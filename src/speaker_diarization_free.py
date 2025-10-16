@@ -6,6 +6,7 @@ speechbrainを使用したトークン不要の話者分離
 import logging
 from typing import List, Dict, Optional
 import numpy as np
+from speaker_diarization_utils import SpeakerFormatterMixin, ClusteringMixin
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ except ImportError:
     logger.warning("resemblyzer not available")
 
 
-class FreeSpeakerDiarizer:
+class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
     """完全無料の話者分離クラス（speechbrain使用）"""
 
     def __init__(self, method: str = "auto"):
@@ -155,48 +156,13 @@ class FreeSpeakerDiarizer:
 
         embeddings = np.array(embeddings)
 
-        # クラスタリング（K-means）
-        from sklearn.cluster import KMeans
+        # クラスタリング（ClusteringMixin から継承）
+        labels = self._perform_clustering(embeddings, num_speakers)
 
-        if num_speakers is None:
-            # 話者数を自動推定（エルボー法の簡易版）
-            num_speakers = min(max(2, len(embeddings) // 20), 5)
+        # 結果を整形（ClusteringMixin から継承）
+        segments = self._merge_consecutive_segments(labels, timestamps)
 
-        kmeans = KMeans(n_clusters=num_speakers, random_state=42)
-        labels = kmeans.fit_predict(embeddings)
-
-        # 結果を整形
-        segments = []
-        current_speaker = None
-        current_start = None
-
-        for i, (label, (start, end)) in enumerate(zip(labels, timestamps)):
-            speaker = f"SPEAKER_{label:02d}"
-
-            # 同じ話者が連続している場合は結合
-            if speaker == current_speaker:
-                continue
-            else:
-                # 前のセグメントを保存
-                if current_speaker is not None:
-                    segments.append({
-                        "speaker": current_speaker,
-                        "start": current_start,
-                        "end": start
-                    })
-
-                current_speaker = speaker
-                current_start = start
-
-        # 最後のセグメント
-        if current_speaker is not None:
-            segments.append({
-                "speaker": current_speaker,
-                "start": current_start,
-                "end": timestamps[-1][1]
-            })
-
-        logger.info(f"Found {num_speakers} speakers")
+        logger.info(f"Found {len(set(labels))} speakers")
         return segments
 
     def _diarize_resemblyzer(self, audio_path: str, num_speakers: Optional[int]) -> List[Dict]:
@@ -227,108 +193,16 @@ class FreeSpeakerDiarizer:
 
         embeddings = np.array(embeddings)
 
-        # クラスタリング
-        from sklearn.cluster import KMeans
+        # クラスタリング（ClusteringMixin から継承）
+        labels = self._perform_clustering(embeddings, num_speakers)
 
-        if num_speakers is None:
-            num_speakers = min(max(2, len(embeddings) // 20), 5)
-
-        kmeans = KMeans(n_clusters=num_speakers, random_state=42)
-        labels = kmeans.fit_predict(embeddings)
-
-        # 結果を整形
-        segments = []
-        current_speaker = None
-        current_start = None
-
-        for i, (label, (start, end)) in enumerate(zip(labels, timestamps)):
-            speaker = f"SPEAKER_{label:02d}"
-
-            if speaker == current_speaker:
-                continue
-            else:
-                if current_speaker is not None:
-                    segments.append({
-                        "speaker": current_speaker,
-                        "start": current_start,
-                        "end": start
-                    })
-
-                current_speaker = speaker
-                current_start = start
-
-        if current_speaker is not None:
-            segments.append({
-                "speaker": current_speaker,
-                "start": current_start,
-                "end": timestamps[-1][1]
-            })
+        # 結果を整形（ClusteringMixin から継承）
+        segments = self._merge_consecutive_segments(labels, timestamps)
 
         return segments
 
-    def format_with_speakers(self, transcription_text: str,
-                           diarization_segments: List[Dict],
-                           transcription_segments: Optional[List[Dict]] = None) -> str:
-        """
-        文字起こしテキストに話者情報を追加
-
-        Args:
-            transcription_text: 文字起こしテキスト
-            diarization_segments: 話者分離結果
-            transcription_segments: 文字起こしセグメント（タイムスタンプ付き）
-
-        Returns:
-            話者情報が付加されたテキスト
-        """
-        if not transcription_segments:
-            # シンプルな形式
-            result = []
-            for seg in diarization_segments:
-                speaker = seg["speaker"]
-                result.append(f"\n[{speaker}] ({seg['start']:.1f}秒 - {seg['end']:.1f}秒)")
-
-            result.append("\n" + transcription_text)
-            return "\n".join(result)
-
-        # 詳細な形式
-        result = []
-        current_speaker = None
-
-        for trans_seg in transcription_segments:
-            trans_start = trans_seg.get("start", 0)
-            trans_end = trans_seg.get("end", 0)
-            trans_text = trans_seg.get("text", "")
-
-            for diar_seg in diarization_segments:
-                diar_start = diar_seg["start"]
-                diar_end = diar_seg["end"]
-                speaker = diar_seg["speaker"]
-
-                if (trans_start >= diar_start and trans_start < diar_end) or \
-                   (trans_end > diar_start and trans_end <= diar_end):
-
-                    if speaker != current_speaker:
-                        result.append(f"\n[{speaker}] ({trans_start:.1f}秒 - {trans_end:.1f}秒)")
-                        current_speaker = speaker
-
-                    result.append(trans_text)
-                    break
-
-        return "\n".join(result)
-
-    def get_speaker_statistics(self, diarization_segments: List[Dict]) -> Dict[str, float]:
-        """話者ごとの統計情報を取得"""
-        stats = {}
-        for seg in diarization_segments:
-            speaker = seg["speaker"]
-            duration = seg["end"] - seg["start"]
-
-            if speaker in stats:
-                stats[speaker] += duration
-            else:
-                stats[speaker] = duration
-
-        return stats
+    # format_with_speakers と get_speaker_statistics は
+    # SpeakerFormatterMixin から継承
 
 
 if __name__ == "__main__":

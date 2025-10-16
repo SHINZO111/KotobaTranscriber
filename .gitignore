@@ -42,8 +42,25 @@ desktop.ini
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+pytest.log
+pytest_report.html
+pytest_report.xml
+coverage.xml
+coverage.json
+bandit-report.json
+
+# CI/CD
+*.egg-info/
+.eggs/
 
 # Temporary files
 *.tmp
 *.temp
+
+# Pre-commit
+.pre-commit-config.yaml.bak

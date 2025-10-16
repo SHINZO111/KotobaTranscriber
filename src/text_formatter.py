@@ -5,6 +5,10 @@
 
 import re
 from typing import List, Dict
+import logging
+from validators import Validator, ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 class TextFormatter:
@@ -37,7 +41,17 @@ class TextFormatter:
 
         Returns:
             フィラー語を削除したテキスト
+
+        Raises:
+            ValidationError: テキストが不正な場合
         """
+        # テキストを検証
+        try:
+            Validator.validate_text_length(text, min_length=0, max_length=1000000)
+        except ValidationError as e:
+            logger.error(f"Text validation failed in remove_fillers: {e}")
+            raise
+
         result = text
 
         # フィラー語のパターンを作成
@@ -95,7 +109,28 @@ class TextFormatter:
 
         Returns:
             段落が整形されたテキスト
+
+        Raises:
+            ValidationError: テキストまたはパラメータが不正な場合
         """
+        # テキストを検証
+        try:
+            Validator.validate_text_length(text, min_length=0, max_length=1000000)
+        except ValidationError as e:
+            logger.error(f"Text validation failed in format_paragraphs: {e}")
+            raise
+
+        # 段落あたりの文数を検証（1〜10が妥当）
+        try:
+            max_sentences_per_paragraph = Validator.validate_positive_integer(
+                max_sentences_per_paragraph,
+                min_val=1,
+                max_val=10,
+                name="max_sentences_per_paragraph"
+            )
+        except ValidationError as e:
+            logger.warning(f"Invalid max_sentences_per_paragraph: {e}, using default value 4")
+            max_sentences_per_paragraph = 4
         # 既に適切な改行がある場合（連続改行が2つ以上）
         if '\n\n' in text:
             return text

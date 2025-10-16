@@ -1,0 +1,98 @@
+# KotobaTranscriber - 開発依存関係
+# Development dependencies for testing, linting, and code quality
+
+# 本番依存関係を含める
+-r requirements.txt
+
+# ===== Testing =====
+# テストフレームワーク
+pytest>=7.4.0
+pytest-cov>=4.1.0              # カバレッジ測定
+pytest-xdist>=3.5.0            # 並列テスト実行
+pytest-timeout>=2.2.0          # テストタイムアウト
+pytest-mock>=3.12.0            # モック機能
+pytest-qt>=4.3.0               # PyQt5テスト
+pytest-html>=4.1.0             # HTMLレポート生成
+pytest-json-report>=1.5.0      # JSONレポート生成
+pytest-benchmark>=4.0.0        # パフォーマンステスト
+pytest-asyncio>=0.21.0         # 非同期テスト
+
+# ===== Code Quality =====
+# コードフォーマッター
+black>=23.12.0                 # コードフォーマッター
+isort>=5.13.0                  # インポート整理
+
+# リンター
+ruff>=0.1.9                    # 高速Python linter
+flake8>=6.1.0                  # 代替linter
+flake8-docstrings>=1.7.0       # docstringチェック
+flake8-bugbear>=23.12.2        # バグ検出
+pylint>=3.0.0                  # コード品質チェック
+
+# 型チェック
+mypy>=1.8.0                    # 静的型チェック
+types-requests>=2.31.0         # requestsの型定義
+types-pyyaml>=6.0.12           # PyYAMLの型定義
+
+# ===== Security =====
+# セキュリティスキャン
+bandit>=1.7.6                  # セキュリティ脆弱性検出
+safety>=3.0.0                  # 依存関係の脆弱性チェック
+
+# ===== Documentation =====
+# ドキュメント生成
+sphinx>=7.2.0                  # ドキュメント生成
+sphinx-rtd-theme>=2.0.0        # Read the Docs テーマ
+sphinx-autodoc-typehints>=1.25.0  # 型ヒント自動ドキュメント化
+
+# ===== Pre-commit =====
+# Git hooks管理
+pre-commit>=3.6.0              # pre-commitフック管理
+
+# ===== Build & Package =====
+# ビルドツール
+build>=1.0.3                   # PEP 517ビルドツール
+wheel>=0.42.0                  # wheelパッケージ
+setuptools>=69.0.0             # セットアップツール
+twine>=4.0.2                   # PyPIへのアップロード
+
+# PyInstaller（実行ファイル生成）
+pyinstaller>=6.3.0             # 実行ファイル生成
+
+# ===== Utilities =====
+# ユーティリティ
+ipython>=8.19.0                # 対話的シェル
+ipdb>=0.13.13                  # デバッガー
+pdbpp>=0.10.3                  # 拡張デバッガー
+
+# プロファイリング
+py-spy>=0.3.14                 # プロファイラー
+memory-profiler>=0.61.0        # メモリプロファイラー
+line-profiler>=4.1.0           # ラインプロファイラー
+
+# コード複雑度測定
+radon>=6.0.1                   # 複雑度測定
+mccabe>=0.7.0                  # 循環的複雑度測定
+
+# コードカバレッジ可視化
+coverage[toml]>=7.4.0          # カバレッジ測定（toml対応）
+
+# ===== Additional Development Tools =====
+# コードメトリクス
+vulture>=2.10                  # 未使用コード検出
+pydocstyle>=6.3.0              # docstringスタイルチェック
+
+# Markdownツール
+mdformat>=0.7.17               # Markdownフォーマッター
+mdformat-gfm>=0.3.5            # GitHub Flavored Markdown
+mdformat-black>=0.1.1          # Blackスタイル対応
+
+# YAMLツール
+yamllint>=1.33.0               # YAML linter
+
+# JSONツール
+jsonschema>=4.20.0             # JSONスキーマ検証
+
+# ===== Windows-specific =====
+# Windows環境での開発サポート
+colorama>=0.4.6                # Windows コンソール色対応

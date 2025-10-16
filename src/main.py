@@ -7,6 +7,7 @@ import sys
 import os
 import shutil
 from datetime import datetime
+from typing import Optional
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTextEdit, QFileDialog, QLabel, QProgressBar, QMessageBox,
@@ -25,6 +26,10 @@ from speaker_diarization_free import FreeSpeakerDiarizer
 from llm_corrector_standalone import SimpleLLMCorrector, StandaloneLLMCorrector
 from folder_monitor import FolderMonitor
 from realtime_transcriber import RealtimeTranscriber
+from realtime_audio_capture import RealtimeAudioCapture
+from simple_vad import AdaptiveVAD
+from faster_whisper_engine import FasterWhisperEngine
+from app_settings import AppSettings
 
 # ロギング設定
 logging.basicConfig(
@@ -32,6 +37,70 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class RealtimeTranscriberFactory:
+    """
+    RealtimeTranscriberインスタンスを生成するファクトリクラス
+
+    依存性注入パターンを使用し、具体的な実装をカプセル化する
+    """
+
+    @staticmethod
+    def create(model_size: str = "base",
+               device: str = "auto",
+               device_index: Optional[int] = None,
+               enable_vad: bool = True,
+               vad_threshold: float = 0.01) -> RealtimeTranscriber:
+        """
+        RealtimeTranscriberインスタンスを作成
+
+        Args:
+            model_size: Whisperモデルサイズ ("tiny", "base", "small", "medium")
+            device: 実行デバイス ("cpu", "cuda", "auto")
+            device_index: マイクデバイスインデックス（Noneで自動選択）
+            enable_vad: VAD有効化フラグ
+            vad_threshold: VAD閾値（0.005〜0.050）
+
+        Returns:
+            RealtimeTranscriber: 設定済みのRealtimeTranscriberインスタンス
+        """
+        # 音声キャプチャコンポーネントを作成
+        audio_capture = RealtimeAudioCapture(
+            device_index=device_index,
+            sample_rate=16000,
+            buffer_duration=3.0
+        )
+
+        # 文字起こしエンジンを作成
+        whisper_engine = FasterWhisperEngine(
+            model_size=model_size,
+            device=device,
+            language="ja"
+        )
+
+        # VADコンポーネントを作成（オプション）
+        vad = None
+        if enable_vad:
+            vad = AdaptiveVAD(
+                initial_threshold=vad_threshold,
+                min_silence_duration=1.0,
+                sample_rate=16000
+            )
+
+        # RealtimeTranscriberを依存性注入で作成
+        transcriber = RealtimeTranscriber(
+            audio_capture=audio_capture,
+            whisper_engine=whisper_engine,
+            vad=vad
+        )
+
+        logger.info(
+            f"RealtimeTranscriber created via factory: "
+            f"model={model_size}, device={device}, vad={enable_vad}"
+        )
+
+        return transcriber
 
 
 class BatchTranscriptionWorker(QThread):
@@ -255,9 +324,15 @@ class MainWindow(QMainWindow):
         # リアルタイム文字起こし
         self.realtime_transcriber = None  # RealtimeTranscriberインスタンス
 
+        # 設定管理
+        self.settings = AppSettings()
+        self.settings.load()  # 設定を読み込む
+
         self.init_ui()
         self.init_tray_icon()  # システムトレイアイコン初期化
         self.check_startup_status()  # Windows起動設定状態をチェック
+        # 設定を復元（UIコンポーネント初期化後）
+        self.load_ui_settings()
 
     def init_ui(self):
         """UI初期化"""
@@ -868,6 +943,9 @@ class MainWindow(QMainWindow):
 
     def quit_application(self):
         """アプリケーション終了"""
+        # 設定を保存
+        self.save_ui_settings()
+
         # リアルタイム文字起こし停止
         if self.realtime_transcriber and self.realtime_transcriber.isRunning():
             self.realtime_transcriber.cleanup()
@@ -1093,6 +1171,10 @@ class MainWindow(QMainWindow):
         """監視間隔変更"""
         self.monitor_check_interval = value
         logger.info(f"Monitor interval changed to: {value}s")
+
+        # デバウンス付き保存
+        self.settings.set('monitor_interval', value)
+        self.settings.save_debounced()
 
         # 監視中の場合は再起動
         if self.folder_monitor and self.folder_monitor.isRunning():
@@ -1362,8 +1444,8 @@ class MainWindow(QMainWindow):
             # モデルサイズ
             model_size = self.realtime_model_combo.currentText()
 
-            # RealtimeTranscriberを初期化
-            self.realtime_transcriber = RealtimeTranscriber(
+            # ファクトリを使用してRealtimeTranscriberを作成（依存性注入パターン）
+            self.realtime_transcriber = RealtimeTranscriberFactory.create(
                 model_size=model_size,
                 device="auto",
                 device_index=device_index,
@@ -1375,6 +1457,7 @@ class MainWindow(QMainWindow):
             self.realtime_transcriber.transcription_update.connect(self.on_realtime_transcription)
             self.realtime_transcriber.status_update.connect(self.on_realtime_status)
             self.realtime_transcriber.error_occurred.connect(self.on_realtime_error)
+            self.realtime_transcriber.critical_error_occurred.connect(self.on_realtime_error)  # 致命的エラーも処理
             self.realtime_transcriber.vad_status_changed.connect(self.on_realtime_vad)
 
             # スレッド開始
@@ -1539,6 +1622,156 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             logger.warning(f"Failed to check startup status: {e}")
+
+    def load_ui_settings(self):
+        """UI設定を復元（検証付き）"""
+        try:
+            # ウィンドウジオメトリを検証して復元
+            width = self.settings.get('window.width', 900)
+            height = self.settings.get('window.height', 700)
+            x = self.settings.get('window.x', 100)
+            y = self.settings.get('window.y', 100)
+
+            # 範囲検証
+            width = max(400, min(3840, width))
+            height = max(300, min(2160, height))
+            x = max(0, min(3000, x))
+            y = max(0, min(2000, y))
+
+            # 画面内に収まるかチェック
+            from PyQt5.QtWidgets import QApplication
+            desktop = QApplication.desktop()
+            if desktop:
+                screen_geometry = desktop.availableGeometry()
+
+                # ウィンドウが画面外に出る場合は調整
+                if x + width > screen_geometry.width():
+                    x = max(0, screen_geometry.width() - width)
+                if y + height > screen_geometry.height():
+                    y = max(0, screen_geometry.height() - height)
+
+            self.setGeometry(x, y, width, height)
+            logger.info(f"Window geometry restored: {width}x{height} at ({x}, {y})")
+
+            # フォルダ設定を復元（存在チェック付き）
+            monitored_folder = self.settings.get('monitored_folder')
+            if monitored_folder:
+                from pathlib import Path
+                if Path(monitored_folder).exists() and Path(monitored_folder).is_dir():
+                    self.monitored_folder = monitored_folder
+                    folder_name = os.path.basename(monitored_folder)
+                    self.monitor_folder_label.setText(f"監視フォルダ: {folder_name}")
+                    logger.info(f"Restored monitored folder: {monitored_folder}")
+                else:
+                    logger.warning(f"Monitored folder no longer exists: {monitored_folder}")
+
+            completed_folder = self.settings.get('completed_folder')
+            if completed_folder:
+                from pathlib import Path
+                if Path(completed_folder).exists() and Path(completed_folder).is_dir():
+                    self.completed_folder = completed_folder
+                    folder_name = os.path.basename(completed_folder)
+                    self.completed_folder_label.setText(folder_name)
+                    logger.info(f"Restored completed folder: {completed_folder}")
+                else:
+                    logger.warning(f"Completed folder no longer exists: {completed_folder}")
+
+            # 監視間隔を復元（範囲検証）
+            monitor_interval = self.settings.get('monitor_interval', 10)
+            monitor_interval = max(5, min(60, monitor_interval))
+            self.monitor_interval_spinbox.setValue(monitor_interval)
+
+            # 自動移動設定を復元
+            auto_move = self.settings.get('auto_move_completed', False)
+            if isinstance(auto_move, bool):
+                self.auto_move_check.setChecked(auto_move)
+                self.auto_move_completed = auto_move
+                self.select_completed_folder_button.setEnabled(auto_move)
+
+            # テキスト整形オプションを復元
+            self.remove_fillers_check.setChecked(
+                bool(self.settings.get('remove_fillers', True))
+            )
+            self.add_punctuation_check.setChecked(
+                bool(self.settings.get('add_punctuation', True))
+            )
+            self.format_paragraphs_check.setChecked(
+                bool(self.settings.get('format_paragraphs', True))
+            )
+            self.enable_diarization_check.setChecked(
+                bool(self.settings.get('enable_diarization', False))
+            )
+            self.enable_llm_correction_check.setChecked(
+                bool(self.settings.get('enable_llm_correction', False))
+            )
+            self.use_advanced_llm_check.setChecked(
+                bool(self.settings.get('use_advanced_llm', False))
+            )
+
+            # リアルタイム設定を復元（検証付き）
+            model_size = self.settings.get('realtime.model_size', 'base')
+            valid_models = ['tiny', 'base', 'small', 'medium']
+            if model_size not in valid_models:
+                logger.warning(f"Invalid model size '{model_size}', using 'base'")
+                model_size = 'base'
+
+            index = self.realtime_model_combo.findText(model_size)
+            if index >= 0:
+                self.realtime_model_combo.setCurrentIndex(index)
+
+            vad_enabled = self.settings.get('realtime.vad_enabled', True)
+            if isinstance(vad_enabled, bool):
+                self.realtime_vad_enable_check.setChecked(vad_enabled)
+
+            vad_threshold = self.settings.get('realtime.vad_threshold', 10)
+            vad_threshold = max(5, min(50, vad_threshold))
+            self.realtime_vad_slider.setValue(vad_threshold)
+
+            # デバイスインデックスは保存するが復元はしない（デバイス構成が変わる可能性があるため）
+
+            logger.info("UI settings restored successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to load UI settings: {e}", exc_info=True)
+            # エラー時はデフォルトジオメトリに設定
+            self.setGeometry(100, 100, 900, 700)
+
+    def save_ui_settings(self):
+        """UI設定を保存"""
+        try:
+            # フォルダ設定を保存
+            self.settings.set('monitored_folder', self.monitored_folder)
+            self.settings.set('completed_folder', self.completed_folder)
+            self.settings.set('monitor_interval', self.monitor_interval_spinbox.value())
+            self.settings.set('auto_move_completed', self.auto_move_completed)
+
+            # テキスト整形オプションを保存
+            self.settings.set('remove_fillers', self.remove_fillers_check.isChecked())
+            self.settings.set('add_punctuation', self.add_punctuation_check.isChecked())
+            self.settings.set('format_paragraphs', self.format_paragraphs_check.isChecked())
+            self.settings.set('enable_diarization', self.enable_diarization_check.isChecked())
+            self.settings.set('enable_llm_correction', self.enable_llm_correction_check.isChecked())
+            self.settings.set('use_advanced_llm', self.use_advanced_llm_check.isChecked())
+
+            # リアルタイム設定を保存
+            device_index = self.realtime_device_combo.currentData()
+            self.settings.set('realtime.device_index', device_index)
+            self.settings.set('realtime.model_size', self.realtime_model_combo.currentText())
+            self.settings.set('realtime.vad_enabled', self.realtime_vad_enable_check.isChecked())
+            self.settings.set('realtime.vad_threshold', self.realtime_vad_slider.value())
+
+            # ウィンドウサイズ・位置を保存
+            self.settings.set('window.width', self.width())
+            self.settings.set('window.height', self.height())
+            self.settings.set('window.x', self.x())
+            self.settings.set('window.y', self.y())
+
+            # 即座にファイルに保存（アプリ終了時なので）
+            self.settings.save_immediate()
+            logger.info("UI settings saved successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to save UI settings: {e}")
 
 
 def main():

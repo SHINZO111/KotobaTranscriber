@@ -5,10 +5,23 @@ faster-whisperエンジン
 
 import logging
 import numpy as np
-from typing import Optional, Dict, List, Any
+import numpy.typing as npt
+from typing import Optional, Dict, List, Any, Literal
 import time
 
+from base_engine import BaseTranscriptionEngine
+from exceptions import (
+    ModelLoadingError,
+    TranscriptionFailedError,
+    UnsupportedModelError
+)
+
 logger = logging.getLogger(__name__)
+
+# Type aliases for better type safety
+ModelSize = Literal["tiny", "base", "small", "medium", "large-v2", "large-v3"]
+ComputeType = Literal["int8", "int8_float16", "int16", "float16", "float32"]
+DeviceType = Literal["auto", "cpu", "cuda"]
 
 # faster-whisper のインポート（オプショナル）
 try:
@@ -19,13 +32,21 @@ except ImportError:
     logger.warning("faster-whisper not available, install with: pip install faster-whisper")
 
 
-class FasterWhisperEngine:
-    """faster-whisperベースのリアルタイム文字起こしエンジン"""
+class FasterWhisperEngine(BaseTranscriptionEngine):
+    """
+    faster-whisperベースのリアルタイム文字起こしエンジン
+
+    コンテキストマネージャとして使用可能:
+        with FasterWhisperEngine(model_size="base") as engine:
+            result = engine.transcribe(audio_data)
+            # ... 処理 ...
+        # 自動的にモデルがアンロードされる
+    """
 
     def __init__(self,
-                 model_size: str = "base",
-                 device: str = "auto",
-                 compute_type: str = "auto",
+                 model_size: ModelSize = "base",
+                 device: DeviceType = "auto",
+                 compute_type: ComputeType = "auto",
                  language: str = "ja"):
         """
         初期化
@@ -36,32 +57,23 @@ class FasterWhisperEngine:
             compute_type: 計算精度 ("int8", "float16", "float32", "auto")
             language: 言語コード
         """
-        self.model_size = model_size
-        self.language = language
-        self.model: Optional[WhisperModel] = None
-        self.is_loaded = False
-
-        # デバイス自動選択
-        if device == "auto":
-            try:
-                import torch
-                self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            except ImportError:
-                self.device = "cpu"
-        else:
-            self.device = device
-
-        # 計算精度の自動選択
-        if compute_type == "auto":
-            if self.device == "cuda":
-                self.compute_type = "float16"  # GPUの場合はfloat16
-            else:
-                self.compute_type = "int8"  # CPUの場合はint8で高速化
-        else:
-            self.compute_type = compute_type
+        # Note: parent class stores model_size in self.model_name
+        # We also keep it as self.model_size for semantic clarity
+        super().__init__(model_size, device, language)
+        self.model_size = model_size  # Explicitly preserved for clarity (parent sets as model_name)
+        self.compute_type = self._resolve_compute_type(compute_type)
 
         logger.info(f"FasterWhisperEngine initialized: model={model_size}, "
                    f"device={self.device}, compute_type={self.compute_type}")
+
+    def _resolve_compute_type(self, compute_type: ComputeType) -> str:
+        """計算精度を自動選択"""
+        if compute_type == "auto":
+            if self.device == "cuda":
+                return "float16"  # GPUの場合はfloat16
+            else:
+                return "int8"  # CPUの場合はint8で高速化
+        return compute_type
 
     def load_model(self) -> bool:
         """モデルをロード"""
@@ -91,10 +103,10 @@ class FasterWhisperEngine:
 
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
-            return False
+            raise ModelLoadingError(self.model_size, e)
 
     def transcribe(self,
-                   audio: np.ndarray,
+                   audio: npt.NDArray[np.float32],
                    sample_rate: int = 16000,
                    beam_size: int = 5,
                    best_of: int = 5,
@@ -183,16 +195,11 @@ class FasterWhisperEngine:
 
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
-            return {
-                "text": "",
-                "segments": [],
-                "language": self.language,
-                "duration": 0.0,
-                "error": str(e)
-            }
+            audio_duration = len(audio) / sample_rate if 'sample_rate' in locals() else 0.0
+            raise TranscriptionFailedError(str(e), audio_duration)
 
     def transcribe_stream(self,
-                         audio_chunk: np.ndarray,
+                         audio_chunk: npt.NDArray[np.float32],
                          sample_rate: int = 16000) -> Optional[str]:
         """
         音声チャンクを文字起こし（ストリーミング用・簡易版）
@@ -221,28 +228,26 @@ class FasterWhisperEngine:
         return FASTER_WHISPER_AVAILABLE and self.is_loaded
 
     def get_model_info(self) -> Dict[str, Any]:
-        """モデル情報を取得"""
-        return {
-            "available": FASTER_WHISPER_AVAILABLE,
-            "loaded": self.is_loaded,
-            "model_size": self.model_size,
-            "device": self.device,
-            "compute_type": self.compute_type,
-            "language": self.language
-        }
+        """モデル情報を取得（compute_type を追加）"""
+        info = super().get_model_info()
+        info["available"] = FASTER_WHISPER_AVAILABLE
+        info["compute_type"] = self.compute_type
+        return info
 
-    def unload_model(self):
-        """モデルをアンロード（メモリ解放）"""
-        if self.model is not None:
-            del self.model
-            self.model = None
-            self.is_loaded = False
-            logger.info("Model unloaded")
+    # unload_model は BaseEngine から継承
 
 
 # フォールバック用：transformers版
-class TransformersWhisperEngine:
-    """transformersベースのWhisperエンジン（フォールバック用）"""
+class TransformersWhisperEngine(BaseTranscriptionEngine):
+    """
+    transformersベースのWhisperエンジン（フォールバック用）
+
+    コンテキストマネージャとして使用可能:
+        with TransformersWhisperEngine() as engine:
+            result = engine.transcribe(audio_data)
+            # ... 処理 ...
+        # 自動的にモデルがアンロードされる
+    """
 
     def __init__(self,
                  model_name: str = "kotoba-tech/kotoba-whisper-v2.2",
@@ -254,11 +259,8 @@ class TransformersWhisperEngine:
             model_name: モデル名
             device: デバイス
         """
-        self.model_name = model_name
-        self.device = device
-        self.model = None
+        super().__init__(model_name, device, language="ja")
         self.processor = None
-        self.is_loaded = False
 
         logger.info(f"TransformersWhisperEngine initialized: model={model_name}")
 
@@ -329,11 +331,26 @@ class TransformersWhisperEngine:
 
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
-            return {"text": "", "error": str(e)}
+            audio_duration = len(audio) / sample_rate if 'sample_rate' in locals() else 0.0
+            raise TranscriptionFailedError(str(e), audio_duration)
 
     def is_available(self) -> bool:
         """エンジンが利用可能かチェック"""
         return self.is_loaded
+
+    def unload_model(self) -> None:
+        """
+        モデルをアンロード（メモリ解放）
+
+        プロセッサも含めてクリーンアップ
+        """
+        # プロセッサを削除
+        if self.processor is not None:
+            del self.processor
+            self.processor = None
+
+        # 基底クラスのunload_modelを呼び出し
+        super().unload_model()
 
 
 if __name__ == "__main__":
@@ -344,18 +361,15 @@ if __name__ == "__main__":
     print(f"\nfaster-whisper available: {FASTER_WHISPER_AVAILABLE}")
 
     if FASTER_WHISPER_AVAILABLE:
-        # faster-whisperテスト
-        print("\n=== FasterWhisperEngine Test ===")
-        engine = FasterWhisperEngine(model_size="base", device="auto")
+        # faster-whisperテスト（コンテキストマネージャを使用）
+        print("\n=== FasterWhisperEngine Context Manager Test ===")
 
-        print(f"Model info: {engine.get_model_info()}")
+        # コンテキストマネージャとして使用
+        with FasterWhisperEngine(model_size="base", device="auto") as engine:
+            print(f"Model info: {engine.get_model_info()}")
 
-        # テスト用音声データ（5秒の無音）
-        test_audio = np.zeros(16000 * 5, dtype=np.float32)
-
-        print("\nLoading model...")
-        if engine.load_model():
-            print("Model loaded successfully")
+            # テスト用音声データ（5秒の無音）
+            test_audio = np.zeros(16000 * 5, dtype=np.float32)
 
             print("\nTranscribing test audio...")
             result = engine.transcribe(test_audio)
@@ -364,9 +378,8 @@ if __name__ == "__main__":
             print(f"Text: {result['text']}")
             print(f"RTF: {result.get('realtime_factor', 0):.2f}x")
 
-            engine.unload_model()
-        else:
-            print("Failed to load model")
+        # with ブロックを抜けると自動的にモデルがアンロードされる
+        print("\nモデルは自動的にアンロードされました")
 
     else:
         print("\nfaster-whisper not available")

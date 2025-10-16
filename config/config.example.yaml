@@ -1,0 +1,178 @@
+# KotobaTranscriber Configuration Template
+# Copy this file to config.yaml and customize as needed
+
+# ========================================
+# Application Settings
+# ========================================
+app:
+  name: "KotobaTranscriber"
+  version: "1.0.0"
+  language: "ja"
+  encoding: "utf-8"
+
+# ========================================
+# Model Settings
+# ========================================
+model:
+  whisper:
+    name: "kotoba-tech/kotoba-whisper-v2.2"
+    device: "auto"  # auto, cuda, cpu
+    chunk_length_s: 15
+    task: "transcribe"
+    language: "ja"
+    return_timestamps: true
+
+  faster_whisper:
+    model_size: "base"  # tiny, base, small, medium, large-v2, large-v3
+    compute_type: "auto"  # int8, int8_float16, float16, float32, auto
+    beam_size: 5
+    device: "auto"
+    download_root: null
+    local_files_only: false
+
+# ========================================
+# Real-time Transcription Settings
+# ========================================
+realtime:
+  sample_rate: 16000
+  channels: 1
+  chunk_size: 512
+  buffer_duration: 3.0
+  chunk_overlap: 0.5
+  max_buffer_size: 10.0
+
+  vad:
+    enabled: true
+    threshold: 0.01
+    min_speech_duration: 0.3
+    min_silence_duration: 1.0
+    window_duration: 0.5
+
+  min_transcription_length: 10
+  cooldown_after_transcription: 0.1
+
+# ========================================
+# Text Formatting Settings
+# ========================================
+formatting:
+  remove_fillers: true
+  add_punctuation: true
+  format_paragraphs: true
+  clean_repeated_words: true
+  format_numbers: false
+  sentences_per_paragraph: 3
+
+# ========================================
+# Error Handling and Recovery
+# ========================================
+error_handling:
+  max_retries: 3
+  retry_delay: 1.0
+  backoff_multiplier: 2.0
+  max_consecutive_errors: 5
+  error_cooldown_time: 2.0
+  fallback_to_cpu: true
+  continue_on_error: true
+
+# ========================================
+# Logging Settings
+# ========================================
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "text"  # text, json
+
+  file:
+    enabled: true
+    path: "logs/app.log"
+    rotation: "1 day"
+    retention: "30 days"
+    encoding: "utf-8"
+
+  console:
+    enabled: true
+    colored: true
+
+  format_template: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# ========================================
+# Performance Settings
+# ========================================
+performance:
+  thread_pool_size: 4
+  max_queue_size: 100
+  cache_size: 1000
+  cache_ttl: 3600
+  max_memory_usage_mb: 4096
+  gc_threshold: 0.8
+  batch_size: 10
+  max_concurrent_transcriptions: 2
+
+# ========================================
+# Output Settings
+# ========================================
+output:
+  default_format: "txt"
+  save_directory: "results"
+  auto_create_directory: true
+  auto_save: false
+  auto_save_interval: 60
+  filename_template: "{timestamp}_{original_name}"
+  timestamp_format: "%Y%m%d_%H%M%S"
+  include_timestamps: false
+  include_confidence_scores: false
+  encoding: "utf-8"
+
+# ========================================
+# Audio Processing Settings
+# ========================================
+audio:
+  ffmpeg:
+    path: "C:\\ffmpeg\\ffmpeg-8.0-essentials_build\\bin"  # Windows path
+    # path: "/usr/local/bin"  # macOS/Linux path
+    auto_configure: true
+
+  normalize_audio: true
+  remove_silence: false
+  noise_reduction: false
+
+# ========================================
+# GUI Settings
+# ========================================
+gui:
+  window:
+    title: "KotobaTranscriber - 日本語音声文字起こし"
+    width: 800
+    height: 600
+    min_width: 600
+    min_height: 400
+
+  theme: "default"
+  locale: "ja_JP"
+
+  progress_bar:
+    show_percentage: true
+    show_time_remaining: true
+    update_interval: 100
+
+# ========================================
+# Advanced Features
+# ========================================
+advanced:
+  speaker_diarization:
+    enabled: false
+    min_speakers: 1
+    max_speakers: 10
+
+  llm_correction:
+    enabled: false
+    provider: "openai"
+    model: "gpt-4"
+    api_key: null  # Set via environment variable
+    temperature: 0.3
+    max_tokens: 2000
+
+  folder_monitor:
+    enabled: false
+    watch_directory: "watch"
+    process_subdirectories: true
+    delete_after_processing: false

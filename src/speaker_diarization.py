@@ -7,11 +7,12 @@ import torch
 from pyannote.audio import Pipeline
 from typing import Dict, List, Optional
 import logging
+from speaker_diarization_utils import SpeakerFormatterMixin
 
 logger = logging.getLogger(__name__)
 
 
-class SpeakerDiarizer:
+class SpeakerDiarizer(SpeakerFormatterMixin):
     """話者分離クラス"""
 
     def __init__(self, use_auth_token: Optional[str] = None):
@@ -86,88 +87,8 @@ class SpeakerDiarizer:
             logger.error(f"Speaker diarization failed: {e}")
             raise
 
-    def format_with_speakers(self, transcription_text: str,
-                           diarization_segments: List[Dict],
-                           transcription_segments: Optional[List[Dict]] = None) -> str:
-        """
-        文字起こしテキストに話者情報を追加
-
-        Args:
-            transcription_text: 文字起こしテキスト
-            diarization_segments: 話者分離結果
-            transcription_segments: 文字起こしセグメント（タイムスタンプ付き）
-
-        Returns:
-            話者情報が付加されたテキスト
-        """
-        if not transcription_segments:
-            # タイムスタンプ情報がない場合はシンプルな形式
-            result = []
-            current_speaker = None
-
-            for seg in diarization_segments:
-                speaker = seg["speaker"]
-                if speaker != current_speaker:
-                    result.append(f"\n[{speaker}]")
-                    current_speaker = speaker
-
-            # 文字起こしテキストを追加
-            if result:
-                result.append(transcription_text)
-                return "\n".join(result)
-            else:
-                return transcription_text
-
-        # タイムスタンプ情報がある場合は詳細な形式
-        result = []
-        current_speaker = None
-
-        for trans_seg in transcription_segments:
-            trans_start = trans_seg.get("start", 0)
-            trans_end = trans_seg.get("end", 0)
-            trans_text = trans_seg.get("text", "")
-
-            # この文字起こしセグメントに対応する話者を探す
-            for diar_seg in diarization_segments:
-                diar_start = diar_seg["start"]
-                diar_end = diar_seg["end"]
-                speaker = diar_seg["speaker"]
-
-                # タイムスタンプが重複している場合
-                if (trans_start >= diar_start and trans_start < diar_end) or \
-                   (trans_end > diar_start and trans_end <= diar_end) or \
-                   (trans_start <= diar_start and trans_end >= diar_end):
-
-                    if speaker != current_speaker:
-                        result.append(f"\n[{speaker}] ({trans_start:.1f}秒 - {trans_end:.1f}秒)")
-                        current_speaker = speaker
-
-                    result.append(trans_text)
-                    break
-
-        return "\n".join(result)
-
-    def get_speaker_statistics(self, diarization_segments: List[Dict]) -> Dict[str, float]:
-        """
-        話者ごとの統計情報を取得
-
-        Args:
-            diarization_segments: 話者分離結果
-
-        Returns:
-            話者ごとの発話時間（秒）
-        """
-        stats = {}
-        for seg in diarization_segments:
-            speaker = seg["speaker"]
-            duration = seg["end"] - seg["start"]
-
-            if speaker in stats:
-                stats[speaker] += duration
-            else:
-                stats[speaker] = duration
-
-        return stats
+    # format_with_speakers と get_speaker_statistics は
+    # SpeakerFormatterMixin から継承
 
     def is_available(self) -> bool:
         """話者分離が利用可能かチェック"""

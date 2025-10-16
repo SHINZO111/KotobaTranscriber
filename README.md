@@ -2,6 +2,13 @@
 
 日本語音声文字起こしアプリケーション - kotoba-whisper v2.2使用
 
+[![CI Pipeline](https://github.com/SHINZO111/KotobaTranscriber/actions/workflows/ci.yml/badge.svg)](https://github.com/SHINZO111/KotobaTranscriber/actions/workflows/ci.yml)
+[![Release](https://github.com/SHINZO111/KotobaTranscriber/actions/workflows/release.yml/badge.svg)](https://github.com/SHINZO111/KotobaTranscriber/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/SHINZO111/KotobaTranscriber/branch/main/graph/badge.svg)](https://codecov.io/gh/SHINZO111/KotobaTranscriber)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 ## 特徴
 
 - ✅ **高精度**: kotoba-whisper v2.2による日本語特化の音声認識
@@ -256,6 +263,10 @@ python -c "import torch; print(torch.cuda.is_available())"
 ### プロジェクト構造
 ```
 KotobaTranscriber/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                     # CI パイプライン
+│       └── release.yml                # リリース自動化
 ├── src/
 │   ├── main.py                        # メインアプリケーション（タブベースUI）
 │   ├── transcription_engine.py        # 文字起こしエンジン
@@ -270,18 +281,70 @@ KotobaTranscriber/
 │   └── __init__.py
 ├── tests/                             # テストコード
 ├── docs/                              # ドキュメント
+│   ├── CI_CD_GUIDE.md                        # CI/CD ガイド
 │   ├── REALTIME_TRANSCRIPTION_GUIDE.md      # 🆕 リアルタイム機能ガイド
 │   ├── REALTIME_TECHNICAL_DETAILS.md        # 🆕 技術詳細
 │   └── REALTIME_IMPLEMENTATION_SUMMARY.md   # 🆕 実装サマリー
 ├── models/                            # モデルファイル（自動ダウンロード）
+├── pytest.ini                         # pytest 設定
+├── .coveragerc                        # カバレッジ設定
+├── .pre-commit-config.yaml            # pre-commit フック設定
 ├── requirements.txt                   # 依存パッケージ
+├── requirements-dev.txt               # 開発依存パッケージ
 └── README.md                          # このファイル
+```
+
+### 開発環境セットアップ
+
+```bash
+# 依存パッケージのインストール
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# pre-commit フックのインストール
+pre-commit install
 ```
 
 ### テスト実行
 ```bash
-pytest tests/
+# 全テストを実行
+pytest
+
+# カバレッジレポート付き
+pytest --cov=src --cov-report=html --cov-report=term-missing
+
+# ユニットテストのみ
+pytest -m unit
+
+# 統合テストのみ
+pytest -m integration
+
+# 並列実行（高速化）
+pytest -n auto
 ```
+
+### コード品質チェック
+```bash
+# コードフォーマット
+black src/ tests/
+isort src/ tests/
+
+# リント
+ruff check src/ tests/ --fix
+
+# 型チェック
+mypy src/
+
+# セキュリティスキャン
+bandit -r src/
+```
+
+### CI/CD
+このプロジェクトは包括的なCI/CDパイプラインを実装しています。詳細は [CI/CD Guide](docs/CI_CD_GUIDE.md) を参照してください。
+
+**ワークフロー:**
+- **CI Pipeline**: コミット毎に自動テスト、リント、セキュリティスキャン
+- **Release Pipeline**: タグプッシュで自動ビルド、GitHub リリース作成
 
 ## 参考リンク
 

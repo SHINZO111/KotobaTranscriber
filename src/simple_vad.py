@@ -4,8 +4,13 @@
 """
 
 import numpy as np
+import numpy.typing as npt
 import logging
-from typing import Tuple
+from typing import Tuple, List
+
+from exceptions import (
+    InvalidVADThresholdError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +37,14 @@ class SimpleVAD:
         self.min_silence_duration = min_silence_duration
         self.sample_rate = sample_rate
 
+        # Validate threshold
+        if not (0.0 < threshold <= 1.0):
+            raise InvalidVADThresholdError(threshold, (0.0, 1.0))
+        if not (0.0 < min_speech_duration <= 10.0):
+            raise InvalidVADThresholdError(min_speech_duration, (0.0, 10.0))
+        if not (0.0 < min_silence_duration <= 10.0):
+            raise InvalidVADThresholdError(min_silence_duration, (0.0, 10.0))
+
         # 状態管理
         self.is_speech = False
         self.speech_start_time = 0.0
@@ -42,11 +55,11 @@ class SimpleVAD:
                    f"min_speech={min_speech_duration}s, "
                    f"min_silence={min_silence_duration}s")
 
-    def calculate_energy(self, audio: np.ndarray) -> float:
+    def calculate_energy(self, audio: npt.NDArray[np.float32]) -> float:
         """音声のエネルギー（RMS）を計算"""
         return float(np.sqrt(np.mean(audio**2)))
 
-    def is_speech_present(self, audio: np.ndarray) -> Tuple[bool, float]:
+    def is_speech_present(self, audio: npt.NDArray[np.float32]) -> Tuple[bool, float]:
         """
         音声が存在するか判定
 
@@ -93,7 +106,7 @@ class SimpleVAD:
 
         return self.is_speech, energy
 
-    def reset(self):
+    def reset(self) -> None:
         """状態リセット"""
         self.is_speech = False
         self.speech_start_time = 0.0
@@ -118,9 +131,13 @@ class AdaptiveVAD(SimpleVAD):
             **kwargs: SimpleVADのパラメータ
         """
         super().__init__(threshold=initial_threshold, **kwargs)
+
+        # Validate adaptation_rate
+        if not (0.0 <= adaptation_rate <= 1.0):
+            raise InvalidVADThresholdError(adaptation_rate, (0.0, 1.0))
         self.adaptation_rate = adaptation_rate
         self.noise_level = initial_threshold
-        self.energy_history = []
+        self.energy_history: List[float] = []
         self.history_size = 50
 
         logger.info(f"AdaptiveVAD initialized with adaptation_rate={adaptation_rate}")

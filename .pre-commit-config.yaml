@@ -1,0 +1,141 @@
+# Pre-commit hooks configuration
+# https://pre-commit.com/
+
+default_language_version:
+  python: python3.11
+
+repos:
+  # 一般的なファイルチェック
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # ファイル末尾の改行チェック
+      - id: end-of-file-fixer
+        exclude: ^(models/|htmlcov/|.pytest_cache/)
+
+      # トレイリング空白削除
+      - id: trailing-whitespace
+        exclude: ^(models/|htmlcov/|.pytest_cache/)
+        args: [--markdown-linebreak-ext=md]
+
+      # YAML構文チェック
+      - id: check-yaml
+        args: [--safe]
+
+      # JSON構文チェック
+      - id: check-json
+
+      # TOML構文チェック
+      - id: check-toml
+
+      # 大きなファイルの追加を防止（10MB以上）
+      - id: check-added-large-files
+        args: [--maxkb=10240]
+
+      # マージコンフリクトマーカーチェック
+      - id: check-merge-conflict
+
+      # デバッグステートメントチェック
+      - id: debug-statements
+
+      # Python構文チェック
+      - id: check-ast
+
+      # 壊れたシンボリックリンクチェック
+      - id: check-symlinks
+
+      # ケースコンフリクトチェック
+      - id: check-case-conflict
+
+      # requirements.txt の順序チェック
+      - id: requirements-txt-fixer
+
+      # 実行可能スクリプトにshebangがあるかチェック
+      - id: check-executables-have-shebangs
+
+      # Pythonファイルに不要なUTF-8 BOMがないかチェック
+      - id: fix-byte-order-marker
+
+      # 不完全な docstring をチェック
+      - id: check-docstring-first
+
+  # コードフォーマッター: Black
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: [--line-length=100]
+        exclude: ^(venv/|models/|htmlcov/|.pytest_cache/)
+
+  # インポート整理: isort
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile=black, --line-length=100]
+        exclude: ^(venv/|models/|htmlcov/|.pytest_cache/)
+
+  # リンター: Ruff (高速なPython linter)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        exclude: ^(venv/|models/|htmlcov/|.pytest_cache/)
+
+  # 型チェック: mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+        args: [--ignore-missing-imports, --no-strict-optional]
+        exclude: ^(tests/|venv/|models/|htmlcov/|.pytest_cache/)
+
+  # セキュリティチェック: Bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.6
+    hooks:
+      - id: bandit
+        args: [-r, src/, -ll, -i]
+        exclude: ^(tests/|venv/|models/|htmlcov/|.pytest_cache/)
+
+  # docstring スタイルチェック: pydocstyle
+  - repo: https://github.com/PyCQA/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args: [--convention=google]
+        exclude: ^(tests/|venv/|models/|htmlcov/|.pytest_cache/)
+
+  # Markdown フォーマット: mdformat
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.17
+    hooks:
+      - id: mdformat
+        args: [--wrap=100]
+        additional_dependencies:
+          - mdformat-gfm
+          - mdformat-black
+        exclude: ^(models/|htmlcov/|.pytest_cache/)
+
+  # シェルスクリプトチェック: shellcheck
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        exclude: ^(venv/|models/|htmlcov/|.pytest_cache/)
+
+# CI環境で実行するかどうか
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
