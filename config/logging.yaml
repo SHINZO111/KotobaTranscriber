@@ -1,0 +1,129 @@
+# KotobaTranscriber ロギング設定
+# 構造化ログ（JSON形式）による一貫したロギング
+
+version: 1
+disable_existing_loggers: false
+
+# ログレベル: DEBUG, INFO, WARNING, ERROR, CRITICAL
+default_level: INFO
+
+# ログファイル設定
+file:
+  # ログファイルパス（相対パスまたは絶対パス）
+  path: logs/app.log
+
+  # ログローテーション設定
+  max_size: 10485760  # 10MB
+  backup_count: 5     # 5世代保持
+
+  # ログレベル（ファイル）
+  level: INFO
+
+# コンソール出力設定
+console:
+  # コンソール出力を有効化
+  enabled: true
+
+  # ログレベル（コンソール）
+  level: INFO
+
+  # カラー出力を有効化
+  colorize: true
+
+# モジュール別ログレベル設定
+loggers:
+  # メインアプリケーション
+  __main__:
+    level: INFO
+
+  # 文字起こしエンジン
+  transcription_engine:
+    level: INFO
+
+  # リアルタイム文字起こし
+  realtime_transcriber:
+    level: INFO
+
+  # LLM補正
+  llm_corrector:
+    level: INFO
+
+  # 話者分離
+  speaker_diarization:
+    level: INFO
+  speaker_diarization_free:
+    level: INFO
+
+  # フォルダ監視
+  folder_monitor:
+    level: INFO
+
+  # VAD
+  simple_vad:
+    level: INFO
+
+  # その他のモジュール
+  advanced_features:
+    level: INFO
+  faster_whisper_engine:
+    level: INFO
+  llm_corrector_standalone:
+    level: INFO
+  realtime_audio_capture:
+    level: INFO
+  text_formatter:
+    level: INFO
+
+# 外部ライブラリのログレベル
+external_loggers:
+  # Transformers（Hugging Face）
+  transformers:
+    level: WARNING
+
+  # PyTorch
+  torch:
+    level: WARNING
+
+  # urllib3（HTTP通信）
+  urllib3:
+    level: WARNING
+
+  # PyAudio
+  pyaudio:
+    level: WARNING
+
+# ログフォーマット設定
+format:
+  # 構造化ログ（JSON形式）を使用
+  structured: true
+
+  # タイムスタンプフォーマット（ISO 8601）
+  timestamp_format: "%Y-%m-%dT%H:%M:%S.%fZ"
+
+  # コンテキスト情報を含める
+  include_context: true
+
+  # スタックトレースを含める
+  include_traceback: true
+
+# パフォーマンス設定
+performance:
+  # 非同期ロギングを有効化
+  async_logging: false
+
+  # バッファサイズ
+  buffer_size: 100
+
+# セキュリティ設定
+security:
+  # センシティブ情報をマスク
+  mask_sensitive: true
+
+  # マスク対象キーワード
+  sensitive_keywords:
+    - password
+    - token
+    - secret
+    - api_key
+    - auth
+    - credential

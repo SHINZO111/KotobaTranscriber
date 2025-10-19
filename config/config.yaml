@@ -1,0 +1,66 @@
+# KotobaTranscriber 設定ファイル
+
+app:
+  name: "KotobaTranscriber"
+  version: "1.0.0"
+  language: "ja"
+
+model:
+  whisper:
+    name: "kotoba-tech/kotoba-whisper-v2.2"
+    device: "auto"
+    chunk_length_s: 15
+    language: "ja"
+    task: "transcribe"
+    return_timestamps: true
+  faster_whisper:
+    model_size: "base"
+    compute_type: "auto"
+    beam_size: 5
+
+# 音声前処理設定（無効化推奨: meta tensorエラー回避）
+audio:
+  preprocessing:
+    enabled: false  # 無効化
+    noise_reduction: false
+    normalize: false
+    remove_silence: false
+  ffmpeg:
+    path: "C:\\ffmpeg\\ffmpeg-8.0-essentials_build\\bin"
+    auto_configure: true
+
+# カスタム語彙設定
+vocabulary:
+  enabled: false
+  file: "custom_vocabulary.json"
+
+realtime:
+  sample_rate: 16000
+  buffer_duration: 3.0
+  vad:
+    enabled: true
+    threshold: 0.01
+
+formatting:
+  remove_fillers: true
+  add_punctuation: true
+  format_paragraphs: true
+  sentences_per_paragraph: 3
+
+error_handling:
+  max_retries: 3
+  retry_delay: 1.0
+  max_consecutive_errors: 5
+
+logging:
+  level: "INFO"
+  format: "text"
+  file: "logs/app.log"
+
+performance:
+  thread_pool_size: 4
+  memory_limit_mb: 4096
+
+output:
+  default_format: "txt"
+  save_directory: "results"

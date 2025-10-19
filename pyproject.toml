@@ -1,0 +1,180 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kotobtranscriber"
+version = "1.0.0"
+description = "Japanese Speech-to-Text Transcription Application using kotoba-whisper v2.2"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "KotobaTranscriber Team"}
+]
+keywords = ["speech-to-text", "transcription", "japanese", "whisper", "ai", "ml"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "transformers>=4.30.0",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+    "librosa>=0.10.0",
+    "soundfile>=0.12.0",
+    "pydub>=0.25.0",
+    "pyaudio>=0.2.13",
+    "faster-whisper>=1.0.0",
+    "speechbrain>=0.5.0",
+    "scikit-learn>=1.0.0",
+    "PyQt5>=5.15.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "python-docx>=0.8.11",
+    "openpyxl>=3.1.0",
+    "tqdm>=4.65.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-timeout>=2.1.0",
+    "pytest-mock>=3.10.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pylint>=2.17.0",
+    "isort>=5.12.0",
+    "bandit>=1.7.0",
+    "safety>=2.3.0",
+]
+
+build = [
+    "pyinstaller>=5.0.0",
+    "build>=0.10.0",
+    "twine>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/KotobaTranscriber"
+Documentation = "https://github.com/yourusername/KotobaTranscriber/blob/main/README.md"
+Repository = "https://github.com/yourusername/KotobaTranscriber"
+Issues = "https://github.com/yourusername/KotobaTranscriber/issues"
+
+[project.scripts]
+kotobtranscriber = "src.main:main"
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.black]
+line-length = 127
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | venv
+  | build
+  | dist
+  | __pycache__
+  | \.pytest_cache
+  | \.mypy_cache
+  | models
+  | logs
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 127
+skip_glob = ["venv/*", ".venv/*", "build/*", "dist/*"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+no_strict_optional = true
+exclude = [
+    'venv',
+    '.venv',
+    'build',
+    'dist',
+]
+
+[tool.pylint.messages_control]
+max-line-length = 127
+disable = [
+    "C0111",  # missing-docstring
+    "C0103",  # invalid-name
+    "R0913",  # too-many-arguments
+    "R0914",  # too-many-locals
+    "W0212",  # protected-access
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--showlocals",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "gpu: marks tests that require GPU",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.bandit]
+exclude_dirs = ["tests", "venv", ".venv"]
+skips = ["B101", "B601"]

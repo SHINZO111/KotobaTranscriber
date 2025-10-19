@@ -1,0 +1,102 @@
+# Coverage.py configuration file
+# https://coverage.readthedocs.io/
+
+[run]
+# ソースディレクトリ
+source = src
+
+# カバレッジから除外するファイル/ディレクトリ
+omit =
+    */venv/*
+    */tests/*
+    */site-packages/*
+    */__pycache__/*
+    */main.py
+    */.venv/*
+    */dist/*
+    */build/*
+    */models/*
+
+# 並列実行モード（pytest-xdist使用時）
+parallel = True
+
+# ブランチカバレッジを測定
+branch = True
+
+# カバレッジデータファイル
+data_file = .coverage
+
+[report]
+# 精度（小数点以下の桁数）
+precision = 2
+
+# カバーされていない行を表示
+show_missing = True
+
+# カバー済みのファイルをスキップしない
+skip_covered = False
+
+# 空のファイルをスキップ
+skip_empty = True
+
+# カバレッジ不足のファイルを表示
+fail_under = 65
+
+# 除外する行のパターン
+exclude_lines =
+    # デフォルト除外パターン
+    pragma: no cover
+
+    # デバッグコード
+    def __repr__
+    def __str__
+
+    # 抽象メソッド
+    raise NotImplementedError
+    raise AssertionError
+
+    # if __name__ == '__main__' ブロック
+    if __name__ == .__main__.:
+
+    # typing関連
+    if TYPE_CHECKING:
+    @overload
+
+    # プロトコル定義
+    \.\.\.
+
+    # 防御的なコード
+    except ImportError:
+    except ModuleNotFoundError:
+
+    # パスステートメント
+    pass
+
+# ソートキー（名前、カバレッジ、ステートメント数、ミス数）
+sort = Cover
+
+[html]
+# HTMLレポート出力ディレクトリ
+directory = htmlcov
+
+# タイトル
+title = KotobaTranscriber Coverage Report
+
+# 追加の列を表示
+extra_css =
+
+[xml]
+# XMLレポート出力ファイル
+output = coverage.xml
+
+[json]
+# JSONレポート出力ファイル
+output = coverage.json
+pretty_print = True
+show_contexts = True
+
+[paths]
+# パスマッピング（Windows/Linux/macOS間の違いを吸収）
+source =
+    src/
+    */site-packages/

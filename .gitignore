@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Hugging Face cache
+.cache/
+models/
+
+# Output files
+*_文字起こし.txt
+output/
+transcriptions/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+pytest.log
+pytest_report.html
+pytest_report.xml
+coverage.xml
+coverage.json
+bandit-report.json
+
+# CI/CD
+*.egg-info/
+.eggs/
+
+# Temporary files
+*.tmp
+*.temp
+*.backup
+*.bak
+
+# Application settings
+app_settings.json
+.backups/
+
+# Pre-commit
+.pre-commit-config.yaml.bak
+nul
+
+# Development files
+pip_install.log
+app_runtime.log
+transcription_output.log
