@@ -1,0 +1,26 @@
+{
+  "version": "2.1.0",
+  "build_date": "2025-10-20T00:47:39.325227",
+  "files": {
+    "DISTRIBUTION.md": {
+      "sha256": "4f227ac009e00f87669dcb897907134076b12defc0231e654371f9729f8e0096",
+      "size": 7111
+    },
+    "INSTALLATION.md": {
+      "sha256": "371df7ec07054469f7e685b7b74001f1f98afc477ef705b1c9cf50f68842198d",
+      "size": 9159
+    },
+    "KotobaTranscriber-Source-v2.1.0.zip": {
+      "sha256": "8fda0bfd0d0c1283b5658a3af8216052d587889459e599884579f31fccda86fb",
+      "size": 149151
+    },
+    "LICENSE": {
+      "sha256": "49fb9907ab0fe3c93082d1e90ff05553a81f01d595baf9d8587dea3c3395962e",
+      "size": 1087
+    },
+    "README.md": {
+      "sha256": "f85dadfe0bd25bb1d4c0399623d29af48f071b31bd4f4ab424e5752d2c396ffb",
+      "size": 12155
+    }
+  }
+}
