@@ -6,6 +6,7 @@ KotobaTranscriber - メインアプリケーション
 import sys
 import os
 import shutil
+import argparse
 from datetime import datetime
 from typing import Optional
 import win32event
@@ -31,6 +32,7 @@ from folder_monitor import FolderMonitor
 from faster_whisper_engine import FasterWhisperEngine
 from app_settings import AppSettings
 from validators import Validator, ValidationError
+from config_manager import get_config
 from exceptions import (
     FileProcessingError,
     AudioFormatError,
@@ -1870,6 +1872,25 @@ class MainWindow(QMainWindow):
 
 def main():
     """メイン関数"""
+    # コマンドライン引数の解析
+    parser = argparse.ArgumentParser(
+        description='KotobaTranscriber - 日本語音声文字起こしアプリケーション'
+    )
+    parser.add_argument(
+        '--dangerously-skip-permissions',
+        action='store_true',
+        help='危険: ファイルアクセス権限のチェックをスキップします。セキュリティリスクがあるため、開発時のみ使用してください。'
+    )
+    args = parser.parse_args()
+
+    # パーミッションチェックのスキップフラグを設定
+    if args.dangerously_skip_permissions:
+        logger.warning("=" * 60)
+        logger.warning("WARNING: Permission checks are DISABLED!")
+        logger.warning("This is a security risk. Use only for development/testing.")
+        logger.warning("=" * 60)
+        Validator.set_skip_permissions(True)
+
     # 多重起動防止
     mutex_name = "Global\\KotobaTranscriber_SingleInstance_Mutex"
     mutex = win32event.CreateMutex(None, False, mutex_name)
