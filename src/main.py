@@ -1194,37 +1194,48 @@ class MainWindow(QMainWindow):
         logger.info("Window hidden to tray")
 
     def quit_application(self):
-        """アプリケーション終了"""
+        """アプリケーション終了（並列スレッド終了による高速化）"""
         # 設定を保存
         self.save_ui_settings()
 
-        # 通常の文字起こしワーカー停止
+        # すべてのスレッドに停止要求を送信（並列）
+        threads_to_stop = []
+
+        # 通常の文字起こしワーカー停止要求
         if self.worker and self.worker.isRunning():
             logger.info("Stopping transcription worker...")
             self.worker.quit()
-            if not self.worker.wait(10000):  # 10秒タイムアウト
-                logger.warning("Transcription worker did not finish within timeout, terminating...")
-                self.worker.terminate()
-                self.worker.wait()
+            threads_to_stop.append(('transcription worker', self.worker, 10000))
 
-        # バッチ処理ワーカー停止
+        # バッチ処理ワーカー停止要求
         if self.batch_worker and self.batch_worker.isRunning():
             logger.info("Stopping batch worker...")
             self.batch_worker.cancel()  # キャンセルリクエスト
-            if not self.batch_worker.wait(30000):  # 30秒タイムアウト (複数ファイル処理中の可能性)
-                logger.warning("Batch worker did not finish within timeout, terminating...")
-                self.batch_worker.terminate()
-                self.batch_worker.wait()
+            threads_to_stop.append(('batch worker', self.batch_worker, 30000))
 
-
-        # フォルダ監視停止
+        # フォルダ監視停止要求
         if self.folder_monitor and self.folder_monitor.isRunning():
             logger.info("Stopping folder monitor...")
             self.folder_monitor.stop()
-            if not self.folder_monitor.wait(5000):  # 5秒タイムアウト
-                logger.warning("Folder monitor did not finish within timeout, terminating...")
-                self.folder_monitor.terminate()
-                self.folder_monitor.wait()
+            threads_to_stop.append(('folder monitor', self.folder_monitor, 5000))
+
+        # すべてのスレッドを並列に待機
+        import time
+        if threads_to_stop:
+            start_time = time.time()
+            max_timeout = max((timeout for _, _, timeout in threads_to_stop), default=0)
+
+            # 各スレッドを順番に確認（ただし、トータルのタイムアウトは最大値）
+            for name, thread, timeout in threads_to_stop:
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                remaining_time = max(0, timeout - elapsed_ms)
+
+                if not thread.wait(remaining_time):
+                    logger.warning(f"{name} did not finish within timeout, terminating...")
+                    thread.terminate()
+                    thread.wait()
+                else:
+                    logger.info(f"{name} stopped successfully")
 
         # トレイアイコン非表示
         self.tray_icon.hide()
@@ -1758,10 +1769,9 @@ class MainWindow(QMainWindow):
             y = max(0, min(UIConstants.WINDOW_MAX_HEIGHT, y))
 
             # 画面内に収まるかチェック
-            from PyQt5.QtWidgets import QApplication
-            desktop = QApplication.desktop()
-            if desktop:
-                screen_geometry = desktop.availableGeometry()
+            screen = QApplication.primaryScreen()
+            if screen:
+                screen_geometry = screen.availableGeometry()
 
                 # ウィンドウが画面外に出る場合は調整
                 if x + width > screen_geometry.width():

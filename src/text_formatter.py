@@ -75,13 +75,14 @@ class RegexPatterns:
     # Number formatting
     NUMBER_SPACING = re.compile(r'(\d+)\s+(\d+)')
 
-    # Dynamically compiled patterns cache
-    _pattern_cache: Dict[str, Pattern] = {}
+    # Dynamically compiled patterns are now cached using LRU cache
+    # (maxsize=128 limits memory usage while providing good performance)
 
-    @classmethod
-    def get_filler_pattern(cls, filler: str) -> Pattern:
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def get_filler_pattern(filler: str) -> Pattern:
         """
-        Get or create a cached pattern for filler word removal
+        Get or create a cached pattern for filler word removal (LRU cached)
 
         Args:
             filler: Filler word to create pattern for
@@ -89,16 +90,14 @@ class RegexPatterns:
         Returns:
             Compiled regex pattern
         """
-        key = f"filler_{filler}"
-        if key not in cls._pattern_cache:
-            pattern = r'\b' + re.escape(filler) + r'\b[、。]?\s*'
-            cls._pattern_cache[key] = re.compile(pattern, re.IGNORECASE)
-        return cls._pattern_cache[key]
+        pattern = r'\b' + re.escape(filler) + r'\b[、。]?\s*'
+        return re.compile(pattern, re.IGNORECASE)
 
-    @classmethod
-    def get_conjunction_pattern(cls, conjunction: str) -> Pattern:
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def get_conjunction_pattern(conjunction: str) -> Pattern:
         """
-        Get or create a cached pattern for conjunction punctuation
+        Get or create a cached pattern for conjunction punctuation (LRU cached)
 
         Args:
             conjunction: Conjunction word to create pattern for
@@ -106,16 +105,14 @@ class RegexPatterns:
         Returns:
             Compiled regex pattern
         """
-        key = f"conj_{conjunction}"
-        if key not in cls._pattern_cache:
-            pattern = r'([^、。！？\n])(' + re.escape(conjunction) + r')'
-            cls._pattern_cache[key] = re.compile(pattern)
-        return cls._pattern_cache[key]
+        pattern = r'([^、。！？\n])(' + re.escape(conjunction) + r')'
+        return re.compile(pattern)
 
-    @classmethod
-    def get_quote_verb_pattern(cls, verb: str) -> Pattern:
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def get_quote_verb_pattern(verb: str) -> Pattern:
         """
-        Get or create a cached pattern for quote verb punctuation
+        Get or create a cached pattern for quote verb punctuation (LRU cached)
 
         Args:
             verb: Quote verb to create pattern for
@@ -123,16 +120,14 @@ class RegexPatterns:
         Returns:
             Compiled regex pattern
         """
-        key = f"quote_{verb}"
-        if key not in cls._pattern_cache:
-            pattern = r'と(' + re.escape(verb) + ')'
-            cls._pattern_cache[key] = re.compile(pattern)
-        return cls._pattern_cache[key]
+        pattern = r'と(' + re.escape(verb) + ')'
+        return re.compile(pattern)
 
-    @classmethod
-    def get_polite_ending_pattern(cls, ending: str) -> Pattern:
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def get_polite_ending_pattern(ending: str) -> Pattern:
         """
-        Get or create a cached pattern for polite ending punctuation
+        Get or create a cached pattern for polite ending punctuation (LRU cached)
 
         Args:
             ending: Polite ending to create pattern for
@@ -140,11 +135,8 @@ class RegexPatterns:
         Returns:
             Compiled regex pattern
         """
-        key = f"polite_{ending}"
-        if key not in cls._pattern_cache:
-            pattern = r'(' + re.escape(ending) + r')([^。！？\n])'
-            cls._pattern_cache[key] = re.compile(pattern)
-        return cls._pattern_cache[key]
+        pattern = r'(' + re.escape(ending) + r')([^。！？\n])'
+        return re.compile(pattern)
 
 
 class TextFormatter:

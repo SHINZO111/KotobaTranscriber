@@ -122,55 +122,91 @@ class FolderMonitor(QThread):
 
         return unprocessed
 
-    def is_file_ready(self, file_path: str) -> bool:
+    def is_file_ready(self, file_path: str, timeout: int = 5, check_interval: float = 0.5) -> bool:
         """
-        ファイルが読み取り可能かチェック
+        ファイルが読み取り可能かチェック（TOCTOU対策強化版）
         （ファイルコピー/移動中でないか確認）
-        TOCTOU対策: 排他ロックによるファイル準備確認
-        """
-        try:
-            # ファイルサイズをチェック（0バイトなら待つ）
-            if os.path.getsize(file_path) == 0:
-                return False
 
-            # 排他ロックを試みる（他のプロセスが書き込み中でないか確認）
+        Args:
+            file_path: チェックするファイルパス
+            timeout: タイムアウト（秒）
+            check_interval: チェック間隔（秒）
+
+        Returns:
+            ファイルが読み取り可能ならTrue
+        """
+        start_time = time.time()
+        previous_size = -1
+
+        while time.time() - start_time < timeout:
             try:
-                # 読み書きモードで排他的に開く
-                with open(file_path, 'r+b') as f:
+                # 排他的読み取りを試みる（ロックを保持したままサイズチェック）
+                with open(file_path, 'rb') as f:
                     # ファイル全体をロック（Windows: msvcrt, Unix: fcntl）
                     if os.name == 'nt':
                         import msvcrt
                         try:
+                            # ノンブロッキングでロックを試みる
                             msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-                            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
                         except IOError:
                             logger.debug(f"File is locked by another process: {file_path}")
-                            return False
+                            time.sleep(check_interval)
+                            continue
+
+                        try:
+                            # ロックを保持したままサイズと読み取りテスト
+                            current_size = os.fstat(f.fileno()).st_size
+
+                            if current_size == 0:
+                                return False
+
+                            if current_size == previous_size:
+                                # サイズが安定している - 一部読み取りテスト
+                                f.seek(0)
+                                f.read(min(1024, current_size))
+                                return True
+
+                            previous_size = current_size
+                        finally:
+                            # ロックを解放
+                            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
                     else:
                         import fcntl
                         try:
+                            # ノンブロッキングでロックを試みる
                             fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
                         except IOError:
                             logger.debug(f"File is locked by another process: {file_path}")
-                            return False
+                            time.sleep(check_interval)
+                            continue
 
-                    # 1バイト読み取りテスト
-                    f.read(1)
-            except PermissionError:
-                logger.debug(f"Permission denied, file likely in use: {file_path}")
-                return False
+                        try:
+                            # ロックを保持したままサイズと読み取りテスト
+                            current_size = os.fstat(f.fileno()).st_size
 
-            # サイズ安定性チェック（1秒待機）
-            size1 = os.path.getsize(file_path)
-            time.sleep(1)
-            size2 = os.path.getsize(file_path)
+                            if current_size == 0:
+                                return False
 
-            return size1 == size2
+                            if current_size == previous_size:
+                                # サイズが安定している - 一部読み取りテスト
+                                f.seek(0)
+                                f.read(min(1024, current_size))
+                                return True
 
-        except (OSError, IOError) as e:
-            logger.debug(f"File not ready: {file_path} - {e}")
-            return False
+                            previous_size = current_size
+                        finally:
+                            # ロックを解放
+                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+            except (OSError, IOError, PermissionError) as e:
+                logger.debug(f"File not ready: {file_path} - {e}")
+                time.sleep(check_interval)
+                continue
+
+            time.sleep(check_interval)
+
+        logger.debug(f"Timeout waiting for file to be ready: {file_path}")
+        return False
 
     def mark_as_processed(self, file_path: str):
         """

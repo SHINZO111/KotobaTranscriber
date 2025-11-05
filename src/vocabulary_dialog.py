@@ -375,10 +375,10 @@ class VocabularyDialog(QDialog):
 if __name__ == "__main__":
     # テスト用コード
     import sys
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     logging.basicConfig(level=logging.INFO)
 
     app = QApplication(sys.argv)
     dialog = VocabularyDialog()
-    dialog.exec_()
+    dialog.exec()
