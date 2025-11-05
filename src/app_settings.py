@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from runtime_config import RuntimeConfig
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,29 +94,34 @@ class AppSettings:
             # セキュリティ検証: パストラバーサル対策
             custom_path = Path(settings_file).resolve()
 
-            # 許可されたディレクトリ
-            project_root = Path(__file__).parent.parent.resolve()
-            user_home = Path.home().resolve()
+            # Skip permission checks if flag is set
+            if RuntimeConfig.should_skip_permissions():
+                logger.warning(f"⚠️  Skipping path validation for: {custom_path}")
+                self.settings_file = custom_path
+            else:
+                # 許可されたディレクトリ
+                project_root = Path(__file__).parent.parent.resolve()
+                user_home = Path.home().resolve()
 
-            # パスが許可されたディレクトリ配下かチェック
-            is_allowed = False
-            try:
-                custom_path.relative_to(project_root)
-                is_allowed = True
-            except ValueError:
+                # パスが許可されたディレクトリ配下かチェック
+                is_allowed = False
                 try:
-                    custom_path.relative_to(user_home)
+                    custom_path.relative_to(project_root)
                     is_allowed = True
                 except ValueError:
-                    pass
+                    try:
+                        custom_path.relative_to(user_home)
+                        is_allowed = True
+                    except ValueError:
+                        pass
 
-            if not is_allowed:
-                raise ValueError(
-                    f"Settings file must be within project directory ({project_root}) "
-                    f"or user home ({user_home}): {custom_path}"
-                )
+                if not is_allowed:
+                    raise ValueError(
+                        f"Settings file must be within project directory ({project_root}) "
+                        f"or user home ({user_home}): {custom_path}"
+                    )
 
-            self.settings_file = custom_path
+                self.settings_file = custom_path
 
         self.settings: Dict[str, Any] = copy.deepcopy(self.DEFAULT_SETTINGS)
 

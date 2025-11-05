@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 from validators import Validator, ValidationError
 from config_manager import get_config
+from runtime_config import RuntimeConfig
 
 # オプション: 音声前処理とカスタム語彙
 try:
@@ -43,6 +44,11 @@ def _validate_ffmpeg_path(path: str) -> bool:
     Returns:
         bool: 検証成功時True、失敗時False
     """
+    # Skip validation if flag is set
+    if RuntimeConfig.should_skip_permissions():
+        logger.warning(f"⚠️  Skipping ffmpeg path validation for: {path}")
+        return True
+
     if not path:
         return False
 
