@@ -25,11 +25,11 @@ jobs:
 
       - name: Lint (flake8)
         run: |
-          flake8 src || (echo "flake8 failed" && exit 1)
+          flake8 src
 
       - name: Type check (mypy)
         run: |
-          mypy src || (echo "mypy failed" && exit 1)
+          mypy src
 
       - name: Run tests
         run: |

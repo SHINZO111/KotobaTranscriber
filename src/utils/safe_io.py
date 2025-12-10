@@ -9,7 +9,6 @@ Safe file I/O utilities.
 
 import os
 import tempfile
-import errno
 
 
 def is_within_directory(base_dir: str, target_path: str) -> bool:
@@ -20,7 +19,7 @@ def is_within_directory(base_dir: str, target_path: str) -> bool:
     base = os.path.abspath(base_dir)
     target = os.path.abspath(target_path)
     try:
-        return os.path.commonpath([base]) == os.path.commonpath([base, target])
+        return os.path.commonpath([base, target]) == base
     except ValueError:
         # On different drives (Windows) commonpath can raise
         return False
@@ -30,11 +29,7 @@ def safe_makedirs(path: str, mode: int = 0o755) -> None:
     """
     Create directories, handling races where another process may create it concurrently.
     """
-    try:
-        os.makedirs(path, mode=mode, exist_ok=True)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
+    os.makedirs(path, mode=mode, exist_ok=True)
 
 
 def atomic_write_text(path: str, text: str, encoding: str = 'utf-8') -> None:
