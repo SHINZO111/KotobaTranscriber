@@ -31,13 +31,13 @@ class SubtitleExporter:
         Returns:
             SRT形式の時間文字列
         """
-        td = timedelta(seconds=seconds)
-        hours, remainder = divmod(td.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
+        # ミリ秒を先に計算（小数部分から）
         milliseconds = int((seconds % 1) * 1000)
-        seconds = int(seconds)
+        total_seconds = int(seconds)
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, secs = divmod(remainder, 60)
 
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
 
     @staticmethod
     def format_vtt_time(seconds: float) -> str:
@@ -50,13 +50,13 @@ class SubtitleExporter:
         Returns:
             VTT形式の時間文字列
         """
-        td = timedelta(seconds=seconds)
-        hours, remainder = divmod(td.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
+        # ミリ秒を先に計算（小数部分から）
         milliseconds = int((seconds % 1) * 1000)
-        seconds = int(seconds)
+        total_seconds = int(seconds)
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, secs = divmod(remainder, 60)
 
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
 
     def export_srt(self,
                    segments: List[Dict[str, Any]],

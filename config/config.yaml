@@ -43,6 +43,28 @@ vocabulary:
   enabled: false
   file: "custom_vocabulary.json"
 
+# 建設業用語辞書設定（AGEC対応）
+construction_vocabulary:
+  enabled: true
+  file: "data/construction_dictionary.json"
+  categories:
+    - standard_labor      # 標準労務費関連
+    - construction_law    # 建設業法関連
+    - cost_management     # コスト管理関連
+    - agec_specific       # AGEC社内用語
+
+# 会議モード設定
+meeting_mode:
+  enabled: true
+  auto_split_duration: 1800  # 30分ごとに自動分割（秒）
+  speaker_detection:
+    enabled: true
+    min_speakers: 2
+    max_speakers: 10
+  auto_save:
+    enabled: true
+    interval: 300  # 5分ごとに自動保存（秒）
+
 realtime:
   sample_rate: 16000
   buffer_duration: 3.0
