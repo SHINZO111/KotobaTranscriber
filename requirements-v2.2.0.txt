@@ -1,0 +1,51 @@
+# KotobaTranscriber - 日本語音声文字起こしアプリ
+# Python 3.8以上必要
+
+# AI/ML Libraries
+transformers>=4.30.0
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# Audio Processing
+librosa>=0.10.0
+soundfile>=0.12.0
+pydub>=0.25.0
+
+# === v2.2.0 新機能 ===
+# リアルタイム音声キャプチャ（オプション）
+pyaudio>=0.2.13; platform_system=="Windows" or platform_system=="Linux" or platform_system=="Darwin"
+webrtcvad>=2.0.10; platform_system=="Windows" or platform_system=="Linux" or platform_system=="Darwin"
+
+# Faster Whisper (リアルタイム文字起こし用)
+faster-whisper>=1.0.0
+
+# Speaker Diarization (完全無料、トークン不要)
+speechbrain>=0.5.0
+scikit-learn>=1.0.0
+
+# API補正機能（オプション）
+anthropic>=0.21.0
+openai>=1.0.0
+
+# 強化バッチ処理
+psutil>=5.9.0
+
+# GUI (LGPL v3 - 商用利用可能)
+PySide6>=6.5.0
+
+# Utilities
+numpy>=1.24.0
+pandas>=2.0.0
+python-docx>=0.8.11
+openpyxl>=3.1.0
+pyyaml>=6.0.0
+
+# Progress bar
+tqdm>=4.65.0
+
+# Development tools (optional)
+pytest>=7.0.0; extra == "dev"
+pytest-cov>=4.0.0; extra == "dev"
+black>=23.0.0; extra == "dev"
+flake8>=6.0.0; extra == "dev"
+mypy>=1.0.0; extra == "dev"

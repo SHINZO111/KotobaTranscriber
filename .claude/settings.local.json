@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(start.bat)",
+      "Bash(cmd /c \"cd /d f:\\\\KotobaTranscriber && python src\\\\main.py\")",
+      "Bash(cmd /c \"dir /s /b C:\\\\Python* 2>nul\")",
+      "Bash(cmd /c \"dir /s /b \"\"C:\\\\Program Files\\\\Python*\"\" 2>nul\")",
+      "Bash(cmd /c \"dir /s /b \"\"C:\\\\Users\\\\sawas\\\\AppData\\\\Local\\\\Programs\\\\Python\"\" 2>nul\")",
+      "Bash(cmd /c \"where /R C:\\\\Users\\\\sawas python.exe 2>nul\")",
+      "Bash(cmd /c \"echo %PATH%\")",
+      "Bash(echo:*)",
+      "Bash(py:*)",
+      "Bash(py -3:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Read(//f/KotobaTranscriber/**)",
+      "Bash(xargs:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(winget install:*)",
+      "Bash(\"/c/Users/sawas/AppData/Local/Programs/Python/Python312/python.exe\" --version)",
+      "Bash(\"/c/Users/sawas/AppData/Local/Programs/Python/Python312/python.exe\" -m venv f:/KotobaTranscriber/venv)",
+      "Bash(f:/KotobaTranscriber/venv/Scripts/python.exe -m pip install:*)"
+    ]
+  }
+}
