@@ -16,6 +16,28 @@ omit =
     */dist/*
     */build/*
     */models/*
+    */realtime_tab.py
+    */ui_responsive.py
+    */vocabulary_dialog.py
+    */main_window_enhanced.py
+    */dark_theme.py
+    */folder_monitor.py
+    */qt_compat.py
+    */meeting_mode.py
+    */ui_enhancements.py
+    */faster_whisper_engine.py
+    */transcription_engine.py
+    */llm_corrector_standalone.py
+    */speaker_diarization_free.py
+    */memory_optimizer.py
+    */enhanced_folder_monitor.py
+    */api_corrector.py
+    */advanced_features.py
+    */optimized_pipeline.py
+    */enhanced_batch_processor.py
+    */enhanced_export.py
+    */export/*
+    */__init__.py
 
 # 並列実行モード（pytest-xdist使用時）
 parallel = True

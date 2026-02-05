@@ -5,8 +5,8 @@ KotobaTranscriber - メインアプリケーション
 
 import sys
 import os
-import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 import win32event
 import win32api
@@ -15,9 +15,9 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QTextEdit, QFileDialog, QLabel, QProgressBar, QMessageBox,
     QCheckBox, QGroupBox, QListWidget, QListWidgetItem, QSystemTrayIcon, QMenu,
-    QSpinBox, QFrame, QTabWidget, QComboBox, QSlider
+    QSpinBox, QFrame, QTabWidget, QComboBox, QSlider, QDialog
 )
-from PySide6.QtCore import Qt, QThread, Signal, QThreadPool, QRunnable, Slot
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QAction
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,6 +30,7 @@ from llm_corrector_standalone import StandaloneLLMCorrector
 from folder_monitor import FolderMonitor
 from faster_whisper_engine import FasterWhisperEngine
 from app_settings import AppSettings
+from config_manager import get_config
 from validators import Validator, ValidationError
 from exceptions import (
     FileProcessingError,
@@ -104,8 +105,42 @@ class UIConstants:
 
     # ステータスメッセージ表示時間（ミリ秒）
     STATUS_MESSAGE_TIMEOUT = 3000  # 3秒
+    TRAY_NOTIFICATION_TIMEOUT = 2000  # 2秒（トレイ通知用）
+    ERROR_NOTIFICATION_TIMEOUT = 5000  # 5秒（エラー通知用）
+
+    # サポートする音声/動画ファイル拡張子
+    SUPPORTED_EXTENSIONS = (
+        '.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac', '.wma', '.opus', '.amr',
+        '.mp4', '.avi', '.mov', '.mkv', '.3gp', '.webm',
+    )
+
+    # QFileDialog 用フィルタ文字列
+    AUDIO_FILE_FILTER = (
+        "Audio Files ("
+        + " ".join(f"*{ext}" for ext in SUPPORTED_EXTENSIONS)
+        + ");;All Files (*)"
+    )
 
 
+
+
+# ---------------------------------------------------------------------------
+# Worker Signal Naming Convention
+# ---------------------------------------------------------------------------
+# TranscriptionWorker (単一ファイル):
+#   progress(int)        - 進捗パーセンテージ (0-100)
+#   finished(str)        - 完了シグナル (結果テキスト)
+#   error(str)           - エラーシグナル (エラーメッセージ)
+#
+# BatchTranscriptionWorker (バッチ):
+#   progress(int,int,str)  - 進捗 (完了数, 総数, ファイル名)
+#   file_finished(str,str,bool) - 個別ファイル完了 (パス, テキスト, 成功)
+#   all_finished(int,int)  - 全完了 (成功数, 失敗数)
+#   error(str)             - エラーシグナル (エラーメッセージ)
+#
+# シグナル名の違い (finished vs all_finished) は意図的な設計です。
+# 単一ワーカーは結果テキストを直接返し、バッチワーカーは統計を返します。
+# ---------------------------------------------------------------------------
 
 
 class BatchTranscriptionWorker(QThread):
@@ -196,7 +231,7 @@ class BatchTranscriptionWorker(QThread):
             except MemoryError as e:
                 error_msg = f"メモリ不足です: {audio_path}"
                 logger.error(error_msg, exc_info=True)
-                raise InsufficientMemoryError(0, 0) from e
+                raise InsufficientMemoryError(message=error_msg) from e
             except (IOError, OSError) as e:
                 error_msg = f"ファイル読み込みエラー: {audio_path} - {e}"
                 logger.error(error_msg, exc_info=True)
@@ -376,6 +411,7 @@ class TranscriptionWorker(QThread):
         self.engine = TranscriptionEngine()
         self.enable_diarization = enable_diarization
         self.diarizer = None
+        self._cancelled = False
 
         if enable_diarization:
             try:
@@ -383,6 +419,11 @@ class TranscriptionWorker(QThread):
                 self.diarizer = FreeSpeakerDiarizer()
             except Exception as e:
                 logger.warning(f"Failed to initialize speaker diarization: {e}")
+
+    def cancel(self):
+        """文字起こし処理をキャンセル"""
+        logger.info("Transcription cancellation requested")
+        self._cancelled = True
 
     def run(self):
         """文字起こし実行"""
@@ -408,6 +449,12 @@ class TranscriptionWorker(QThread):
                 error_msg = f"予期しないモデルロードエラー: {type(e).__name__} - {e}"
                 logger.error(error_msg, exc_info=True)
                 self.error.emit(error_msg)
+                return
+
+            # キャンセルチェック（モデルロード後）
+            if self._cancelled:
+                logger.info("Transcription cancelled after model load")
+                self.error.emit("文字起こしがキャンセルされました")
                 return
 
             # 文字起こし実行
@@ -459,6 +506,12 @@ class TranscriptionWorker(QThread):
             text = result.get("text", "")
             if not text:
                 logger.warning(f"Transcription returned empty text for: {self.audio_path}")
+
+            # キャンセルチェック（文字起こし後、話者分離前）
+            if self._cancelled:
+                logger.info("Transcription cancelled before diarization")
+                self.error.emit("文字起こしがキャンセルされました")
+                return
 
             # 話者分離が有効な場合（非クリティカル処理）
             if self.enable_diarization and self.diarizer:
@@ -524,6 +577,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.worker = None
         self.batch_worker = None
+        self.selected_file = None
         self.formatter = TextFormatter()
         self.diarizer = None  # 話者分離は必要時に初期化
         self.advanced_corrector = None  # 高度AI補正（常に使用）
@@ -809,7 +863,7 @@ class MainWindow(QMainWindow):
             self,
             "音声ファイルを選択",
             "",
-            "Audio Files (*.mp3 *.wav *.m4a *.flac *.ogg *.aac *.wma *.opus *.amr *.3gp *.webm *.mp4 *.avi *.mov *.mkv);;All Files (*)"
+            UIConstants.AUDIO_FILE_FILTER
         )
 
         if file_path:
@@ -820,6 +874,21 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"ファイル選択: {filename}")
             logger.info(f"File selected: {file_path}")
 
+    def _set_processing_ui(self, processing: bool):
+        """処理中/待機中のUI状態を切り替え"""
+        if processing:
+            self.transcribe_button.setEnabled(False)
+            self.file_button.setEnabled(False)
+            self.batch_file_button.setEnabled(False)
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setValue(0)
+        else:
+            has_file = bool(self.selected_file) or bool(getattr(self, 'batch_files', None))
+            self.transcribe_button.setEnabled(has_file)
+            self.file_button.setEnabled(True)
+            self.batch_file_button.setEnabled(True)
+            self.progress_bar.setVisible(False)
+
     def start_transcription(self):
         """文字起こし開始（バッチ/単一を自動判定）"""
         # バッチ処理モードかチェック
@@ -828,16 +897,12 @@ class MainWindow(QMainWindow):
             return
 
         # 単一ファイル処理
-        if not hasattr(self, 'selected_file'):
+        if not self.selected_file:
             QMessageBox.warning(self, "警告", "音声ファイルを選択してください")
             return
 
         # UI状態変更
-        self.transcribe_button.setEnabled(False)
-        self.file_button.setEnabled(False)
-        self.batch_file_button.setEnabled(False)
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
+        self._set_processing_ui(True)
         self.statusBar().showMessage("文字起こし中...")
 
         # ワーカースレッド開始
@@ -890,9 +955,7 @@ class MainWindow(QMainWindow):
                             f"AI補正のロードに失敗しました: {str(e)}\n補正なしで続行します。"
                         )
                         # 補正なしで続行
-                        self.transcribe_button.setEnabled(True)
-                        self.file_button.setEnabled(True)
-                        self.progress_bar.setVisible(False)
+                        self._set_processing_ui(False)
                         self.auto_save_text(formatted_text)
                         self.statusBar().showMessage("文字起こし完了!")
                         QMessageBox.information(self, "完了", "文字起こしが完了しました")
@@ -913,10 +976,7 @@ class MainWindow(QMainWindow):
                 )
 
         # 結果表示エリア削除（自動保存のみ）
-        self.transcribe_button.setEnabled(True)
-        self.file_button.setEnabled(True)
-        self.batch_file_button.setEnabled(True)
-        self.progress_bar.setVisible(False)
+        self._set_processing_ui(False)
         self.update_tray_tooltip()  # ツールチップ更新
 
         # 自動保存
@@ -928,10 +988,7 @@ class MainWindow(QMainWindow):
 
     def transcription_error(self, error_msg):
         """エラー処理"""
-        self.transcribe_button.setEnabled(True)
-        self.file_button.setEnabled(True)
-        self.batch_file_button.setEnabled(True)
-        self.progress_bar.setVisible(False)
+        self._set_processing_ui(False)
         self.statusBar().showMessage("エラー発生")
         QMessageBox.critical(self, "エラー", error_msg)
         logger.error(f"Transcription error: {error_msg}")
@@ -940,7 +997,7 @@ class MainWindow(QMainWindow):
         """文字起こし結果を自動保存（パストラバーサル対策済み）"""
         try:
             # 元の音声ファイル名から出力ファイル名を生成
-            if hasattr(self, 'selected_file'):
+            if self.selected_file:
                 base_name = os.path.splitext(self.selected_file)[0]
                 output_file = f"{base_name}_文字起こし.txt"
 
@@ -958,7 +1015,8 @@ class MainWindow(QMainWindow):
                     real_save_path = os.path.realpath(str(validated_path))
                     real_save_dir = os.path.dirname(real_save_path)
 
-                    if not real_save_dir.startswith(original_dir):
+                    # os.sep を付加して /path/audio と /path/audio_backup の誤判定を防止
+                    if not (real_save_dir + os.sep).startswith(original_dir + os.sep):
                         raise ValidationError(f"Path traversal detected: {output_file}")
 
                     # ファイルに保存
@@ -976,16 +1034,13 @@ class MainWindow(QMainWindow):
             logger.error(f"Auto-save failed: {e}")
             # 自動保存失敗はエラーダイアログを表示しない（ユーザー体験を損なわないため）
 
-    # save_textとclear_resultsメソッドを削除（結果表示エリア削除のため不要）
-    # 自動保存機能（auto_save_text）は残す
-
     def select_batch_files(self):
         """複数ファイル選択"""
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
             "複数の音声ファイルを選択",
             "",
-            "Audio Files (*.mp3 *.wav *.m4a *.flac *.ogg *.aac *.wma *.opus *.amr *.3gp *.webm *.mp4 *.avi *.mov *.mkv);;All Files (*)"
+            UIConstants.AUDIO_FILE_FILTER
         )
 
         if file_paths:
@@ -1022,11 +1077,7 @@ class MainWindow(QMainWindow):
             return
 
         # UI状態変更
-        self.transcribe_button.setEnabled(False)
-        self.file_button.setEnabled(False)
-        self.batch_file_button.setEnabled(False)
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
+        self._set_processing_ui(True)
         self.statusBar().showMessage(f"バッチ処理中... (0/{len(self.batch_files)})")
 
         # バッチワーカー開始
@@ -1067,10 +1118,7 @@ class MainWindow(QMainWindow):
         total = success_count + failed_count
 
         # UI状態復元
-        self.transcribe_button.setEnabled(True)
-        self.file_button.setEnabled(True)
-        self.batch_file_button.setEnabled(True)
-        self.progress_bar.setVisible(False)
+        self._set_processing_ui(False)
 
         # 結果表示（結果エリア削除、ダイアログのみ）
         result_message = f"バッチ処理完了!\n\n"
@@ -1193,38 +1241,32 @@ class MainWindow(QMainWindow):
         self.hide()
         logger.info("Window hidden to tray")
 
+    def _stop_worker(self, worker, name: str, timeout: int = 10000, cancel: bool = False, stop: bool = False):
+        """ワーカースレッドを安全に停止する共通メソッド"""
+        if not worker or not worker.isRunning():
+            return
+        logger.info(f"Stopping {name}...")
+        if cancel and hasattr(worker, 'cancel'):
+            worker.cancel()
+        elif stop and hasattr(worker, 'stop'):
+            worker.stop()
+        else:
+            worker.quit()
+        if not worker.wait(timeout):
+            logger.warning(f"{name} did not finish within timeout, terminating...")
+            worker.terminate()
+            if not worker.wait(5000):
+                logger.error(f"{name} failed to terminate within 5s")
+
     def quit_application(self):
         """アプリケーション終了"""
         # 設定を保存
         self.save_ui_settings()
 
-        # 通常の文字起こしワーカー停止
-        if self.worker and self.worker.isRunning():
-            logger.info("Stopping transcription worker...")
-            self.worker.quit()
-            if not self.worker.wait(10000):  # 10秒タイムアウト
-                logger.warning("Transcription worker did not finish within timeout, terminating...")
-                self.worker.terminate()
-                self.worker.wait()
-
-        # バッチ処理ワーカー停止
-        if self.batch_worker and self.batch_worker.isRunning():
-            logger.info("Stopping batch worker...")
-            self.batch_worker.cancel()  # キャンセルリクエスト
-            if not self.batch_worker.wait(30000):  # 30秒タイムアウト (複数ファイル処理中の可能性)
-                logger.warning("Batch worker did not finish within timeout, terminating...")
-                self.batch_worker.terminate()
-                self.batch_worker.wait()
-
-
-        # フォルダ監視停止
-        if self.folder_monitor and self.folder_monitor.isRunning():
-            logger.info("Stopping folder monitor...")
-            self.folder_monitor.stop()
-            if not self.folder_monitor.wait(5000):  # 5秒タイムアウト
-                logger.warning("Folder monitor did not finish within timeout, terminating...")
-                self.folder_monitor.terminate()
-                self.folder_monitor.wait()
+        # ワーカースレッド停止
+        self._stop_worker(self.worker, "transcription worker", timeout=UIConstants.THREAD_WAIT_TIMEOUT, cancel=True)
+        self._stop_worker(self.batch_worker, "batch worker", timeout=UIConstants.BATCH_WAIT_TIMEOUT, cancel=True)
+        self._stop_worker(self.folder_monitor, "folder monitor", timeout=UIConstants.MONITOR_WAIT_TIMEOUT, stop=True)
 
         # トレイアイコン非表示
         self.tray_icon.hide()
@@ -1243,7 +1285,7 @@ class MainWindow(QMainWindow):
             "KotobaTranscriber",
             "アプリはトレイで実行中です。完全に終了するには右クリックメニューから「終了」を選択してください。",
             QSystemTrayIcon.Information,
-            2000
+            UIConstants.TRAY_NOTIFICATION_TIMEOUT
         )
         logger.info("Window closed to tray")
 
@@ -1278,7 +1320,6 @@ class MainWindow(QMainWindow):
                 self.folder_monitor.stop()
 
                 # 両方のスレッドを並列で待機
-                import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                     batch_future = executor.submit(lambda: self.batch_worker.wait(10000))
                     monitor_future = executor.submit(lambda: self.folder_monitor.wait(5000))
@@ -1298,11 +1339,7 @@ class MainWindow(QMainWindow):
                 self.batch_worker = None
             else:
                 # バッチワーカーがない場合は通常の停止
-                self.folder_monitor.stop()
-                if not self.folder_monitor.wait(5000):
-                    logger.warning("Folder monitor did not finish, terminating...")
-                    self.folder_monitor.terminate()
-                    self.folder_monitor.wait()
+                self._stop_worker(self.folder_monitor, "folder monitor", timeout=5000, stop=True)
 
             self.folder_monitor = None
 
@@ -1335,7 +1372,7 @@ class MainWindow(QMainWindow):
         try:
             self.folder_monitor = FolderMonitor(
                 self.monitored_folder,
-                check_interval=10  # 10秒ごとにチェック
+                check_interval=UIConstants.MONITOR_INTERVAL_DEFAULT
             )
 
             # シグナル接続
@@ -1356,7 +1393,7 @@ class MainWindow(QMainWindow):
                 "フォルダ監視開始",
                 f"{os.path.basename(self.monitored_folder)} を監視中...",
                 QSystemTrayIcon.Information,
-                2000
+                UIConstants.TRAY_NOTIFICATION_TIMEOUT
             )
 
         except Exception as e:
@@ -1412,7 +1449,7 @@ class MainWindow(QMainWindow):
             "新規ファイル検出",
             f"{len(new_files)}個のファイルを自動文字起こし中...",
             QSystemTrayIcon.Information,
-            3000
+            UIConstants.TRAY_NOTIFICATION_TIMEOUT
         )
 
         # バッチ処理で自動文字起こし
@@ -1487,7 +1524,7 @@ class MainWindow(QMainWindow):
                 "文字起こし失敗",
                 f"{filename}\nエラー: {result[:100]}",
                 QSystemTrayIcon.Critical,
-                5000
+                UIConstants.ERROR_NOTIFICATION_TIMEOUT
             )
 
             # 失敗した場合はマークしない→次回の監視で再処理される
@@ -1508,7 +1545,7 @@ class MainWindow(QMainWindow):
             "自動文字起こし完了",
             f"成功: {success_count}件, 失敗: {failed_count}件",
             QSystemTrayIcon.Information,
-            3000
+            UIConstants.TRAY_NOTIFICATION_TIMEOUT
         )
 
         self.statusBar().showMessage(f"自動処理完了: {success_count}成功, {failed_count}失敗")
@@ -1520,7 +1557,8 @@ class MainWindow(QMainWindow):
 
     def update_stats_display(self):
         """統計情報表示を更新"""
-        processing_count = len(self.processing_files)
+        with self.processing_files_lock:
+            processing_count = len(self.processing_files)
         self.stats_label.setText(
             f"処理済み: {self.total_processed}件 | 失敗: {self.total_failed}件 | 処理中: {processing_count}件"
         )
@@ -1624,8 +1662,11 @@ class MainWindow(QMainWindow):
 
         try:
             dialog = VocabularyDialog(self)
-            dialog.exec_()
-            logger.info("Vocabulary dialog opened")
+            result = dialog.exec()
+            if result == QDialog.DialogCode.Accepted:
+                logger.info("Vocabulary dialog: changes accepted")
+            else:
+                logger.info("Vocabulary dialog: cancelled")
         except Exception as e:
             logger.error(f"Failed to open vocabulary dialog: {e}")
             QMessageBox.critical(
@@ -1675,7 +1716,6 @@ class MainWindow(QMainWindow):
                 return
 
             # フォルダの存在確認
-            from pathlib import Path
             folder_path = Path(self.monitored_folder)
             if not folder_path.exists() or not folder_path.is_dir():
                 logger.warning(f"Auto-start skipped: Monitored folder does not exist: {self.monitored_folder}")
@@ -1683,12 +1723,10 @@ class MainWindow(QMainWindow):
 
             # 未処理ファイルの確認
             from folder_monitor import FolderMonitor
-            audio_video_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac', '.wma', '.opus', '.amr',
-                                     '.mp4', '.avi', '.mov', '.mkv', '.3gp', '.webm']
 
             # サポートされている形式のファイルを検索
             all_files = []
-            for ext in audio_video_extensions:
+            for ext in UIConstants.SUPPORTED_EXTENSIONS:
                 all_files.extend(list(folder_path.glob(f'*{ext}')))
                 all_files.extend(list(folder_path.glob(f'*{ext.upper()}')))
 
@@ -1736,7 +1774,7 @@ class MainWindow(QMainWindow):
                 "自動監視開始",
                 f"{os.path.basename(self.monitored_folder)}\n{len(unprocessed_files)}個の未処理ファイルを検出",
                 QSystemTrayIcon.Information,
-                3000
+                UIConstants.TRAY_NOTIFICATION_TIMEOUT
             )
 
         except Exception as e:
@@ -1758,10 +1796,9 @@ class MainWindow(QMainWindow):
             y = max(0, min(UIConstants.WINDOW_MAX_HEIGHT, y))
 
             # 画面内に収まるかチェック
-            from PyQt5.QtWidgets import QApplication
-            desktop = QApplication.desktop()
-            if desktop:
-                screen_geometry = desktop.availableGeometry()
+            screen = QApplication.primaryScreen()
+            if screen:
+                screen_geometry = screen.availableGeometry()
 
                 # ウィンドウが画面外に出る場合は調整
                 if x + width > screen_geometry.width():
@@ -1775,7 +1812,6 @@ class MainWindow(QMainWindow):
             # フォルダ設定を復元（存在チェック付き）
             monitored_folder = self.settings.get('monitored_folder')
             if monitored_folder:
-                from pathlib import Path
                 if Path(monitored_folder).exists() and Path(monitored_folder).is_dir():
                     self.monitored_folder = monitored_folder
                     folder_name = os.path.basename(monitored_folder)
@@ -1786,7 +1822,6 @@ class MainWindow(QMainWindow):
 
             completed_folder = self.settings.get('completed_folder')
             if completed_folder:
-                from pathlib import Path
                 if Path(completed_folder).exists() and Path(completed_folder).is_dir():
                     self.completed_folder = completed_folder
                     folder_name = os.path.basename(completed_folder)
@@ -1897,7 +1932,7 @@ def main():
     logger.info("Application started")
 
     try:
-        sys.exit(app.exec_())
+        sys.exit(app.exec())
     finally:
         # ミューテックスの解放
         win32api.CloseHandle(mutex)

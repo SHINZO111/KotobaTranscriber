@@ -3,9 +3,7 @@
 SRT/VTT形式の字幕ファイル生成
 """
 
-import os
 import re
-from datetime import timedelta
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
@@ -21,42 +19,33 @@ class SubtitleExporter:
         pass
 
     @staticmethod
-    def format_srt_time(seconds: float) -> str:
+    def _format_time(seconds: float, separator: str) -> str:
         """
-        秒数をSRT時間形式に変換 (HH:MM:SS,mmm)
+        秒数を時間形式に変換する共通メソッド
 
         Args:
             seconds: 秒数
+            separator: ミリ秒区切り文字（SRT: ","、VTT: "."）
 
         Returns:
-            SRT形式の時間文字列
+            フォーマット済み時間文字列
         """
-        # ミリ秒を先に計算（小数部分から）
         milliseconds = int((seconds % 1) * 1000)
         total_seconds = int(seconds)
         hours, remainder = divmod(total_seconds, 3600)
         minutes, secs = divmod(remainder, 60)
 
-        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}{separator}{milliseconds:03d}"
+
+    @staticmethod
+    def format_srt_time(seconds: float) -> str:
+        """秒数をSRT時間形式に変換 (HH:MM:SS,mmm)"""
+        return SubtitleExporter._format_time(seconds, ",")
 
     @staticmethod
     def format_vtt_time(seconds: float) -> str:
-        """
-        秒数をVTT時間形式に変換 (HH:MM:SS.mmm)
-
-        Args:
-            seconds: 秒数
-
-        Returns:
-            VTT形式の時間文字列
-        """
-        # ミリ秒を先に計算（小数部分から）
-        milliseconds = int((seconds % 1) * 1000)
-        total_seconds = int(seconds)
-        hours, remainder = divmod(total_seconds, 3600)
-        minutes, secs = divmod(remainder, 60)
-
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
+        """秒数をVTT時間形式に変換 (HH:MM:SS.mmm)"""
+        return SubtitleExporter._format_time(seconds, ".")
 
     def export_srt(self,
                    segments: List[Dict[str, Any]],
@@ -83,6 +72,9 @@ class SubtitleExporter:
             logger.info(f"SRT exported: {output_path}")
             return True
 
+        except (IOError, OSError) as e:
+            logger.error(f"SRT export I/O error: {e}")
+            return False
         except Exception as e:
             logger.error(f"SRT export failed: {e}")
             return False
@@ -111,6 +103,9 @@ class SubtitleExporter:
             logger.info(f"VTT exported: {output_path}")
             return True
 
+        except (IOError, OSError) as e:
+            logger.error(f"VTT export I/O error: {e}")
+            return False
         except Exception as e:
             logger.error(f"VTT export failed: {e}")
             return False
@@ -376,6 +371,9 @@ class SubtitleExporter:
                     f.write(f"[{segment['start']:.2f}s] {segment['text']}\n")
 
             return True
+        except (IOError, OSError) as e:
+            logger.error(f"TXT export I/O error: {e}")
+            return False
         except Exception as e:
             logger.error(f"TXT export failed: {e}")
             return False

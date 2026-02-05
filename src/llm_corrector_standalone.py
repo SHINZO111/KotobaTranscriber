@@ -7,6 +7,9 @@ import logging
 import re
 from typing import Optional
 
+from text_formatter import TextFormatter
+from exceptions import ModelLoadError
+
 logger = logging.getLogger(__name__)
 
 # 高度な補正用のインポート（オプション）
@@ -66,15 +69,16 @@ class StandaloneLLMCorrector:
             logger.info(f"Loading model: {self.model_name}...")
 
             # トークナイザーとモデルをロード
+            # セキュリティ: trust_remote_code=Falseで安全にモデルをロード
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
-                trust_remote_code=True
+                trust_remote_code=False
             )
 
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                trust_remote_code=True
+                trust_remote_code=False
             )
 
             # デバイスに移動
@@ -94,7 +98,7 @@ class StandaloneLLMCorrector:
 
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
-            raise
+            raise ModelLoadError(f"Failed to load LLM model '{self.model_name}': {e}") from e
 
     def is_available(self) -> bool:
         """モデルが利用可能かチェック"""
@@ -168,7 +172,7 @@ class StandaloneLLMCorrector:
         if not self.is_loaded:
             try:
                 self.load_model()
-            except:
+            except Exception:
                 return text[:200] + "..."
 
         try:
@@ -212,13 +216,15 @@ class StandaloneLLMCorrector:
 
 class SimpleLLMCorrector:
     """
-    より軽量なルールベース+小規模モデルのハイブリッド補正
-    モデルなしでも動作可能
+    より軽量なルールベース補正
+    TextFormatterに委譲しつつ、追加の補正ルールを適用する。
+    モデルなしでも動作可能。
     """
 
     def __init__(self):
         """初期化"""
         self.is_loaded = True  # 常に利用可能
+        self._formatter = TextFormatter()
 
     def is_available(self) -> bool:
         """常に利用可能"""
@@ -234,16 +240,10 @@ class SimpleLLMCorrector:
         Returns:
             補正された文章
         """
+        # フィラー語削除（TextFormatterのリストを再利用、スペースなしテキスト対応）
+        filler_list = TextFormatter.FILLER_WORDS + TextFormatter.AGGRESSIVE_FILLER_WORDS
         result = text
-
-        # フィラー語（言いよどみ）の削除
-        fillers = [
-            'えーと', 'えーっと', 'えっと', 'あのー', 'あのう', 'あの',
-            'えー', 'あー', 'うー', 'うーん', 'んー', 'まあ',
-            'なんか', 'なんていうか', 'ちょっと', 'やっぱり',
-            'ですね', 'ですよね', 'ですけど', 'なんですけど',
-        ]
-        for filler in fillers:
+        for filler in filler_list:
             result = re.sub(re.escape(filler) + r'\s*', '', result)
 
         # 基本的な補正ルール
@@ -272,104 +272,8 @@ class SimpleLLMCorrector:
         result = re.sub(r'\s+', ' ', result)
         result = result.strip()
 
-        # === LLMベースの句読点処理 ===
-        result = self._add_intelligent_punctuation(result)
-
-        return result
-
-    def _add_intelligent_punctuation(self, text: str) -> str:
-        """
-        インテリジェントな句読点追加（LLMライクなルール）
-
-        Args:
-            text: 入力テキスト
-
-        Returns:
-            句読点が追加されたテキスト
-        """
-        result = text
-
-        # 既存の句読点の後のスペースを削除
-        result = re.sub(r'([、。！？])\s+', r'\1', result)
-
-        # 1. 接続詞の前に読点（文頭以外、既に句読点がない場合のみ）
-        conjunctions = [
-            'しかし', 'また', 'そして', 'それで', 'つまり', 'ところで',
-            'さらに', 'ただし', 'ですが', 'でも', 'けれど', 'けれども',
-            'だから', 'なので', 'そのため', 'したがって'
-        ]
-        for conj in conjunctions:
-            # 文頭・改行直後でない接続詞の前に読点
-            pattern = r'([^、。！？\n])(' + re.escape(conj) + r')'
-            result = re.sub(pattern, r'\1、\2', result)
-
-        # 2. 「～て」「～で」の後に文が続く場合、意味的な区切りで読点
-        # 長い文（40文字以上）の場合のみ
-        result = re.sub(r'([てで])([^、。！？\n]{40,}?)([^、。！？\n]{20,})', r'\1、\2\3', result)
-
-        # 3. 「～が」の後に対比・逆接が続く場合に読点
-        # 「～が」の後に長い文（35文字以上）がある場合
-        result = re.sub(r'([が])([^、。！？\n]{35,})', r'\1、\2', result)
-
-        # 4. 理由・原因を表す「～ので」「～から」の後に読点
-        result = re.sub(r'(ので|から)([^、。！？\n])', r'\1、\2', result)
-
-        # 5. 条件を表す「～たら」「～れば」「～なら」の後に読点
-        result = re.sub(r'(たら|れば|なら)([^、。！？\n])', r'\1、\2', result)
-
-        # 6. 列挙の「～たり」の後に読点
-        result = re.sub(r'(たり)([^、。！？\n])', r'\1、\2', result)
-
-        # 7. 引用の「～と」の後に読点（思う、言う、聞く等の前）
-        quote_verbs = ['思います', '思った', '言います', '言った', '聞きます', '聞いた', '考えます', '考えた']
-        for verb in quote_verbs:
-            result = re.sub(r'と(' + re.escape(verb) + ')', r'と、\1', result)
-
-        # 8. 長すぎる文を検出して適切な位置に読点を追加
-        # 60文字以上句読点がない場合、中間地点で読点を追加
-        sentences = result.split('。')
-        processed_sentences = []
-
-        for sentence in sentences:
-            if len(sentence) > 60 and '、' not in sentence:
-                # 文の中間付近で自然な区切り（助詞の後）を探す
-                mid_point = len(sentence) // 2
-                # 中間地点から前後10文字の範囲で助詞を探す
-                search_range = sentence[max(0, mid_point-10):min(len(sentence), mid_point+10)]
-                particles = ['て', 'で', 'が', 'を', 'に', 'は', 'も']
-
-                for particle in particles:
-                    if particle in search_range:
-                        # 助詞の後に読点を追加
-                        insert_pos = sentence.find(particle, max(0, mid_point-10))
-                        if insert_pos != -1 and insert_pos + 1 < len(sentence):
-                            sentence = sentence[:insert_pos+1] + '、' + sentence[insert_pos+1:]
-                            break
-
-            processed_sentences.append(sentence)
-
-        result = '。'.join(processed_sentences)
-
-        # 9. 連続する読点を削除
-        result = re.sub(r'、{2,}', '、', result)
-
-        # 10. 句点・疑問符・感嘆符の直前の読点を削除
-        result = re.sub(r'、([。！？])', r'\1', result)
-
-        # 11. 文末処理
-        # 「です」「ます」等の丁寧語の後に句点がない場合
-        polite_endings = ['です', 'ます', 'ました', 'でした', 'ません', 'ませんでした',
-                         'でしょう', 'ましょう', 'ください', 'くださいました']
-        for ending in polite_endings:
-            pattern = r'(' + re.escape(ending) + r')([^。！？\n])'
-            result = re.sub(pattern, r'\1。\2', result)
-
-        # 12. 文末に何もない場合は句点を追加
-        if result and not result.endswith(('。', '！', '？', '…', '\n')):
-            result += '。'
-
-        # 13. 句点の後に文字がある場合は改行（見やすさのため）
-        result = re.sub(r'。([^\s\n])', r'。\n\1', result)
+        # 句読点処理はTextFormatterに委譲
+        result = self._formatter.add_punctuation(result)
 
         return result
 

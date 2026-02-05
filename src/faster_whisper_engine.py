@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Type aliases for better type safety
 ModelSize = Literal["tiny", "base", "small", "medium", "large-v2", "large-v3"]
-ComputeType = Literal["int8", "int8_float16", "int16", "float16", "float32"]
+ComputeType = Literal["auto", "int8", "int8_float16", "int16", "float16", "float32"]
 DeviceType = Literal["auto", "cpu", "cuda"]
 
 # faster-whisper のインポート（オプショナル）
@@ -194,7 +194,7 @@ class FasterWhisperEngine(BaseTranscriptionEngine):
 
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
-            audio_duration = len(audio) / sample_rate if 'sample_rate' in locals() else 0.0
+            audio_duration = len(audio) / sample_rate
             raise TranscriptionFailedError(str(e), audio_duration)
 
     def transcribe_stream(self,
@@ -330,7 +330,7 @@ class TransformersWhisperEngine(BaseTranscriptionEngine):
 
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
-            audio_duration = len(audio) / sample_rate if 'sample_rate' in locals() else 0.0
+            audio_duration = len(audio) / sample_rate
             raise TranscriptionFailedError(str(e), audio_duration)
 
     def is_available(self) -> bool:

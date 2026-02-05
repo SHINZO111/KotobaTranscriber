@@ -152,6 +152,9 @@ class EnhancedBatchProcessor:
     - メモリ監視
     """
 
+    # バッチサイズ計算用の乗数（ワーカー数 × この値）
+    BATCH_SIZE_MULTIPLIER = 2
+
     def __init__(self,
                  max_workers: int = 4,
                  auto_adjust_workers: bool = True,
@@ -241,11 +244,13 @@ class EnhancedBatchProcessor:
                 self.failed_files = []
 
         batch_id = batch_id or f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        checkpoint_failures = 0
+        MAX_CHECKPOINT_FAILURES = 3
 
         try:
             while self.remaining_files and not self._cancelled:
-                # 一時停止チェック
-                while self.is_paused:
+                # 一時停止チェック（キャンセルも監視）
+                while self.is_paused and not self._cancelled:
                     time.sleep(0.5)
 
                 # ワーカー数を調整
@@ -253,14 +258,22 @@ class EnhancedBatchProcessor:
                     self._adjust_workers()
 
                 # 現在のバッチを処理
-                batch_size = self.current_workers * 2  # 各ワーカーに2ファイル程度
+                batch_size = self.current_workers * self.BATCH_SIZE_MULTIPLIER
                 current_batch = self.remaining_files[:batch_size]
 
                 self._process_batch(current_batch, processor_func, progress_callback, batch_id)
 
                 # チェックポイント保存
                 if self.enable_checkpoint and self.checkpoint_manager:
-                    self._save_checkpoint(batch_id)
+                    try:
+                        self._save_checkpoint(batch_id)
+                        checkpoint_failures = 0
+                    except Exception as e:
+                        checkpoint_failures += 1
+                        logger.warning(f"Failed to save checkpoint ({checkpoint_failures}/{MAX_CHECKPOINT_FAILURES}): {e}")
+                        if checkpoint_failures >= MAX_CHECKPOINT_FAILURES:
+                            logger.error("Checkpoint saving failed repeatedly, disabling checkpoints")
+                            self.enable_checkpoint = False
 
             # 完了
             self.stats["elapsed_time"] = time.time() - self.stats["start_time"]

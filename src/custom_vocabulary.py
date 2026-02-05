@@ -120,14 +120,24 @@ class CustomVocabulary:
 
         self.save_vocabulary()
 
+    MAX_HOTWORD_LENGTH = 100
+
     def add_hotword(self, word: str):
         """
         ホットワードを追加
 
         Args:
             word: 追加する単語
+
+        Raises:
+            ValueError: 単語が空または長すぎる場合
         """
-        if word and word not in self.hotwords:
+        if not word or not word.strip():
+            raise ValueError("Hotword cannot be empty")
+        word = word.strip()
+        if len(word) > self.MAX_HOTWORD_LENGTH:
+            raise ValueError(f"Hotword too long: {len(word)} > {self.MAX_HOTWORD_LENGTH}")
+        if word not in self.hotwords:
             self.hotwords.append(word)
             self.save_vocabulary()
             logger.info(f"Added hotword: {word}")

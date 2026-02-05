@@ -22,6 +22,8 @@ pytest
 pytest -m unit
 pytest -m integration
 pytest -m production
+pytest -m performance
+pytest -m gui
 
 # Skip slow or GPU tests
 pytest -m "not slow and not gpu"
@@ -63,7 +65,7 @@ python build_release.py
 ## Architecture
 
 ### Entry point and main module
-`src/main.py` (~2,800 lines) is the monolithic main module containing the PySide6 GUI, threading orchestration, and all tab/panel logic. It imports all other modules and manages the application lifecycle.
+`src/main.py` (~1,900 lines) is the monolithic main module containing the PySide6 GUI, threading orchestration, and all tab/panel logic. It imports all other modules and manages the application lifecycle.
 
 ### Transcription engines (two-model strategy)
 - `src/transcription_engine.py` — Primary engine using Kotoba-Whisper v2.2 via HuggingFace Transformers. Best accuracy for Japanese.
@@ -72,6 +74,11 @@ python build_release.py
 ### Post-processing pipeline
 Transcribed text flows through an optional chain: `text_formatter.py` (filler removal, punctuation, paragraphs) → `speaker_diarization_free.py` (SpeechBrain-based speaker separation) → `llm_corrector_standalone.py` (local LLM correction) or `api_corrector.py` (Claude/OpenAI API correction). Each step can be independently enabled/disabled.
 
+### Domain-specific features (v2.2+)
+- `construction_vocabulary.py` / `custom_dictionary.py` — Construction industry terminology support (AGEC-specific terms, labor costs, construction law)
+- `meeting_minutes_generator.py` / `minutes_generator.py` — Auto-generates meeting minutes with speaker detection and auto-save
+- `enhanced_export.py` / `enhanced_subtitle_exporter.py` — Extended export with segment merging and SRT/VTT formatting
+
 ### Processing modes
 - **Single file**: Direct transcription from the main tab
 - **Batch**: `batch_processor.py` / `enhanced_batch_processor.py` (with checkpointing and memory monitoring)
@@ -79,12 +86,20 @@ Transcribed text flows through an optional chain: `text_formatter.py` (filler re
 - **Real-time**: `realtime_tab.py` captures live microphone input via PyAudio + WebRTC VAD
 
 ### Export formats
-TXT, DOCX (python-docx), XLSX (openpyxl), SRT/VTT (`subtitle_exporter.py`), JSON with timestamps.
+TXT, DOCX (`src/export/word_exporter.py`), XLSX (`src/export/excel_exporter.py`), SRT/VTT (`subtitle_exporter.py`), JSON with timestamps.
+
+### Enhancement modules
+- `dark_theme.py`, `ui_enhancements.py`, `ui_responsive.py` — UI customization and theming
+- `memory_optimizer.py`, `device_manager.py`, `optimized_pipeline.py` — Performance optimization
+- `error_recovery.py`, `enhanced_error_handling.py` — Robust error recovery and retry logic
 
 ### Configuration
-- `config/config.yaml` — System defaults (model names, device settings, FFmpeg path, API config)
+- `config/config.yaml` — System defaults (model names, device settings, FFmpeg path, API config). Note: audio preprocessing is disabled by default to avoid meta tensor errors.
 - `app_settings.json` — User preferences, persisted as JSON with thread-safe atomic writes and automatic backup rotation (max 5 generations in `.backups/`)
 - API keys: use environment variables `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`
+
+### Qt compatibility layer (legacy)
+`src/qt_compat.py` provides PyQt5/PySide6 compatibility helpers (`exec_dialog()`, `exec_app()`), but most production code imports PySide6 directly.
 
 ### Threading model
 Main GUI thread runs the PySide6 event loop. Transcription, batch processing, and folder monitoring each run on separate worker threads (QThread / ThreadPoolExecutor). All engine operations are off the main thread.
@@ -98,5 +113,5 @@ Main GUI thread runs the PySide6 event loop. Transcription, batch processing, an
 - Import sorting: isort with `profile = "black"`
 - flake8 ignores: E203, E501, W503, W504, E402, F401
 - Max cyclomatic complexity: 15
-- GUI framework: PySide6 (not PyQt5, despite some legacy references in config files)
+- GUI framework: PySide6 (direct imports in production code)
 - All source code is in the `src/` package; tests in `tests/`

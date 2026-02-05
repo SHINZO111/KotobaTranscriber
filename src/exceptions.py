@@ -31,13 +31,19 @@ Exception Hierarchy:
     │   ├── PyAudioInitializationError
     │   └── VADError
     │       └── InvalidVADThresholdError
+    ├── APIError
+    │   ├── APIConnectionError
+    │   ├── APIAuthenticationError
+    │   └── APIRateLimitError
+    ├── ExportError
+    │   └── SubtitleExportError
     └── SecurityError
         ├── PathTraversalError
         └── UnsafePathError
 
 Author: KotobaTranscriber Development Team
 Date: 2025-10-18
-Version: 2.0.0
+Version: 2.2.0
 """
 
 from typing import Optional, Any, List
@@ -79,6 +85,16 @@ __all__ = [
     'PyAudioInitializationError',
     'VADError',
     'InvalidVADThresholdError',
+
+    # API exceptions
+    'APIError',
+    'APIConnectionError',
+    'APIAuthenticationError',
+    'APIRateLimitError',
+
+    # Export exceptions
+    'ExportError',
+    'SubtitleExportError',
 
     # Security exceptions
     'SecurityError',
@@ -360,9 +376,15 @@ class InsufficientMemoryError(ResourceError):
         available_mb (int): 利用可能なメモリ量（MB）- Available memory in MB
 
     Example:
-        raise InsufficientMemoryError(f"Need {required_mb}MB but only {available_mb}MB available")
+        raise InsufficientMemoryError(required_mb=4096, available_mb=2048)
     """
-    pass
+
+    def __init__(self, required_mb: int = 0, available_mb: int = 0, message: Optional[str] = None):
+        self.required_mb = required_mb
+        self.available_mb = available_mb
+        if message is None:
+            message = f"Insufficient memory: need {required_mb}MB but only {available_mb}MB available"
+        super().__init__(message)
 
 
 class InsufficientDiskSpaceError(ResourceError):
@@ -531,6 +553,102 @@ class InvalidVADThresholdError(VADError):
 
 
 # ============================================================================
+# API関連エラー - API Errors
+# ============================================================================
+
+class APIError(KotobaTranscriberError):
+    """
+    API呼び出しエラー基底クラス
+    Base exception for API call failures.
+
+    Claude API、OpenAI APIなどの外部APIとの通信で発生するエラーの基底クラスです。
+    Base class for errors occurring during communication with external APIs
+    like Claude API and OpenAI API.
+
+    Example:
+        raise APIError("API call failed: unexpected response")
+    """
+    pass
+
+
+class APIConnectionError(APIError):
+    """
+    API接続エラー
+    Failed to connect to API endpoint.
+
+    APIエンドポイントへの接続が失敗した場合に発生します。
+    ネットワーク障害やタイムアウトが原因となります。
+
+    Raised when connection to API endpoint fails. Caused by network failures
+    or timeouts.
+
+    Example:
+        raise APIConnectionError("Connection to Claude API timed out")
+    """
+    pass
+
+
+class APIAuthenticationError(APIError):
+    """
+    API認証エラー
+    API authentication failed.
+
+    APIキーが無効、期限切れ、または未設定の場合に発生します。
+    Raised when API key is invalid, expired, or not configured.
+
+    Example:
+        raise APIAuthenticationError("Invalid API key for OpenAI")
+    """
+    pass
+
+
+class APIRateLimitError(APIError):
+    """
+    APIレート制限エラー
+    API rate limit exceeded.
+
+    APIのレート制限を超過した場合に発生します。
+    Raised when API rate limit is exceeded.
+
+    Example:
+        raise APIRateLimitError("Rate limit exceeded, retry after 60 seconds")
+    """
+    pass
+
+
+# ============================================================================
+# エクスポート関連エラー - Export Errors
+# ============================================================================
+
+class ExportError(KotobaTranscriberError):
+    """
+    エクスポートエラー基底クラス
+    Base exception for export failures.
+
+    ファイルエクスポート処理で発生するエラーの基底クラスです。
+    Base class for errors occurring during file export operations.
+
+    Example:
+        raise ExportError("Failed to export file")
+    """
+    pass
+
+
+class SubtitleExportError(ExportError):
+    """
+    字幕エクスポートエラー
+    Subtitle export failed.
+
+    SRT/VTT等の字幕ファイルのエクスポートが失敗した場合に発生します。
+    Raised when SRT/VTT subtitle file export fails.
+
+    Example:
+        raise SubtitleExportError("Failed to export SRT file: permission denied")
+    """
+    pass
+
+
+# ============================================================================
 # セキュリティ関連エラー - Security Errors
 # ============================================================================
 
@@ -638,6 +756,10 @@ def get_error_category(exception: Exception) -> str:
         return "Resource"
     elif isinstance(exception, RealtimeProcessingError):
         return "RealtimeProcessing"
+    elif isinstance(exception, APIError):
+        return "API"
+    elif isinstance(exception, ExportError):
+        return "Export"
     elif isinstance(exception, SecurityError):
         return "Security"
     elif isinstance(exception, KotobaTranscriberError):
@@ -701,7 +823,7 @@ if __name__ == "__main__":
     # Test 5: ResourceError hierarchy
     print("[Test 5] ResourceError Hierarchy")
     try:
-        raise InsufficientMemoryError("Need 4096MB but only 2048MB available")
+        raise InsufficientMemoryError(required_mb=4096, available_mb=2048)
     except InsufficientMemoryError as e:
         print(f"  ✓ {e}")
         print(f"    Category: {get_error_category(e)}")
@@ -754,7 +876,7 @@ if __name__ == "__main__":
         (ModelLoadError("test"), TranscriptionError),
         (AudioDeviceError("test"), RealtimeProcessingError),
         (PathTraversalError("test"), SecurityError),
-        (InsufficientMemoryError("test"), ResourceError),
+        (InsufficientMemoryError(message="test"), ResourceError),
         (BatchCancelledError("test"), BatchProcessingError),
         (InvalidConfigValueError("test"), ConfigurationError),
     ]

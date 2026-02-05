@@ -66,9 +66,10 @@ class RealtimeTranscriptionWorker(QThread):
         self.stream = None
         self.vad = None
 
-        # バッファ
+        # バッファ（最大60秒分でメモリを制限）
         self.audio_buffer = []
         self.buffer_samples = int(sample_rate * buffer_duration)
+        self._max_buffer_samples = sample_rate * 60
 
     def initialize(self) -> bool:
         """エンジンとオーディオを初期化"""
@@ -137,8 +138,10 @@ class RealtimeTranscriptionWorker(QThread):
                         volume = np.abs(audio_float).mean()
                         self.volume_changed.emit(float(volume))
 
-                        # バッファに追加
+                        # バッファに追加（メモリ保護: 最大サイズを超えたら古いサンプルを破棄）
                         self.audio_buffer.extend(audio_float)
+                        if len(self.audio_buffer) > self._max_buffer_samples:
+                            self.audio_buffer = self.audio_buffer[-self._max_buffer_samples:]
 
                         # VADチェック
                         is_speech = self._check_vad(data)
@@ -173,7 +176,7 @@ class RealtimeTranscriptionWorker(QThread):
 
         try:
             return self.vad.is_speech(data, self.sample_rate)
-        except:
+        except Exception:
             return True
 
     def _process_buffer(self):
@@ -343,12 +346,13 @@ class RealtimeTab(QWidget):
         layout.addLayout(save_layout)
 
         # 利用不可メッセージ
+        missing = []
         if not FASTER_WHISPER_AVAILABLE:
-            self.status_label.setText("⚠️ faster-whisperがインストールされていません")
-            self.start_button.setEnabled(False)
-
+            missing.append("faster-whisper")
         if not PYAUDIO_AVAILABLE:
-            self.status_label.setText("⚠️ PyAudioがインストールされていません")
+            missing.append("PyAudio")
+        if missing:
+            self.status_label.setText(f"⚠️ {', '.join(missing)}がインストールされていません")
             self.start_button.setEnabled(False)
 
     def toggle_recording(self):

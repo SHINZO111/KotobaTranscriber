@@ -1,6 +1,6 @@
 {
   "monitored_folder": null,
-  "monitor_interval": 15,
+  "monitor_interval": 10,
   "completed_folder": null,
   "auto_move_completed": false,
   "remove_fillers": true,

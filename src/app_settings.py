@@ -3,6 +3,7 @@
 ユーザー設定をJSONファイルに保存・復元します
 """
 
+import atexit
 import copy
 import json
 import logging
@@ -12,7 +13,9 @@ import shutil
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+
+from exceptions import PathTraversalError
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +112,7 @@ class AppSettings:
                     pass
 
             if not is_allowed:
-                raise ValueError(
+                raise PathTraversalError(
                     f"Settings file must be within project directory ({project_root}) "
                     f"or user home ({user_home}): {custom_path}"
                 )
@@ -123,13 +126,23 @@ class AppSettings:
         self._save_debounce_delay = 2.0  # 2秒の遅延
         self._lock = threading.RLock()  # 再入可能ロック
 
+        # atexitでシャットダウン時にタイマーを確実にキャンセル
+        atexit.register(self._atexit_cleanup)
+
         logger.info(f"AppSettings initialized: {self.settings_file}")
+
+    def _atexit_cleanup(self):
+        """アプリケーション終了時のクリーンアップ"""
+        try:
+            self.save_immediate()
+        except Exception:
+            pass
 
     def __del__(self):
         """デストラクタ：保留中のタイマーをクリーンアップ"""
         try:
             self.cancel_pending_save()
-        except:
+        except Exception:
             pass
 
     def _validate_key(self, key: str) -> None:
@@ -211,6 +224,13 @@ class AppSettings:
         """
         if not self.settings_file.exists():
             logger.info(f"Settings file not found: {self.settings_file}, using defaults")
+            return False
+
+        # セキュリティ: ファイルサイズ制限 (10MB)
+        MAX_SETTINGS_SIZE = 10 * 1024 * 1024
+        file_size = self.settings_file.stat().st_size
+        if file_size > MAX_SETTINGS_SIZE:
+            logger.error(f"Settings file too large: {file_size} bytes (max: {MAX_SETTINGS_SIZE})")
             return False
 
         with self._lock:
@@ -311,7 +331,14 @@ class AppSettings:
         with self._lock:
             try:
                 backup_dir = self.settings_file.parent / self.BACKUP_FOLDER
-                backup_path = backup_dir / backup_filename
+                backup_path = (backup_dir / backup_filename).resolve()
+
+                # パストラバーサル検証
+                try:
+                    backup_path.relative_to(backup_dir.resolve())
+                except ValueError:
+                    logger.error(f"Path traversal detected in backup filename: {backup_filename}")
+                    return False
 
                 if not backup_path.exists():
                     logger.error(f"Backup file not found: {backup_path}")
@@ -331,7 +358,7 @@ class AppSettings:
                 logger.error(f"Failed to restore backup: {e}", exc_info=True)
                 return False
 
-    def list_backups(self) -> list[str]:
+    def list_backups(self) -> List[str]:
         """
         利用可能なバックアップファイル一覧を取得
 

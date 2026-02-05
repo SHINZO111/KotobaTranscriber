@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import json
 import wave
-import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +65,12 @@ class MeetingModeRecorder:
     長時間録音の自動分割・保存を実現
     """
 
+    # デフォルト設定値
+    DEFAULT_AUTO_SPLIT_DURATION = 1800   # 30分（秒）
+    DEFAULT_AUTO_SAVE_INTERVAL = 300     # 5分（秒）
+    DEFAULT_MIN_SPEAKERS = 2
+    DEFAULT_MAX_SPEAKERS = 10
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         初期化
@@ -76,14 +81,14 @@ class MeetingModeRecorder:
         self.config = config or {}
 
         # 自動分割設定
-        self.auto_split_duration = self.config.get('auto_split_duration', 1800)  # 30分
-        self.auto_save_interval = self.config.get('auto_save', {}).get('interval', 300)  # 5分
+        self.auto_split_duration = self.config.get('auto_split_duration', self.DEFAULT_AUTO_SPLIT_DURATION)
+        self.auto_save_interval = self.config.get('auto_save', {}).get('interval', self.DEFAULT_AUTO_SAVE_INTERVAL)
 
         # 話者検出設定
         speaker_config = self.config.get('speaker_detection', {})
         self.speaker_detection_enabled = speaker_config.get('enabled', True)
-        self.min_speakers = speaker_config.get('min_speakers', 2)
-        self.max_speakers = speaker_config.get('max_speakers', 10)
+        self.min_speakers = speaker_config.get('min_speakers', self.DEFAULT_MIN_SPEAKERS)
+        self.max_speakers = speaker_config.get('max_speakers', self.DEFAULT_MAX_SPEAKERS)
 
         # 録音状態
         self.is_recording = False
@@ -349,6 +354,7 @@ class MeetingModeProcessor:
 
         # 話者識別設定（会議向け最適化）
         self.speaker_config = {
+            "enabled": self.config.get('speaker_detection', {}).get('enabled', True),
             "min_speakers": self.config.get('speaker_detection', {}).get('min_speakers', 2),
             "max_speakers": self.config.get('speaker_detection', {}).get('max_speakers', 10),
             "clustering_method": "spectral",  # 会議向けにspectralクラスタリングを使用

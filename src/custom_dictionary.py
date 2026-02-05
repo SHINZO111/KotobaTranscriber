@@ -7,7 +7,6 @@ import logging
 import json
 from pathlib import Path
 from typing import List, Dict, Optional, Set, Any
-import re
 
 from construction_vocabulary import ConstructionVocabulary, get_construction_vocabulary
 from custom_vocabulary import CustomVocabulary
@@ -146,14 +145,7 @@ class CustomDictionary:
         Returns:
             置換後のテキスト
         """
-        result = text
-
-        for wrong, correct in self.replacements.items():
-            # 単語境界を考慮した置換
-            pattern = r'\b' + re.escape(wrong) + r'\b'
-            result = re.sub(pattern, correct, result, flags=re.IGNORECASE)
-
-        return result
+        return ConstructionVocabulary.apply_replacements_to_text(text, self.replacements)
 
     def add_term(self, term: str, category: str = "custom"):
         """

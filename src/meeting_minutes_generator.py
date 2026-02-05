@@ -6,7 +6,7 @@
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from datetime import datetime
 from enum import Enum
 
@@ -182,6 +182,10 @@ class MeetingMinutes:
 
 class MeetingMinutesGenerator:
     """議事録自動生成クラス"""
+
+    # 検索範囲の制限
+    AGENDA_SEARCH_LIMIT = 10  # 議題検索: 最初のN発言
+    CLOSING_SEARCH_LIMIT = 20  # 締め検索: 最後のN発言
 
     # 決定事項を示すキーワードパターン
     DECISION_PATTERNS = [
@@ -497,7 +501,7 @@ class MeetingMinutesGenerator:
         ]
 
         agendas = []
-        for stmt in statements[:10]:  # 最初の10発言から検索
+        for stmt in statements[:self.AGENDA_SEARCH_LIMIT]:
             for keyword in agenda_keywords:
                 if keyword in stmt.text:
                     # キーワード以降を抽出
@@ -525,7 +529,7 @@ class MeetingMinutesGenerator:
             r"再来週(?:の)?(.{2,15})(?:に|で)",
         ]
 
-        for stmt in statements[-20:]:  # 最後の20発言から検索
+        for stmt in statements[-self.CLOSING_SEARCH_LIMIT:]:
             for pattern in next_patterns:
                 match = re.search(pattern, stmt.text)
                 if match:

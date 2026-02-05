@@ -228,7 +228,25 @@ class ConstructionVocabulary:
 
             self.hotwords = data.get('hotwords', [])
             self.replacements = data.get('replacements', {})
-            self.category_vocabularies = data.get('categories', {})
+
+            # Handle both formats: direct list of terms or nested dict with 'terms' key
+            raw_categories = data.get('categories', {})
+            self.category_vocabularies = {}
+            for cat_name, cat_data in raw_categories.items():
+                if isinstance(cat_data, list):
+                    # Direct list format: {"category_name": ["term1", "term2"]}
+                    self.category_vocabularies[cat_name] = cat_data
+                elif isinstance(cat_data, dict) and 'terms' in cat_data:
+                    # Nested format: {"category_name": {"name": "...", "terms": [...]}}
+                    self.category_vocabularies[cat_name] = cat_data['terms']
+                else:
+                    self.category_vocabularies[cat_name] = []
+
+            # If hotwords is empty, populate it from all categories
+            if not self.hotwords and self.category_vocabularies:
+                for terms in self.category_vocabularies.values():
+                    self.hotwords.extend(terms)
+                self.hotwords = sorted(set(self.hotwords))  # Remove duplicates, deterministic order
 
             logger.info(f"Loaded {len(self.hotwords)} construction terms from {self.vocabulary_file}")
 
@@ -343,6 +361,34 @@ class ConstructionVocabulary:
 
         return ""
 
+    @staticmethod
+    def apply_replacements_to_text(text: str, replacements: Dict[str, str]) -> str:
+        """
+        テキストに置換ルールを適用（共通ロジック）
+
+        Args:
+            text: 入力テキスト
+            replacements: 置換ルール辞書 {wrong: correct}
+
+        Returns:
+            置換後のテキスト
+        """
+        result = text
+
+        # 長い文字列から先に置換して連鎖置換を防ぐ
+        sorted_replacements = sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True)
+        for wrong, correct in sorted_replacements:
+            # Japanese text doesn't use word boundaries, so we use regex with escape
+            # For mixed text, we only use word boundary for ASCII patterns
+            if wrong.isascii():
+                pattern = r'\b' + re.escape(wrong) + r'\b'
+                result = re.sub(pattern, correct, result, flags=re.IGNORECASE)
+            else:
+                # 正規表現で置換（re.escape で安全にマッチ）
+                result = re.sub(re.escape(wrong), correct, result)
+
+        return result
+
     def apply_replacements(self, text: str) -> str:
         """
         テキストに置換ルールを適用
@@ -353,13 +399,9 @@ class ConstructionVocabulary:
         Returns:
             置換後のテキスト
         """
-        result = text
+        return self.apply_replacements_to_text(text, self.replacements)
 
-        for wrong, correct in self.replacements.items():
-            pattern = r'\b' + re.escape(wrong) + r'\b'
-            result = re.sub(pattern, correct, result, flags=re.IGNORECASE)
-
-        return result
+    MAX_TERM_LENGTH = 100
 
     def add_term(self, term: str, category: str = "custom"):
         """
@@ -368,8 +410,16 @@ class ConstructionVocabulary:
         Args:
             term: 追加する用語
             category: カテゴリ名
+
+        Raises:
+            ValueError: 用語が空または長すぎる場合
         """
-        if term and term not in self.hotwords:
+        if not term or not term.strip():
+            raise ValueError("Term cannot be empty")
+        term = term.strip()
+        if len(term) > self.MAX_TERM_LENGTH:
+            raise ValueError(f"Term too long: {len(term)} > {self.MAX_TERM_LENGTH}")
+        if term not in self.hotwords:
             self.hotwords.append(term)
             self.hotwords.sort()
 

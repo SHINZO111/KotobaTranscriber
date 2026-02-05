@@ -4,6 +4,7 @@ KotobaTranscriber v2.2 - ユーザー体験向上
 """
 
 import os
+import time
 import logging
 from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass
@@ -419,7 +420,7 @@ class NotificationManager:
     def _display_notification(self, notification: Dict[str, Any]):
         """通知を実際に表示"""
         try:
-            from qt_compat import QMessageBox
+            from PySide6.QtWidgets import QMessageBox
             
             msg_type = notification["type"]
             message = notification["message"]
@@ -521,7 +522,7 @@ class KeyboardShortcuts:
     def register_shortcuts(cls, parent: Any, actions: Dict[str, Callable]):
         """ショートカットを登録"""
         try:
-            from qt_compat import QShortcut, QKeySequence
+            from PySide6.QtGui import QKeySequence, QShortcut
             
             for action_name, callback in actions.items():
                 shortcut_str = cls.get_shortcut(action_name)
@@ -542,8 +543,6 @@ def get_theme_manager() -> ThemeManager:
 
 
 if __name__ == "__main__":
-    import time
-    
     logging.basicConfig(level=logging.INFO)
     
     print("=== UI/UX Improvements Test ===\n")

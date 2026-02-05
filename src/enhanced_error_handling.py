@@ -8,7 +8,7 @@ import sys
 import time
 import logging
 import traceback
-from typing import Optional, Dict, Any, List, Callable, Type
+from typing import Optional, Dict, Any, List, Callable, Type, Tuple
 from enum import Enum, auto
 from dataclasses import dataclass
 from functools import wraps

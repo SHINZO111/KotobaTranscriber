@@ -5,7 +5,6 @@
 
 import re
 from typing import List, Dict, Pattern
-from functools import lru_cache
 import logging
 from validators import Validator, ValidationError
 
@@ -163,6 +162,16 @@ class TextFormatter:
         'ごめん', 'ごめんなさい',  # 不要な謝罪表現
     ]
 
+    # 積極的削除用の追加フィラー語（レベル2: aggressive=True 時のみ使用）
+    AGGRESSIVE_FILLER_WORDS = [
+        'ちょっと', 'やっぱり', 'やはり', 'やっぱ',
+        'まあまあ', 'とりあえず', 'いわゆる',
+        'ですです', 'ですね', 'ますね',
+        'そうですね', 'そうそう', 'そうそうそう',
+        'ほんとに', 'ほんとうに', 'まじで',
+        'けっこう', 'けど', 'だけど',
+    ]
+
     def __init__(self):
         """初期化"""
         pass
@@ -191,7 +200,8 @@ class TextFormatter:
         result = text
 
         # フィラー語を削除（プリコンパイル済みパターンを使用）
-        for filler in self.FILLER_WORDS:
+        filler_list = self.FILLER_WORDS + self.AGGRESSIVE_FILLER_WORDS if aggressive else self.FILLER_WORDS
+        for filler in filler_list:
             pattern = RegexPatterns.get_filler_pattern(filler)
             result = pattern.sub('', result)
 

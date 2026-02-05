@@ -10,8 +10,10 @@ from transformers import pipeline
 from typing import Optional, Dict, Any, List
 import logging
 from pathlib import Path
+from base_engine import BaseTranscriptionEngine
 from validators import Validator, ValidationError
 from config_manager import get_config
+from exceptions import ModelLoadError, TranscriptionFailedError
 
 # オプション: 音声前処理とカスタム語彙
 try:
@@ -54,7 +56,6 @@ def _validate_ffmpeg_path(path: str) -> bool:
         return False
 
     # 許可リストチェック（Windows/Linux両対応）
-    from pathlib import Path
     allowed_paths = [
         Path(r"C:\ffmpeg"),
         Path(r"C:\Program Files\ffmpeg"),
@@ -156,7 +157,7 @@ class DeviceSelector:
         return 0 if device == "cuda" else -1
 
 
-class TranscriptionEngine:
+class TranscriptionEngine(BaseTranscriptionEngine):
     """kotoba-whisper v2.2を使用した文字起こしエンジン"""
 
     def __init__(self, model_name: Optional[str] = None):
@@ -175,19 +176,21 @@ class TranscriptionEngine:
 
         # モデル名を検証
         try:
-            self.model_name = Validator.validate_model_name(model_name, model_type="whisper")
+            model_name = Validator.validate_model_name(model_name, model_type="whisper")
         except ValidationError as e:
             logger.error(f"Invalid model name: {model_name} - {e}")
             # デフォルト値にフォールバック
             default_model = config.get("model.whisper.name", default="kotoba-tech/kotoba-whisper-v2.2")
             logger.warning(f"Falling back to default model: {default_model}")
-            self.model_name = default_model
+            model_name = default_model
 
         # デバイス設定を取得
         device_config = config.get("model.whisper.device", default="auto")
-        self.device = DeviceSelector.select_device(device_config)
+        device = DeviceSelector.select_device(device_config)
+        language = config.get("model.whisper.language", default="ja")
 
-        self.pipe = None
+        # 基底クラスの初期化
+        super().__init__(model_name, device, language)
 
         # 一時ファイル追跡（リソースリーク対策）
         self._temp_files: List[str] = []
@@ -229,17 +232,18 @@ class TranscriptionEngine:
         device_id = DeviceSelector.get_device_id(device)
 
         # シンプルなdevice引数のみを使用（device_mapは使わない）
-        self.pipe = pipeline(
+        # セキュリティ: trust_remote_code=Falseで安全にモデルをロード
+        self.model = pipeline(
             "automatic-speech-recognition",
             model=self.model_name,
             device=device_id,
             torch_dtype=dtype,
-            trust_remote_code=True,
+            trust_remote_code=False,
         )
 
         logger.info(f"Model loaded successfully on {device}")
 
-    def load_model(self):
+    def load_model(self) -> bool:
         """モデルをロード（自動フォールバック機能付き）"""
         try:
             logger.info(f"Loading model: {self.model_name}")
@@ -257,9 +261,15 @@ class TranscriptionEngine:
                     logger.info("Model loaded successfully on CPU (fallback)")
                 else:
                     raise
+
+            self.is_loaded = True
+            return True
+
+        except ModelLoadError:
+            raise
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
-            raise
+            raise ModelLoadError(f"Failed to load model '{self.model_name}': {e}") from e
 
     def _cleanup_temp_files(self) -> None:
         """
@@ -347,7 +357,7 @@ class TranscriptionEngine:
             logger.error(f"Chunk length validation failed: {e}")
             raise
 
-        if self.pipe is None:
+        if self.model is None:
             self.load_model()
 
         # 日本語パス対策: ASCII専用の一時パスにコピー
@@ -388,7 +398,7 @@ class TranscriptionEngine:
             if temp_ascii_path and os.path.exists(temp_ascii_path):
                 try:
                     os.unlink(temp_ascii_path)
-                except:
+                except OSError:
                     pass
 
         # 音声前処理を適用（有効な場合）
@@ -423,7 +433,7 @@ class TranscriptionEngine:
                     generate_kwargs["initial_prompt"] = prompt
                     logger.info(f"Using hotwords prompt: {prompt[:100]}...")
 
-            result = self.pipe(
+            result = self.model(
                 str(processed_audio_path),  # Pathオブジェクトを文字列に変換
                 chunk_length_s=chunk_length_s,
                 return_timestamps=return_timestamps,
@@ -441,9 +451,11 @@ class TranscriptionEngine:
             logger.info("Transcription completed successfully")
             return result
 
+        except TranscriptionFailedError:
+            raise
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
-            raise
+            raise TranscriptionFailedError(f"Transcription failed for '{audio_path}': {e}") from e
 
         finally:
             # CUDAメモリキャッシュをクリア（メモリリーク防止）
@@ -472,7 +484,11 @@ class TranscriptionEngine:
 
     def is_available(self) -> bool:
         """エンジンが利用可能かチェック"""
-        return self.pipe is not None or torch.cuda.is_available()
+        return self.is_loaded or self.model is not None
+
+
+# テストファイルとの後方互換性エイリアス
+KotobaTranscriptionEngine = TranscriptionEngine
 
 
 if __name__ == "__main__":

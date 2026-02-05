@@ -7,7 +7,6 @@ import logging
 import time
 from typing import List, Dict, Any, Optional, Callable
 from pathlib import Path
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -400,7 +399,7 @@ if __name__ == "__main__":
     results = processor.process_all(dummy_processor, progress_callback)
 
     # 結果表示
-    print(f"\n2. Processing completed:")
+    print("\n2. Processing completed:")
     print(f"   Total results: {len(results)}")
     print(f"   Successful: {len(processor.get_successful_results())}")
     print(f"   Failed: {len(processor.get_failed_results())}")

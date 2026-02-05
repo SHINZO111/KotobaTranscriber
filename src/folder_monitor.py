@@ -53,6 +53,9 @@ class FolderMonitor(QThread):
                 with open(processed_file_path, 'r', encoding='utf-8') as f:
                     self.processed_files = set(line.strip() for line in f if line.strip())
                 logger.info(f"Loaded {len(self.processed_files)} processed files")
+        except (IOError, OSError, UnicodeDecodeError) as e:
+            logger.error(f"Failed to load processed files (I/O): {e}")
+            self.processed_files = set()
         except Exception as e:
             logger.error(f"Failed to load processed files: {e}")
             self.processed_files = set()
@@ -65,6 +68,8 @@ class FolderMonitor(QThread):
                 for file_path in sorted(self.processed_files):
                     f.write(f"{file_path}\n")
             logger.debug(f"Saved {len(self.processed_files)} processed files")
+        except (IOError, OSError) as e:
+            logger.error(f"Failed to save processed files (I/O): {e}")
         except Exception as e:
             logger.error(f"Failed to save processed files: {e}")
 
@@ -117,6 +122,8 @@ class FolderMonitor(QThread):
                 if self.is_file_ready(file_path):
                     unprocessed.append(file_path)
 
+        except (IOError, OSError) as e:
+            logger.error(f"I/O error getting unprocessed files: {e}")
         except Exception as e:
             logger.error(f"Error getting unprocessed files: {e}")
 
@@ -135,6 +142,7 @@ class FolderMonitor(QThread):
 
             # 排他ロックを試みる（他のプロセスが書き込み中でないか確認）
             try:
+                logger.debug(f"Attempting exclusive lock on: {file_path}")
                 # 読み書きモードで排他的に開く
                 with open(file_path, 'r+b') as f:
                     # ファイル全体をロック（Windows: msvcrt, Unix: fcntl）
@@ -213,12 +221,18 @@ class FolderMonitor(QThread):
 
                     # 注意: 処理済みマークは文字起こし成功後にmain.pyから呼ばれる
 
-                # 指定間隔待機
-                time.sleep(self.check_interval)
+                # 指定間隔待機（小刻みにsleepしてgraceful shutdownを可能にする）
+                for _ in range(int(self.check_interval * 2)):
+                    if not self.running:
+                        break
+                    time.sleep(0.5)
 
             except Exception as e:
                 logger.error(f"Error in monitoring loop: {e}")
-                time.sleep(self.check_interval)
+                for _ in range(int(self.check_interval * 2)):
+                    if not self.running:
+                        break
+                    time.sleep(0.5)
 
         logger.info("Folder monitoring stopped")
         self.status_update.emit("フォルダ監視停止")
