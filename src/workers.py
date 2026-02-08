@@ -157,7 +157,7 @@ class BatchTranscriptionWorker(QThread):
         self.success_count = 0
         self.failed_count = 0
         self.lock = threading.Lock()
-        self._cancelled = False  # キャンセルフラグ
+        self._cancel_event = threading.Event()  # スレッドセーフなキャンセルフラグ
         self._executor = None  # ThreadPoolExecutor参照保持
 
         # 共有TranscriptionEngineインスタンス（並列処理での再利用）
@@ -167,7 +167,7 @@ class BatchTranscriptionWorker(QThread):
     def cancel(self):
         """バッチ処理をキャンセル"""
         logger.info("Batch processing cancellation requested")
-        self._cancelled = True
+        self._cancel_event.set()
         # ThreadPoolExecutorのシャットダウン（実行中のタスクは完了を待つ）
         if self._executor:
             self._executor.shutdown(wait=False)
@@ -175,7 +175,7 @@ class BatchTranscriptionWorker(QThread):
     def process_single_file(self, audio_path: str):
         """単一ファイルを処理"""
         # キャンセルチェック
-        if self._cancelled:
+        if self._cancel_event.is_set():
             return audio_path, "処理がキャンセルされました", False
 
         try:
@@ -351,7 +351,7 @@ class BatchTranscriptionWorker(QThread):
                 # 完了したものから処理
                 for future in as_completed(future_to_path):
                     # キャンセルチェック
-                    if self._cancelled:
+                    if self._cancel_event.is_set():
                         logger.info("Batch processing cancelled by user")
                         break
 
@@ -364,23 +364,29 @@ class BatchTranscriptionWorker(QThread):
                                 self.success_count += 1
                             else:
                                 self.failed_count += 1
+                            completed_snapshot = self.completed
 
                         # 進捗通知
                         filename = os.path.basename(audio_path)
-                        self.progress.emit(self.completed, total, filename)
+                        self.progress.emit(completed_snapshot, total, filename)
                         self.file_finished.emit(audio_path, result_text, success)
 
                     except Exception as future_error:
-                        logger.error(f"Future result error: {future_error}")
+                        file_path = future_to_path.get(future, "unknown")
+                        logger.error(f"Future result error for {file_path}: {future_error}")
                         with self.lock:
                             self.completed += 1
                             self.failed_count += 1
+                            completed_snapshot = self.completed
+                        filename = os.path.basename(file_path) if file_path != "unknown" else "unknown"
+                        self.progress.emit(completed_snapshot, total, filename)
+                        self.file_finished.emit(file_path, str(future_error), False)
 
                 self._executor = None  # 参照をクリア
 
             # 全完了通知
             completion_msg = f"Batch processing completed: {self.success_count} success, {self.failed_count} failed"
-            if self._cancelled:
+            if self._cancel_event.is_set():
                 completion_msg += " (cancelled)"
             logger.info(completion_msg)
             self.all_finished.emit(self.success_count, self.failed_count)

@@ -103,7 +103,7 @@ class FasterWhisperEngine(BaseTranscriptionEngine):
 
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
-            raise ModelLoadError(f"Failed to load model {self.model_size}: {e}")
+            raise ModelLoadError(f"Failed to load model {self.model_size}: {e}") from e
 
     def transcribe(self,
                    audio: npt.NDArray[np.float32],

@@ -323,6 +323,15 @@ class Validator:
         if name_without_ext in reserved_names:
             sanitized = f"_{sanitized}"
 
+        # ファイル名長制限 (Windows MAX_PATH対策)
+        MAX_FILENAME_LENGTH = 200
+        if len(sanitized) > MAX_FILENAME_LENGTH:
+            name_part, _, ext_part = sanitized.rpartition('.')
+            if ext_part and len(ext_part) < 10:
+                sanitized = name_part[:MAX_FILENAME_LENGTH - len(ext_part) - 1] + '.' + ext_part
+            else:
+                sanitized = sanitized[:MAX_FILENAME_LENGTH]
+
         return sanitized
 
 

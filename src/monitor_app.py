@@ -823,8 +823,13 @@ class MonitorWindow(QMainWindow):
             processed_files = set()
             if processed_files_path.exists():
                 try:
-                    with open(processed_files_path, 'r', encoding='utf-8') as f:
-                        processed_files = set(line.strip() for line in f if line.strip())
+                    MAX_PROCESSED_SIZE = 50 * 1024 * 1024  # 50MB
+                    file_size = processed_files_path.stat().st_size
+                    if file_size > MAX_PROCESSED_SIZE:
+                        logger.error(f"Processed files list too large: {file_size} bytes, skipping")
+                    else:
+                        with open(processed_files_path, 'r', encoding='utf-8') as f:
+                            processed_files = set(line.strip() for line in f if line.strip())
                 except Exception as e:
                     logger.warning(f"Failed to load processed files list: {e}")
 

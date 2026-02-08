@@ -131,8 +131,21 @@ class FileOrganizer:
             成功した場合True
         """
         try:
+            # パスバリデーション
+            source = Path(source_path).resolve()
+            dest = Path(dest_folder).resolve()
+
+            if not source.is_file():
+                logger.error(f"Source file does not exist: {source_path}")
+                return False
+
+            # パストラバーサル検出
+            if '..' in Path(dest_folder).parts:
+                logger.error(f"Path traversal detected in dest_folder: {dest_folder}")
+                return False
+
             # 移動先フォルダが存在しない場合は作成
-            os.makedirs(dest_folder, exist_ok=True)
+            os.makedirs(str(dest), exist_ok=True)
 
             # ファイル名を取得
             filename = os.path.basename(source_path)

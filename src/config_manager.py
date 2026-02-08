@@ -92,7 +92,8 @@ class Config:
     @property
     def data(self) -> Dict[str, Any]:
         """内部データのコピーを返す（外部からの書き換え防止）"""
-        return copy.deepcopy(self._data)
+        with self._data_lock:
+            return copy.deepcopy(self._data)
 
 
 class ConfigManager:

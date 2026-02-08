@@ -223,6 +223,7 @@ class ClaudeCorrector(BaseAPICorrector):
             raise KotobaAPIConnectionError(f"Claude API connection failed: {e}") from e
         except Exception as e:
             self._handle_api_error(e, "Claude")
+            raise  # unreachable — satisfies type checker and guards against refactoring
 
     def correct_text(self, text: str, context: Optional[str] = None) -> str:
         """
@@ -328,6 +329,7 @@ class OpenAICorrector(BaseAPICorrector):
             raise KotobaAPIConnectionError(f"OpenAI API connection failed: {e}") from e
         except Exception as e:
             self._handle_api_error(e, "OpenAI")
+            raise  # unreachable — satisfies type checker and guards against refactoring
 
     def correct_text(self, text: str, context: Optional[str] = None) -> str:
         """

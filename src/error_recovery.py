@@ -69,13 +69,14 @@ class ErrorRecoveryManager:
     def register_callback(self, error_category: str, callback: Callable):
         """
         エラーカテゴリごとのコールバックを登録
-        
+
         Args:
             error_category: 'transient', 'resource', 'permanent'
             callback: コールバック関数
         """
-        if error_category in self._error_callbacks:
-            self._error_callbacks[error_category].append(callback)
+        with self._lock:
+            if error_category in self._error_callbacks:
+                self._error_callbacks[error_category].append(callback)
     
     def handle_error(
         self,
@@ -111,8 +112,10 @@ class ErrorRecoveryManager:
         # エラー分類
         error_category = self._classify_error(error)
         
-        # コールバック実行
-        for callback in self._error_callbacks.get(error_category, []):
+        # コールバック実行（ロック下でコピーしてからイテレーション）
+        with self._lock:
+            callbacks = list(self._error_callbacks.get(error_category, []))
+        for callback in callbacks:
             try:
                 callback(error, file_path)
             except Exception as e:
@@ -276,7 +279,16 @@ class ErrorRecoveryManager:
         """
         if not self.error_log_file.exists():
             return {'total_errors': 0}
-        
+
+        # ファイルサイズチェック
+        try:
+            file_size = self.error_log_file.stat().st_size
+            if file_size > self.MAX_LOG_SIZE * 2:
+                logger.warning(f"Error log too large for summary: {file_size} bytes")
+                return {'total_errors': -1, 'error': 'log_too_large'}
+        except OSError:
+            return {'total_errors': 0}
+
         errors = []
         cutoff_time = None
         

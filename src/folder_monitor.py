@@ -6,6 +6,7 @@
 import os
 import time
 import logging
+import tempfile
 import threading
 from typing import List, Set, Callable
 from pathlib import Path
@@ -36,7 +37,7 @@ class FolderMonitor(QThread):
         super().__init__()
         self.folder_path = folder_path
         self.check_interval = check_interval
-        self.running = False
+        self._stop_event = threading.Event()
         self._processed_lock = threading.Lock()
         self.processed_files: Set[str] = set()
         self.load_processed_files()
@@ -67,14 +68,23 @@ class FolderMonitor(QThread):
             self.processed_files = set()
 
     def save_processed_files(self):
-        """処理済みファイルリストを保存"""
+        """処理済みファイルリストを保存（アトミック書き込み）"""
         try:
             with self._processed_lock:
                 files_copy = sorted(self.processed_files)
             processed_file_path = os.path.join(self.folder_path, '.processed_files.txt')
-            with open(processed_file_path, 'w', encoding='utf-8') as f:
-                for file_path in files_copy:
-                    f.write(f"{file_path}\n")
+            fd, tmp_path = tempfile.mkstemp(dir=self.folder_path, suffix='.tmp')
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    for file_path in files_copy:
+                        f.write(f"{file_path}\n")
+                os.replace(tmp_path, processed_file_path)
+            except BaseException:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             logger.debug(f"Saved {len(files_copy)} processed files")
         except (IOError, OSError) as e:
             logger.error(f"Failed to save processed files (I/O): {e}")
@@ -220,11 +230,11 @@ class FolderMonitor(QThread):
 
     def run(self):
         """監視ループ"""
-        self.running = True
+        self._stop_event.clear()
         logger.info(f"Folder monitoring started: {self.folder_path}")
         self.status_update.emit(f"フォルダ監視開始: {self.folder_path}")
 
-        while self.running:
+        while not self._stop_event.is_set():
             try:
                 # 未処理ファイルをチェック
                 unprocessed_files = self.get_unprocessed_files()
@@ -237,24 +247,20 @@ class FolderMonitor(QThread):
                     # 注意: 処理済みマークは文字起こし成功後にmain.pyから呼ばれる
 
                 # 指定間隔待機（小刻みにsleepしてgraceful shutdownを可能にする）
-                for _ in range(int(self.check_interval * 2)):
-                    if not self.running:
-                        break
-                    time.sleep(0.5)
+                if self._stop_event.wait(timeout=self.check_interval):
+                    break
 
             except Exception as e:
                 logger.error(f"Error in monitoring loop: {e}")
-                for _ in range(int(self.check_interval * 2)):
-                    if not self.running:
-                        break
-                    time.sleep(0.5)
+                if self._stop_event.wait(timeout=self.check_interval):
+                    break
 
         logger.info("Folder monitoring stopped")
         self.status_update.emit("フォルダ監視停止")
 
     def stop(self):
         """監視停止"""
-        self.running = False
+        self._stop_event.set()
         logger.info("Stopping folder monitor...")
 
 

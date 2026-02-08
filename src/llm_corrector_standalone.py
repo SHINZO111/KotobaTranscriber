@@ -204,10 +204,10 @@ class StandaloneLLMCorrector:
 
     def unload_model(self):
         """モデルをアンロード（メモリ解放）"""
-        if self.model is not None:
-            del self.model
-            del self.tokenizer
-            del self.pipe
+        if self.model is not None or self.tokenizer is not None or self.pipe is not None:
+            self.model = None
+            self.tokenizer = None
+            self.pipe = None
             if TRANSFORMERS_AVAILABLE and torch.cuda.is_available():
                 torch.cuda.empty_cache()
             self.is_loaded = False

@@ -272,8 +272,20 @@ class ConstructionVocabulary:
             }
 
             self.vocabulary_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.vocabulary_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            import tempfile
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(self.vocabulary_file.parent), suffix='.tmp'
+            )
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp_path, str(self.vocabulary_file))
+            except BaseException:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
             logger.info(f"Saved construction vocabulary to {self.vocabulary_file}")
 
@@ -447,6 +459,16 @@ class ConstructionVocabulary:
             wrong: 誤認識される単語
             correct: 正しい単語
         """
+        if not wrong or not wrong.strip():
+            raise ValueError("Replacement source cannot be empty")
+        if not correct or not correct.strip():
+            raise ValueError("Replacement target cannot be empty")
+        wrong = wrong.strip()
+        correct = correct.strip()
+        if len(wrong) > self.MAX_TERM_LENGTH:
+            raise ValueError(f"Replacement source too long: {len(wrong)} > {self.MAX_TERM_LENGTH}")
+        if len(correct) > self.MAX_TERM_LENGTH:
+            raise ValueError(f"Replacement target too long: {len(correct)} > {self.MAX_TERM_LENGTH}")
         self.replacements[wrong] = correct
         self.save_vocabulary()
         logger.info(f"Added replacement: '{wrong}' -> '{correct}'")

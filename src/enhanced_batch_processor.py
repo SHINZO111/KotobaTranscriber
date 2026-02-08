@@ -244,8 +244,8 @@ class EnhancedBatchProcessor:
         self.failed_files: List[Dict] = []
         self.remaining_files: List[str] = []
         self.is_running = False
-        self.is_paused = False
-        self._cancelled = False
+        self._pause_event = threading.Event()   # スレッドセーフな一時停止フラグ
+        self._cancel_event = threading.Event()  # スレッドセーフなキャンセルフラグ
 
         # ロック
         self._lock = threading.RLock()
@@ -283,7 +283,8 @@ class EnhancedBatchProcessor:
         """
         with self._lock:
             self.is_running = True
-            self._cancelled = False
+            self._cancel_event.clear()
+            self._pause_event.clear()
             self.stats["start_time"] = time.time()
             self.stats["total_files"] = len(file_paths)
 
@@ -307,9 +308,9 @@ class EnhancedBatchProcessor:
         MAX_CHECKPOINT_FAILURES = 3
 
         try:
-            while self.remaining_files and not self._cancelled:
+            while self.remaining_files and not self._cancel_event.is_set():
                 # 一時停止チェック（キャンセルも監視）
-                while self.is_paused and not self._cancelled:
+                while self._pause_event.is_set() and not self._cancel_event.is_set():
                     time.sleep(0.5)
 
                 # ワーカー数を調整
@@ -338,7 +339,7 @@ class EnhancedBatchProcessor:
             self.stats["elapsed_time"] = time.time() - self.stats["start_time"]
 
             return {
-                "success": not self._cancelled,
+                "success": not self._cancel_event.is_set(),
                 "processed_files": self.processed_files,
                 "failed_files": self.failed_files,
                 "stats": self.stats.copy()
@@ -375,7 +376,7 @@ class EnhancedBatchProcessor:
             }
 
             for future in as_completed(future_to_file):
-                if self._cancelled:
+                if self._cancel_event.is_set():
                     break
 
                 file_path = future_to_file[future]
@@ -466,7 +467,10 @@ class EnhancedBatchProcessor:
 
     def _update_stats(self):
         """統計情報を更新"""
-        elapsed = time.time() - self.stats["start_time"]
+        start_time = self.stats.get("start_time")
+        if start_time is None:
+            return
+        elapsed = time.time() - start_time
         self.stats["elapsed_time"] = elapsed
 
         processed = self.stats["processed_count"]
@@ -490,17 +494,17 @@ class EnhancedBatchProcessor:
 
     def cancel(self):
         """処理をキャンセル"""
-        self._cancelled = True
+        self._cancel_event.set()
         logger.info("Batch processing cancellation requested")
 
     def pause(self):
         """処理を一時停止"""
-        self.is_paused = True
+        self._pause_event.set()
         logger.info("Batch processing paused")
 
     def resume(self):
         """処理を再開"""
-        self.is_paused = False
+        self._pause_event.clear()
         logger.info("Batch processing resumed")
 
     def get_progress(self) -> Dict[str, Any]:
@@ -522,7 +526,7 @@ class EnhancedBatchProcessor:
                 "progress_percent": (processed / total * 100) if total > 0 else 0,
                 "remaining_files": len(self.remaining_files),
                 "is_running": self.is_running,
-                "is_paused": self.is_paused
+                "is_paused": self._pause_event.is_set()
             }
 
 

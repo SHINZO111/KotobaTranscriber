@@ -233,7 +233,8 @@ class MeetingModeRecorder:
             duration=0.0
         )
 
-        self.audio_buffer.clear()
+        with self.buffer_lock:
+            self.audio_buffer.clear()
         logger.debug(f"Started new segment: {segment_file.name}")
 
     def _save_current_segment(self) -> bool:

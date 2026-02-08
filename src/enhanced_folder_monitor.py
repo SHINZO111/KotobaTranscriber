@@ -360,18 +360,29 @@ class AsyncFolderMonitor(QObject):
             self._processed_files = set()
     
     def _save_processed_files(self):
-        """処理済みリストを保存"""
+        """処理済みリストを保存（アトミック書き込み）"""
         try:
             import json
+            import tempfile
             self._processed_list_path.parent.mkdir(parents=True, exist_ok=True)
             data = {
                 'files': list(self._processed_files),
                 'updated': datetime.now().isoformat()
             }
-            self._processed_list_path.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2),
-                encoding='utf-8'
+            content = json.dumps(data, ensure_ascii=False, indent=2)
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(self._processed_list_path.parent), suffix='.tmp'
             )
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                os.replace(tmp_path, str(self._processed_list_path))
+            except BaseException:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
         except Exception as e:
             logger.warning(f"Failed to save processed files: {e}")
     

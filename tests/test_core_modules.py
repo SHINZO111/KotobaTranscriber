@@ -3504,8 +3504,8 @@ class TestEnhancedBatchProcessorInit:
         assert p.memory_limit_mb == 4096
         assert p.checkpoint_interval == 10
         assert p.is_running is False
-        assert p.is_paused is False
-        assert p._cancelled is False
+        assert p._pause_event.is_set() is False
+        assert p._cancel_event.is_set() is False
 
     def test_custom_workers(self):
         """カスタムワーカー数での初期化"""
@@ -3556,33 +3556,33 @@ class TestEnhancedBatchProcessorControls:
     def test_cancel(self):
         """キャンセルフラグの設定"""
         p = self._make_processor()
-        assert p._cancelled is False
+        assert p._cancel_event.is_set() is False
         p.cancel()
-        assert p._cancelled is True
+        assert p._cancel_event.is_set() is True
 
     def test_pause(self):
         """一時停止フラグの設定"""
         p = self._make_processor()
-        assert p.is_paused is False
+        assert p._pause_event.is_set() is False
         p.pause()
-        assert p.is_paused is True
+        assert p._pause_event.is_set() is True
 
     def test_resume(self):
-        """再開でis_pausedがFalseに戻る"""
+        """再開で_pause_eventがクリアされる"""
         p = self._make_processor()
         p.pause()
-        assert p.is_paused is True
+        assert p._pause_event.is_set() is True
         p.resume()
-        assert p.is_paused is False
+        assert p._pause_event.is_set() is False
 
     def test_pause_resume_cycle(self):
         """一時停止と再開を複数回繰り返す"""
         p = self._make_processor()
         for _ in range(3):
             p.pause()
-            assert p.is_paused is True
+            assert p._pause_event.is_set() is True
             p.resume()
-            assert p.is_paused is False
+            assert p._pause_event.is_set() is False
 
 
 @pytest.mark.unit
@@ -3782,7 +3782,7 @@ class TestFolderMonitorWithQt:
             monitor = FolderMonitor(tmpdir, check_interval=5)
             assert monitor.folder_path == tmpdir
             assert monitor.check_interval == 5
-            assert monitor.running is False
+            assert monitor._stop_event.is_set() is False
             assert isinstance(monitor.processed_files, set)
 
     def test_is_audio_file_method(self):
@@ -3885,14 +3885,14 @@ class TestFolderMonitorWithQt:
             assert result is False
 
     def test_stop(self):
-        """stopメソッドでrunningフラグがFalseになる"""
+        """stopメソッドで_stop_eventがセットされる"""
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             from folder_monitor import FolderMonitor
             monitor = FolderMonitor(tmpdir)
-            monitor.running = True
+            assert monitor._stop_event.is_set() is False
             monitor.stop()
-            assert monitor.running is False
+            assert monitor._stop_event.is_set() is True
 
 
 # ============================================================================
@@ -5205,7 +5205,7 @@ class TestBatchTranscriptionWorkerInit:
         assert worker.completed == 0
         assert worker.success_count == 0
         assert worker.failed_count == 0
-        assert worker._cancelled is False
+        assert worker._cancel_event.is_set() is False
 
     def test_init_with_options(self):
         """オプション付き初期化"""
@@ -5225,9 +5225,9 @@ class TestBatchTranscriptionWorkerInit:
     def test_cancel(self):
         """キャンセル"""
         worker = BatchTranscriptionWorker(["/a.mp3"])
-        assert worker._cancelled is False
+        assert worker._cancel_event.is_set() is False
         worker.cancel()
-        assert worker._cancelled is True
+        assert worker._cancel_event.is_set() is True
 
     def test_cancel_with_executor(self):
         """executor存在時のキャンセル"""
@@ -5235,13 +5235,13 @@ class TestBatchTranscriptionWorkerInit:
         mock_executor = MagicMock()
         worker._executor = mock_executor
         worker.cancel()
-        assert worker._cancelled is True
+        assert worker._cancel_event.is_set() is True
         mock_executor.shutdown.assert_called_once_with(wait=False)
 
     def test_process_single_file_cancelled(self):
         """キャンセル済みファイルの処理"""
         worker = BatchTranscriptionWorker(["/a.mp3"])
-        worker._cancelled = True
+        worker._cancel_event.set()
         path, msg, success = worker.process_single_file("/a.mp3")
         assert path == "/a.mp3"
         assert success is False

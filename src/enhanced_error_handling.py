@@ -57,13 +57,15 @@ class ErrorHandler:
                         severity: ErrorSeverity,
                         handler: Callable[[ErrorRecord], None]):
         """エラーハンドラーを登録"""
-        self._handlers[severity].append(handler)
+        with self._handle_lock:
+            self._handlers[severity].append(handler)
 
     def register_recovery_strategy(self,
                                    error_type: Type[Exception],
                                    strategy: Callable[[Exception], bool]):
         """回復戦略を登録"""
-        self._recovery_strategies[error_type.__name__] = strategy
+        with self._handle_lock:
+            self._recovery_strategies[error_type.__name__] = strategy
 
     def handle(self,
                error: Exception,
