@@ -5,7 +5,6 @@ main.py と monitor_app.py の両方から使用される
 """
 
 import os
-import sys
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed

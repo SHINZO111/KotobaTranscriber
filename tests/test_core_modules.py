@@ -698,9 +698,10 @@ class TestBaseTranscriptionEngine:
 
     def test_is_available_method(self):
         engine = self.ConcreteEngine("test-model")
-        # is_available is now a method, not property
-        result = engine.is_available()
-        assert result is True
+        # is_available returns False when model not loaded
+        assert engine.is_available() is False
+        engine.is_loaded = True
+        assert engine.is_available() is True
 
     def test_get_model_info(self):
         engine = self.ConcreteEngine("test-model", device="cpu")
@@ -4103,9 +4104,11 @@ class TestBaseTranscriptionEngineExtended:
             "is_loaded": False,
         }
 
-    def test_is_available_default_returns_true(self):
-        """is_available のデフォルト実装は True を返す"""
+    def test_is_available_reflects_is_loaded(self):
+        """is_available はモデルロード状態を反映する"""
         engine = self.ConcreteEngine("test-model", device="cpu")
+        assert engine.is_available() is False
+        engine.is_loaded = True
         assert engine.is_available() is True
 
 

@@ -7,8 +7,8 @@ SRT/VTT/JSON/DOCX形式へのエクスポートをサポート
 import html
 import json
 import re
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Protocol
+from datetime import datetime
+from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
 from pathlib import Path
 import logging

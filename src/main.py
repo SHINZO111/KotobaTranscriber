@@ -6,14 +6,12 @@ KotobaTranscriber - メインアプリケーション
 
 import sys
 import os
-from pathlib import Path
-from typing import Optional
 import ctypes
 import ctypes.wintypes
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QFileDialog, QLabel, QProgressBar, QMessageBox,
-    QCheckBox, QGroupBox, QListWidget, QListWidgetItem, QDialog
+    QCheckBox, QGroupBox, QListWidget, QDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon

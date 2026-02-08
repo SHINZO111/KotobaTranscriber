@@ -72,9 +72,6 @@ class RegexPatterns:
     # Repeated words
     REPEATED_WORDS = re.compile(r'\b(\w+)\s+\1\b')
 
-    # Number formatting
-    NUMBER_SPACING = re.compile(r'(\d+)\s+(\d+)')
-
     # Dynamically compiled patterns cache
     _pattern_cache: Dict[str, re.Pattern] = {}
     _cache_lock = threading.Lock()
@@ -512,8 +509,6 @@ class TextFormatter:
 
         if add_punctuation:
             result = self.add_punctuation(result)
-
-        result = self.format_numbers(result)
 
         if format_paragraphs:
             result = self.format_paragraphs(result)

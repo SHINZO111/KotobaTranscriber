@@ -179,7 +179,7 @@ class BaseTranscriptionEngine(ABC):
         Returns:
             利用可能な場合True
         """
-        return True  # サブクラスでオーバーライド
+        return self.is_loaded
 
     def get_model_info(self) -> Dict[str, Any]:
         """

@@ -8,7 +8,6 @@ import sys
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 import ctypes
 import ctypes.wintypes
 import threading
