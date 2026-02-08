@@ -5,9 +5,9 @@
 
 import logging
 import json
+import os
 from pathlib import Path
 from typing import List, Dict, Optional
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,13 @@ class CustomVocabulary:
             return
 
         try:
+            # ファイルサイズ制限 (10MB)
+            MAX_VOCAB_SIZE = 10 * 1024 * 1024
+            file_size = self.vocabulary_file.stat().st_size
+            if file_size > MAX_VOCAB_SIZE:
+                logger.error(f"Vocabulary file too large: {file_size} bytes (max: {MAX_VOCAB_SIZE})")
+                return
+
             with open(self.vocabulary_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
@@ -55,16 +62,32 @@ class CustomVocabulary:
             self.create_default_vocabulary()
 
     def save_vocabulary(self):
-        """語彙ファイルを保存"""
+        """語彙ファイルを保存（アトミック書き込み）"""
         try:
+            import tempfile
             data = {
                 'hotwords': self.hotwords,
                 'replacements': self.replacements,
                 'domains': self.domain_vocabularies
             }
 
-            with open(self.vocabulary_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            # 一時ファイルに書き込み後、アトミックにリネーム
+            parent_dir = self.vocabulary_file.parent
+            parent_dir.mkdir(parents=True, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(parent_dir), suffix='.tmp', prefix='.vocab_'
+            )
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp_path, str(self.vocabulary_file))
+            except Exception:
+                # 一時ファイルをクリーンアップ
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
             logger.info(f"Saved vocabulary to {self.vocabulary_file}")
 
@@ -196,15 +219,11 @@ class CustomVocabulary:
         if domain and domain in self.domain_vocabularies:
             words.extend(self.domain_vocabularies[domain])
 
-        # 重複を削除
-        words = list(set(words))
+        # 重複を削除（挿入順を維持）
+        words = list(dict.fromkeys(words))
 
         # プロンプトは最大244トークン程度に制限（Whisperの制限）
-        # 1単語あたり約2-3トークンと仮定し、最大80単語程度
-        if len(words) > 80:
-            words = words[:80]
-
-        # プロンプトを自然な文章形式で生成
+        # 1単語あたり約2-3トークンと仮定し、最大30単語
         if words:
             prompt = "以下の専門用語に注意してください: " + "、".join(words[:30])
             return prompt
@@ -221,15 +240,8 @@ class CustomVocabulary:
         Returns:
             置換後のテキスト
         """
-        result = text
-
-        for wrong, correct in self.replacements.items():
-            # 単語境界を考慮した置換
-            # 部分一致を避けるため、前後の文字をチェック
-            pattern = r'\b' + re.escape(wrong) + r'\b'
-            result = re.sub(pattern, correct, result, flags=re.IGNORECASE)
-
-        return result
+        from construction_vocabulary import ConstructionVocabulary
+        return ConstructionVocabulary.apply_replacements_to_text(text, self.replacements)
 
     def get_hotwords_list(self) -> List[str]:
         """
@@ -257,13 +269,16 @@ class CustomVocabulary:
             text: 単語リスト（改行区切り）
         """
         words = [w.strip() for w in text.split('\n') if w.strip()]
+        imported_count = 0
 
         for word in words:
-            if word not in self.hotwords:
-                self.hotwords.append(word)
+            try:
+                self.add_hotword(word)
+                imported_count += 1
+            except ValueError as e:
+                logger.warning(f"Skipped invalid word during import: {e}")
 
-        self.save_vocabulary()
-        logger.info(f"Imported {len(words)} words")
+        logger.info(f"Imported {imported_count}/{len(words)} words")
 
     def export_words_to_text(self) -> str:
         """

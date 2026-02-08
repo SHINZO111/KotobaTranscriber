@@ -4,6 +4,7 @@ Excelエクスポートモジュール
 """
 
 import logging
+import threading
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
@@ -319,11 +320,14 @@ class ExcelExporter:
 
 # グローバルインスタンス
 _excel_exporter = None
+_excel_exporter_lock = threading.Lock()
 
 
 def get_excel_exporter() -> ExcelExporter:
     """Excelエクスポーターのシングルトンインスタンスを取得"""
     global _excel_exporter
     if _excel_exporter is None:
-        _excel_exporter = ExcelExporter()
+        with _excel_exporter_lock:
+            if _excel_exporter is None:
+                _excel_exporter = ExcelExporter()
     return _excel_exporter

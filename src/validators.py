@@ -94,6 +94,8 @@ class Validator:
 
         # シンボリックリンク検出（セキュリティ: 許可ディレクトリ外への参照防止）
         if path.is_symlink():
+            if allowed_dirs:
+                raise ValidationError(f"Symlinks not permitted in validated paths: {path} -> {path.resolve()}")
             logger.warning(f"Symlink detected: {path} -> {path.resolve()}")
 
         # 存在チェック

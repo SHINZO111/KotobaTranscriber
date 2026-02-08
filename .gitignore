@@ -72,6 +72,18 @@ app_settings.json
 .pre-commit-config.yaml.bak
 nul
 
+# Claude Code / Agent skill framework
+.agents/
+.claude/
+.github/skills/
+skills/
+
+# Test artifacts
+tests/test_report_*.txt
+
+# Generated config data
+config/construction_vocabulary.json
+
 # Development files
 pip_install.log
 app_runtime.log

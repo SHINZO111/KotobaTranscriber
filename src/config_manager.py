@@ -34,6 +34,7 @@ class Config:
             data: 設定データの辞書
         """
         self._data = data or {}
+        self._data_lock = threading.RLock()
 
     def get(self, key: str, default: Any = None) -> Any:
         """
@@ -46,17 +47,18 @@ class Config:
         Returns:
             設定値、またはデフォルト値
         """
-        keys = key.split('.')
-        value = self._data
+        with self._data_lock:
+            keys = key.split('.')
+            value = self._data
 
-        for k in keys:
-            if isinstance(value, dict):
-                if k not in value:
+            for k in keys:
+                if isinstance(value, dict):
+                    if k not in value:
+                        return default
+                    value = value[k]
+                else:
                     return default
-                value = value[k]
-            else:
-                return default
-        return value
+            return value
 
     def set(self, key: str, value: Any) -> None:
         """
@@ -66,15 +68,16 @@ class Config:
             key: ドット区切りのキー
             value: 設定する値
         """
-        keys = key.split('.')
-        data = self._data
+        with self._data_lock:
+            keys = key.split('.')
+            data = self._data
 
-        for k in keys[:-1]:
-            if k not in data or not isinstance(data[k], dict):
-                data[k] = {}
-            data = data[k]
+            for k in keys[:-1]:
+                if k not in data or not isinstance(data[k], dict):
+                    data[k] = {}
+                data = data[k]
 
-        data[keys[-1]] = value
+            data[keys[-1]] = value
 
     def __getitem__(self, key: str) -> Any:
         """辞書形式でのアクセス"""
@@ -304,8 +307,9 @@ class ConfigManager:
 
     def reload(self) -> None:
         """設定を再読み込み"""
-        self._config = None
-        self._load_config()
+        with self._init_lock:
+            self._config = None
+            self._load_config()
 
 
 # グローバルな設定マネージャーインスタンス

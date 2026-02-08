@@ -5,6 +5,7 @@
 
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -557,6 +558,7 @@ class MeetingMinutesGenerator:
 
 # グローバルインスタンス
 _minutes_generator = None
+_minutes_generator_lock = threading.Lock()
 
 
 def get_minutes_generator() -> MeetingMinutesGenerator:
@@ -568,7 +570,9 @@ def get_minutes_generator() -> MeetingMinutesGenerator:
     """
     global _minutes_generator
     if _minutes_generator is None:
-        _minutes_generator = MeetingMinutesGenerator()
+        with _minutes_generator_lock:
+            if _minutes_generator is None:
+                _minutes_generator = MeetingMinutesGenerator()
     return _minutes_generator
 
 

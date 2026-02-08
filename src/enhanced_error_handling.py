@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import logging
+import threading
 import traceback
 from typing import Optional, Dict, Any, List, Callable, Type, Tuple
 from enum import Enum, auto
@@ -50,31 +51,32 @@ class ErrorHandler:
         self._recovery_strategies: Dict[str, Callable[[Exception], bool]] = {}
         self._consecutive_errors = 0
         self._max_consecutive_errors = 5
-    
-    def register_handler(self, 
-                        severity: ErrorSeverity, 
+        self._handle_lock = threading.Lock()
+
+    def register_handler(self,
+                        severity: ErrorSeverity,
                         handler: Callable[[ErrorRecord], None]):
         """エラーハンドラーを登録"""
         self._handlers[severity].append(handler)
-    
-    def register_recovery_strategy(self, 
+
+    def register_recovery_strategy(self,
                                    error_type: Type[Exception],
                                    strategy: Callable[[Exception], bool]):
         """回復戦略を登録"""
         self._recovery_strategies[error_type.__name__] = strategy
-    
-    def handle(self, 
-               error: Exception, 
+
+    def handle(self,
+               error: Exception,
                severity: ErrorSeverity = ErrorSeverity.ERROR,
                context: Dict[str, Any] = None) -> bool:
         """
         エラーを処理
-        
+
         Args:
             error: 発生した例外
             severity: エラーの重要度
             context: 追加コンテキスト情報
-            
+
         Returns:
             回復成功時True
         """
@@ -87,38 +89,43 @@ class ErrorHandler:
             traceback=traceback.format_exc(),
             context=context or {}
         )
-        
-        # 履歴に追加
-        self._error_history.append(record)
-        if len(self._error_history) > self.max_history:
-            self._error_history.pop(0)
-        
-        # 連続エラーカウント
-        self._consecutive_errors += 1
-        
+
+        with self._handle_lock:
+            # 履歴に追加
+            self._error_history.append(record)
+            if len(self._error_history) > self.max_history:
+                self._error_history.pop(0)
+
+            # 連続エラーカウント
+            self._consecutive_errors += 1
+            consecutive = self._consecutive_errors
+
         # ログ出力
         self._log_error(record)
-        
+
         # ハンドラー実行
-        for handler in self._handlers[severity]:
+        with self._handle_lock:
+            handlers = list(self._handlers[severity])
+        for handler in handlers:
             try:
                 handler(record)
             except Exception as e:
                 logger.error(f"Error handler failed: {e}")
-        
+
         # 回復を試行
-        if self._consecutive_errors <= self._max_consecutive_errors:
+        if consecutive <= self._max_consecutive_errors:
             recovered = self._try_recovery(error)
             record.recovered = recovered
-            
+
             if recovered:
-                self._consecutive_errors = 0
+                with self._handle_lock:
+                    self._consecutive_errors = 0
                 logger.info(f"Successfully recovered from {record.error_type}")
                 return True
         else:
-            logger.critical(f"Too many consecutive errors ({self._consecutive_errors})")
+            logger.critical(f"Too many consecutive errors ({consecutive})")
             record.severity = ErrorSeverity.CRITICAL
-        
+
         return False
     
     def _log_error(self, record: ErrorRecord):
@@ -169,10 +176,16 @@ class ErrorHandler:
 
 
 # グローバルエラーハンドラー
-_global_error_handler = ErrorHandler()
+_global_error_handler = None
+_error_handler_lock = threading.Lock()
 
 def get_error_handler() -> ErrorHandler:
     """グローバルエラーハンドラーを取得"""
+    global _global_error_handler
+    if _global_error_handler is None:
+        with _error_handler_lock:
+            if _global_error_handler is None:
+                _global_error_handler = ErrorHandler()
     return _global_error_handler
 
 

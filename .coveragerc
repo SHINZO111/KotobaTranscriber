@@ -1,4 +1,4 @@
-# Coverage.py configuration file
+# AUTHORITATIVE coverage config — do not duplicate in pyproject.toml or pytest.ini
 # https://coverage.readthedocs.io/
 
 [run]
@@ -12,6 +12,7 @@ omit =
     */site-packages/*
     */__pycache__/*
     */main.py
+    */monitor_app.py
     */.venv/*
     */dist/*
     */build/*
@@ -22,7 +23,6 @@ omit =
     */main_window_enhanced.py
     */dark_theme.py
     */folder_monitor.py
-    */qt_compat.py
     */meeting_mode.py
     */ui_enhancements.py
     */faster_whisper_engine.py

@@ -236,7 +236,9 @@ class VocabularyDialog(QDialog):
         # 置換ルールをロード
         self.replacement_list.clear()
         for wrong, correct in self.vocabulary.get_replacements_dict().items():
-            self.replacement_list.addItem(f"{wrong} → {correct}")
+            item = QListWidgetItem(f"{wrong} → {correct}")
+            item.setData(Qt.UserRole, wrong)
+            self.replacement_list.addItem(item)
 
     def add_hotword(self):
         """ホットワードを追加"""
@@ -311,7 +313,9 @@ class VocabularyDialog(QDialog):
 
         try:
             self.vocabulary.add_replacement(wrong, correct)
-            self.replacement_list.addItem(f"{wrong} → {correct}")
+            item = QListWidgetItem(f"{wrong} → {correct}")
+            item.setData(Qt.UserRole, wrong)
+            self.replacement_list.addItem(item)
             self.wrong_input.clear()
             self.correct_input.clear()
             logger.info(f"Added replacement: {wrong} → {correct}")
@@ -326,9 +330,8 @@ class VocabularyDialog(QDialog):
             QMessageBox.information(self, "情報", "削除する置換ルールを選択してください")
             return
 
-        # "誤認識 → 正しい表記" 形式から誤認識部分を抽出
-        text = current_item.text()
-        wrong = text.split(" → ")[0].strip()
+        # QListWidgetItemのデータロールから誤認識キーを取得
+        wrong = current_item.data(Qt.UserRole)
 
         if self.vocabulary is None:
             return

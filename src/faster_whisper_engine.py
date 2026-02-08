@@ -23,12 +23,14 @@ ComputeType = Literal["auto", "int8", "int8_float16", "int16", "float16", "float
 DeviceType = Literal["auto", "cpu", "cuda"]
 
 # faster-whisper のインポート（オプショナル）
+# FileNotFoundError: ctranslate2がDLLディレクトリを参照する際に発生する場合がある
+# OSError: 共有ライブラリの読み込みに失敗する場合がある
 try:
     from faster_whisper import WhisperModel
     FASTER_WHISPER_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError, Exception) as e:
     FASTER_WHISPER_AVAILABLE = False
-    logger.warning("faster-whisper not available, install with: pip install faster-whisper")
+    logger.warning(f"faster-whisper not available: {e}")
 
 
 class FasterWhisperEngine(BaseTranscriptionEngine):
@@ -81,8 +83,7 @@ class FasterWhisperEngine(BaseTranscriptionEngine):
             return True
 
         if not FASTER_WHISPER_AVAILABLE:
-            logger.error("faster-whisper is not installed")
-            return False
+            raise ModelLoadError("faster-whisper is not installed")
 
         try:
             logger.info(f"Loading faster-whisper model: {self.model_size}...")
@@ -134,14 +135,7 @@ class FasterWhisperEngine(BaseTranscriptionEngine):
         """
         if not self.is_loaded:
             logger.warning("Model not loaded, loading now...")
-            if not self.load_model():
-                return {
-                    "text": "",
-                    "segments": [],
-                    "language": self.language,
-                    "duration": 0.0,
-                    "error": "Model loading failed"
-                }
+            self.load_model()
 
         try:
             start_time = time.time()
@@ -294,13 +288,12 @@ class TransformersWhisperEngine(BaseTranscriptionEngine):
 
         except Exception as e:
             logger.error(f"Failed to load transformers model: {e}")
-            return False
+            raise ModelLoadError(f"Failed to load transformers model: {e}")
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> Dict[str, Any]:
         """音声を文字起こし"""
         if not self.is_loaded:
-            if not self.load_model():
-                return {"text": "", "error": "Model loading failed"}
+            self.load_model()
 
         try:
             import torch

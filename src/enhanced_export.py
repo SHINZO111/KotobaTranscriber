@@ -4,6 +4,7 @@ Excel形式(.xlsx)とWord形式(.docx)の議事録出力対応
 """
 
 import logging
+import threading
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
@@ -640,8 +641,8 @@ class EnhancedExporter:
     def _export_text(self, data: Dict, output_path: str, data_type: str) -> bool:
         """テキスト形式でエクスポート"""
         try:
-            if data_type == "meeting_minutes" and hasattr(data, "to_text"):
-                content = data.to_text()
+            if data_type == "meeting_minutes" and "text_format" in data:
+                content = data["text_format"]
             else:
                 # 簡易テキスト出力
                 lines = []
@@ -664,8 +665,8 @@ class EnhancedExporter:
     def _export_markdown(self, data: Dict, output_path: str, data_type: str) -> bool:
         """Markdown形式でエクスポート"""
         try:
-            if data_type == "meeting_minutes" and hasattr(data, "to_markdown"):
-                content = data.to_markdown()
+            if data_type == "meeting_minutes" and "markdown_format" in data:
+                content = data["markdown_format"]
             else:
                 # 簡易Markdown出力
                 lines = ["# 書き起こし", ""]
@@ -702,6 +703,7 @@ class EnhancedExporter:
 
 # グローバルインスタンス
 _enhanced_exporter = None
+_enhanced_exporter_lock = threading.Lock()
 
 
 def get_enhanced_exporter() -> EnhancedExporter:
@@ -713,7 +715,9 @@ def get_enhanced_exporter() -> EnhancedExporter:
     """
     global _enhanced_exporter
     if _enhanced_exporter is None:
-        _enhanced_exporter = EnhancedExporter()
+        with _enhanced_exporter_lock:
+            if _enhanced_exporter is None:
+                _enhanced_exporter = EnhancedExporter()
     return _enhanced_exporter
 
 

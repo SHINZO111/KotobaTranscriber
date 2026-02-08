@@ -58,10 +58,12 @@ class ResponsiveWorker(QObject):
         return self._cancelled
     
     def _process_events(self):
-        """UIイベントを処理"""
+        """UIイベントを処理（GUIスレッドからのみ安全）"""
         now = time.time()
         if now - self._last_ui_update >= self._ui_update_interval:
-            QApplication.processEvents()
+            app = QApplication.instance()
+            if app is not None and QThread.currentThread() == app.thread():
+                QApplication.processEvents()
             self._last_ui_update = now
     
     def update_progress(self, value: int, message: str = ""):
@@ -301,8 +303,10 @@ class ProgressAnimator(QObject):
     def set_value(self, value: int):
         """目標値を設定"""
         self._target = max(0, min(100, value))
+        if self._target == self._current:
+            return
         self._step = (self._target - self._current) / 20  # 20フレームで到達
-        
+
         if not self._timer.isActive():
             self._timer.start(16)  # ~60fps
     

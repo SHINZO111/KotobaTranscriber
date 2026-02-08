@@ -96,7 +96,7 @@ class ClusteringMixin:
             logger.info(f"Estimated {best_k} speakers (silhouette score: {best_score:.3f})")
             return best_k
 
-        except Exception as e:
+        except (ImportError, ValueError, np.linalg.LinAlgError) as e:
             logger.warning(f"Speaker estimation failed: {e}, defaulting to 2")
             return 2
 
@@ -128,11 +128,15 @@ class ClusteringMixin:
                 distances = [np.linalg.norm(emb - c) for c in centroids]
                 labels[i] = np.argmin(distances)
 
-            # 更新
+            # 更新（セントロイドを正規化して単位球面上に保つ）
             for k in range(n_clusters):
                 mask = labels == k
                 if mask.any():
-                    centroids[k] = normalized[mask].mean(axis=0)
+                    centroid = normalized[mask].mean(axis=0)
+                    norm = np.linalg.norm(centroid)
+                    if norm > 0:
+                        centroid = centroid / norm
+                    centroids[k] = centroid
 
         return labels
 
@@ -153,6 +157,11 @@ class ClusteringMixin:
         """
         if len(labels) == 0:
             return []
+
+        if len(labels) != len(timestamps):
+            raise ValueError(
+                f"labels and timestamps length mismatch: {len(labels)} != {len(timestamps)}"
+            )
 
         segments = []
         current_speaker = labels[0]
@@ -262,11 +271,11 @@ class SpeakerFormatterMixin:
 
     def _find_speaker_at_time(
         self,
-        time: float,
+        timestamp: float,
         speaker_segments: List[Dict]
     ) -> str:
         """指定時刻の話者を特定"""
         for seg in speaker_segments:
-            if seg.get("start", 0) <= time <= seg.get("end", 0):
+            if seg.get("start", 0) <= timestamp <= seg.get("end", 0):
                 return seg.get("speaker", "UNKNOWN")
         return "UNKNOWN"

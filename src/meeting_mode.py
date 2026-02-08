@@ -220,6 +220,8 @@ class MeetingModeRecorder:
 
     def _start_new_segment(self):
         """新しいセグメントを開始"""
+        if self.current_session is None:
+            return
         self.segment_index += 1
         segment_file = self.output_dir / f"{self.current_session.session_id}_seg{self.segment_index:03d}.wav"
 
@@ -241,7 +243,7 @@ class MeetingModeRecorder:
         Returns:
             成功したかどうか
         """
-        if not self.current_segment or not self.audio_buffer:
+        if not self.current_segment or not self.audio_buffer or self.current_session is None:
             return False
 
         try:
@@ -431,7 +433,7 @@ class MeetingModeProcessor:
         """
         try:
             from transcription_engine import TranscriptionEngine
-            from speaker_diarization_free import SpeakerDiarizationFree
+            from speaker_diarization_free import FreeSpeakerDiarizer
 
             # 書き起こし
             engine = TranscriptionEngine()
@@ -439,19 +441,16 @@ class MeetingModeProcessor:
 
             result = engine.transcribe(
                 segment.file_path,
-                return_timestamps=True,
-                return_speakers=True
+                return_timestamps=True
             )
 
             # 話者識別（会議向け設定）
             if result and self.speaker_config.get("enabled", True):
-                diarizer = SpeakerDiarizationFree(
-                    min_speakers=self.speaker_config["min_speakers"],
-                    max_speakers=self.speaker_config["max_speakers"]
-                )
-                speaker_segments = diarizer.process(
+                diarizer = FreeSpeakerDiarizer()
+                num_speakers = self.speaker_config.get("max_speakers")
+                speaker_segments = diarizer.diarize(
                     segment.file_path,
-                    result.get("segments", [])
+                    num_speakers=num_speakers
                 )
                 result["speaker_segments"] = speaker_segments
 
@@ -535,6 +534,7 @@ class MeetingModeProcessor:
 # グローバルインスタンス
 _meeting_recorder = None
 _meeting_processor = None
+_meeting_singleton_lock = threading.Lock()
 
 
 def get_meeting_recorder(config: Optional[Dict[str, Any]] = None) -> MeetingModeRecorder:
@@ -549,7 +549,9 @@ def get_meeting_recorder(config: Optional[Dict[str, Any]] = None) -> MeetingMode
     """
     global _meeting_recorder
     if _meeting_recorder is None:
-        _meeting_recorder = MeetingModeRecorder(config)
+        with _meeting_singleton_lock:
+            if _meeting_recorder is None:
+                _meeting_recorder = MeetingModeRecorder(config)
     return _meeting_recorder
 
 
@@ -565,7 +567,9 @@ def get_meeting_processor(config: Optional[Dict[str, Any]] = None) -> MeetingMod
     """
     global _meeting_processor
     if _meeting_processor is None:
-        _meeting_processor = MeetingModeProcessor(config)
+        with _meeting_singleton_lock:
+            if _meeting_processor is None:
+                _meeting_processor = MeetingModeProcessor(config)
     return _meeting_processor
 
 

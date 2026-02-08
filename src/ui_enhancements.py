@@ -296,11 +296,15 @@ class ThemeManager:
     
     def _lighten_color(self, color: str, percent: int) -> str:
         """色を明るくする"""
-        # 簡易実装: 16進数カラーを解析して明るくする
-        color = color.lstrip('#')
-        r = int(color[0:2], 16)
-        g = int(color[2:4], 16)
-        b = int(color[4:6], 16)
+        try:
+            color = color.lstrip('#')
+            if len(color) == 3:
+                color = color[0]*2 + color[1]*2 + color[2]*2
+            r = int(color[0:2], 16)
+            g = int(color[2:4], 16)
+            b = int(color[4:6], 16)
+        except (ValueError, IndexError):
+            return "#ffffff"
         
         r = min(255, r + int((255 - r) * percent / 100))
         g = min(255, g + int((255 - g) * percent / 100))
@@ -310,10 +314,15 @@ class ThemeManager:
     
     def _darken_color(self, color: str, percent: int) -> str:
         """色を暗くする"""
-        color = color.lstrip('#')
-        r = int(color[0:2], 16)
-        g = int(color[2:4], 16)
-        b = int(color[4:6], 16)
+        try:
+            color = color.lstrip('#')
+            if len(color) == 3:
+                color = color[0]*2 + color[1]*2 + color[2]*2
+            r = int(color[0:2], 16)
+            g = int(color[2:4], 16)
+            b = int(color[4:6], 16)
+        except (ValueError, IndexError):
+            return "#000000"
         
         r = max(0, r - int(r * percent / 100))
         g = max(0, g - int(g * percent / 100))
@@ -354,6 +363,8 @@ class ProgressIndicator:
         self._phases = phases
         if weights and len(weights) == len(phases):
             total = sum(weights)
+            if total == 0:
+                total = 1.0
             self._phase_weights = {p: w/total for p, w in zip(phases, weights)}
         else:
             # 均等配分

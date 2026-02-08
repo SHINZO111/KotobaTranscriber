@@ -4,9 +4,9 @@
 """
 
 import logging
-import json
+import threading
 from pathlib import Path
-from typing import List, Dict, Optional, Set, Any
+from typing import List, Dict, Optional, Any
 
 from construction_vocabulary import ConstructionVocabulary, get_construction_vocabulary
 from custom_vocabulary import CustomVocabulary
@@ -121,14 +121,11 @@ class CustomDictionary:
         else:
             words = self.hotwords
 
-        # 重複を削除
-        words = list(set(words))
+        # 重複を削除（挿入順を維持）
+        words = list(dict.fromkeys(words))
 
         # プロンプトは最大244トークン程度に制限
-        # 1単語あたり約2-3トークンと仮定し、最大80単語程度
-        if len(words) > 80:
-            words = words[:80]
-
+        # 1単語あたり約2-3トークンと仮定し、最大30単語
         if words:
             prompt = "以下の専門用語に注意: " + "、".join(words[:30])
             return prompt
@@ -246,13 +243,14 @@ class CustomDictionary:
         logger.info("Dictionary reloaded")
 
 
-# グローバルインスタンス
+# グローバルインスタンス（スレッドセーフ）
 _custom_dictionary = None
+_custom_dictionary_lock = threading.Lock()
 
 
 def get_custom_dictionary(config: Optional[Dict[str, Any]] = None) -> CustomDictionary:
     """
-    カスタム辞書のシングルトンインスタンスを取得
+    カスタム辞書のシングルトンインスタンスを取得（スレッドセーフ）
 
     Args:
         config: 設定辞書（初回呼び出し時のみ使用）
@@ -262,7 +260,9 @@ def get_custom_dictionary(config: Optional[Dict[str, Any]] = None) -> CustomDict
     """
     global _custom_dictionary
     if _custom_dictionary is None:
-        _custom_dictionary = CustomDictionary(config)
+        with _custom_dictionary_lock:
+            if _custom_dictionary is None:
+                _custom_dictionary = CustomDictionary(config)
     return _custom_dictionary
 
 

@@ -238,10 +238,26 @@ class ErrorRecoveryManager:
             'retries': max_retries
         }
     
+    # エラーログの最大サイズ (10MB)
+    MAX_LOG_SIZE = 10 * 1024 * 1024
+
     def _log_error(self, record: ErrorRecord):
         """エラーをログに記録"""
         with self._lock:
             try:
+                # ログローテーション: サイズ上限超過時にローテート
+                if self.error_log_file.exists():
+                    try:
+                        file_size = self.error_log_file.stat().st_size
+                        if file_size > self.MAX_LOG_SIZE:
+                            rotated = self.error_log_file.with_suffix('.jsonl.1')
+                            if rotated.exists():
+                                rotated.unlink()
+                            self.error_log_file.rename(rotated)
+                            logger.info(f"Error log rotated: {file_size} bytes")
+                    except OSError as e:
+                        logger.warning(f"Failed to rotate error log: {e}")
+
                 with open(self.error_log_file, 'a', encoding='utf-8') as f:
                     f.write(json.dumps(asdict(record), ensure_ascii=False) + '\n')
                 self._error_count += 1

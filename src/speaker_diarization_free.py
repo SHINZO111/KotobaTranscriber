@@ -16,17 +16,17 @@ try:
     import torchaudio
     from speechbrain.pretrained import SpeakerRecognition
     SPEECHBRAIN_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError, Exception) as e:
     SPEECHBRAIN_AVAILABLE = False
-    logger.warning("speechbrain not available")
+    logger.warning(f"speechbrain not available: {e}")
 
 try:
     from resemblyzer import VoiceEncoder, preprocess_wav
     from pathlib import Path
     RESEMBLYZER_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError, Exception) as e:
     RESEMBLYZER_AVAILABLE = False
-    logger.warning("resemblyzer not available")
+    logger.warning(f"resemblyzer not available: {e}")
 
 
 class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
@@ -44,7 +44,7 @@ class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
         """
         self.method = method
         self.encoder = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu" if SPEECHBRAIN_AVAILABLE else "cpu"
+        self.device = "cuda" if SPEECHBRAIN_AVAILABLE and torch.cuda.is_available() else "cpu"
 
         logger.info(f"FreeSpeakerDiarizer initialized with method: {method}, device: {self.device}")
 
@@ -116,6 +116,9 @@ class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
                 return self._diarize_speechbrain(audio_path, num_speakers)
             elif self.method == "resemblyzer":
                 return self._diarize_resemblyzer(audio_path, num_speakers)
+            else:
+                logger.warning(f"No diarization method available (method={self.method})")
+                return []
 
         except Exception as e:
             logger.error(f"Speaker diarization failed: {e}")

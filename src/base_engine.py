@@ -105,7 +105,6 @@ class BaseTranscriptionEngine(ABC):
         """
         if self.model is not None:
             try:
-                del self.model
                 self.model = None
                 self.is_loaded = False
 
@@ -131,7 +130,12 @@ class BaseTranscriptionEngine(ABC):
         Returns:
             self
         """
-        self.load_model()
+        try:
+            self.load_model()
+        except Exception:
+            # 部分的にロードされた場合のクリーンアップ
+            self.unload_model()
+            raise
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:

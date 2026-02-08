@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QCheckBox, QMessageBox, QFileDialog
 )
 from PySide6.QtCore import Qt, QThread, Signal
@@ -53,7 +53,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class ExportOptionsDialog(QWidget):
+class ExportOptionsDialog(QDialog):
     """エクスポートオプションダイアログ"""
 
     def __init__(self, parent=None):
@@ -252,7 +252,7 @@ class EnhancedMainWindowMixin:
 
     def toggle_dark_mode(self, state):
         """ダークモードを切り替え"""
-        is_dark = state == Qt.Checked
+        is_dark = state == Qt.CheckState.Checked.value
         self.settings.set('dark_mode', is_dark)
         self.settings.save_debounced()
 
@@ -334,17 +334,19 @@ class EnhancedMainWindowMixin:
             logger.error(f"Enhanced batch processing failed: {e}")
             QMessageBox.critical(self, "エラー", f"バッチ処理エラー:\n{str(e)}")
 
+    def _get_engine(self):
+        """キャッシュされたエンジンインスタンスを取得（モデル再ロード防止）"""
+        if not hasattr(self, '_engine') or self._engine is None:
+            from transcription_engine import TranscriptionEngine
+            self._engine = TranscriptionEngine()
+        if not self._engine.is_available():
+            self._engine.load_model()
+        return self._engine
+
     def _process_single_file_wrapper(self, file_path: str):
         """単一ファイル処理のラッパー"""
-        # 既存の処理関数を呼び出し
-        from transcription_engine import TranscriptionEngine
-        from text_formatter import TextFormatter
-
-        engine = TranscriptionEngine()
-        engine.load_model()
-
+        engine = self._get_engine()
         result = engine.transcribe(file_path, return_timestamps=True)
-
         return result
 
     def _show_resume_dialog(self):

@@ -460,10 +460,11 @@ class TestPyQt5GUIStability(unittest.TestCase):
 
         # Check Qt imports
         try:
-            from qt_compat import (
+            from PySide6.QtWidgets import (
                 QApplication, QMainWindow, QWidget, QVBoxLayout,
-                QPushButton, QLabel, Signal, Slot
+                QPushButton, QLabel,
             )
+            from PySide6.QtCore import Signal, Slot
             cls.qt_available = True
         except ImportError:
             cls.qt_available = False
@@ -478,20 +479,20 @@ class TestPyQt5GUIStability(unittest.TestCase):
             self.result.add_skip("Qt not available")
             self.skipTest("Qt not available")
 
-        from qt_compat import (
+        from PySide6.QtWidgets import (
             QApplication, QMainWindow, QWidget, QVBoxLayout,
-            QPushButton, QLabel, Signal, Slot, QT_VERSION
+            QPushButton, QLabel,
         )
+        from PySide6.QtCore import Signal, Slot
 
-        self.assertIn(QT_VERSION, ["PyQt5", "PySide6"])
-        self.result.add_pass(f"Qt binding: {QT_VERSION}")
+        self.result.add_pass("Qt binding: PySide6")
 
     def test_02_signal_slot(self):
         """Signal/Slot functionality test"""
         if not self.qt_available:
             self.skipTest("Qt not available")
 
-        from qt_compat import QObject, Signal, Slot
+        from PySide6.QtCore import QObject, Signal, Slot
 
         class TestObject(QObject):
             test_signal = Signal(str)
@@ -516,7 +517,7 @@ class TestPyQt5GUIStability(unittest.TestCase):
         if not self.qt_available:
             self.skipTest("Qt not available")
 
-        from qt_compat import QThread, Signal
+        from PySide6.QtCore import QThread, Signal
         import time
 
         class TestWorker(QThread):

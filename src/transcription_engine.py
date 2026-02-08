@@ -274,14 +274,10 @@ class TranscriptionEngine(BaseTranscriptionEngine):
     def _cleanup_temp_files(self) -> None:
         """
         一時ファイルをクリーンアップ（リソースリーク対策）
-        積極的なクリーンアップで一時ファイルの蓄積を防止
+        登録された一時ファイルのみを削除（他アプリのファイルは触らない）
         """
-        import tempfile
-        import glob
-        import time
-
         # 登録された一時ファイルのクリーンアップ
-        for temp_file in self._temp_files:
+        for temp_file in list(self._temp_files):
             try:
                 if os.path.exists(temp_file):
                     os.unlink(temp_file)
@@ -289,25 +285,6 @@ class TranscriptionEngine(BaseTranscriptionEngine):
             except Exception as e:
                 logger.warning(f"Failed to cleanup {temp_file}: {e}")
         self._temp_files.clear()
-
-        # 追加: システム一時フォルダ内の古い音声一時ファイルをクリーンアップ
-        try:
-            temp_dir = tempfile.gettempdir()
-            # 1日以上古い一時音声ファイルを削除
-            current_time = time.time()
-            day_in_seconds = 86400
-
-            for pattern in ['tmp*.wav', 'tmp*.mp3', 'preprocessed_*.wav']:
-                for temp_file in glob.glob(os.path.join(temp_dir, pattern)):
-                    try:
-                        file_age = current_time - os.path.getmtime(temp_file)
-                        if file_age > day_in_seconds:
-                            os.unlink(temp_file)
-                            logger.debug(f"Cleaned up old temp file: {temp_file}")
-                    except Exception as e:
-                        logger.debug(f"Failed to cleanup old temp file {temp_file}: {e}")
-        except Exception as e:
-            logger.debug(f"Failed to cleanup system temp files: {e}")
 
     def transcribe(
         self,
@@ -338,11 +315,11 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         if return_timestamps is None:
             return_timestamps = config.get("model.whisper.return_timestamps", default=True)
 
-        # ファイルパスを検証
+        # ファイルパスを検証（音声/動画ファイル拡張子のみ許可）
         try:
             validated_path = Validator.validate_file_path(
                 audio_path,
-                allowed_extensions=None,  # 全サポート形式を許可
+                allowed_extensions=Validator.ALLOWED_AUDIO_EXTENSIONS,
                 must_exist=True
             )
             logger.debug(f"File path validated: {validated_path}")
@@ -386,7 +363,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                                 break
                             dst.write(chunk)
 
-                logger.info(f"Temporary ASCII path created: {temp_ascii_path}")
+                logger.debug(f"Temporary ASCII path created: {temp_ascii_path}")
 
                 # 一時ファイルを追跡リストに追加
                 self._temp_files.append(temp_ascii_path)
@@ -484,7 +461,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
 
     def is_available(self) -> bool:
         """エンジンが利用可能かチェック"""
-        return self.is_loaded or self.model is not None
+        return self.is_loaded
 
 
 # テストファイルとの後方互換性エイリアス

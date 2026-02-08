@@ -28,6 +28,7 @@ except ImportError:
     logging.warning("watchdog not available, falling back to polling")
 
 from PySide6.QtCore import QObject, Signal, QTimer
+from workers import SharedConstants
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +55,9 @@ class AsyncFolderMonitor(QObject):
     status_update = Signal(str)        # ステータス更新
     file_processed = Signal(str, bool)  # (ファイルパス, 成功)
     
-    # 対応する音声/動画フォーマット
-    AUDIO_EXTENSIONS = {
-        '.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac',
-        '.wma', '.opus', '.amr', '.3gp', '.webm',
-        '.mp4', '.avi', '.mov', '.mkv'
-    }
-    
+    # 対応する音声/動画フォーマット（SharedConstants から参照）
+    AUDIO_EXTENSIONS = SharedConstants.AUDIO_EXTENSIONS
+
     def __init__(
         self,
         folder_paths: Optional[List[str]] = None,
@@ -166,6 +163,8 @@ class AsyncFolderMonitor(QObject):
     
     def stop(self):
         """監視を停止"""
+        if self._ready_check_timer.isActive():
+            self._ready_check_timer.stop()
         if self._observer:
             self._observer.stop()
             self._observer.join()
@@ -217,61 +216,66 @@ class AsyncFolderMonitor(QObject):
                 return
         
         # 保留リストに追加
-        self._pending_files[path] = FileEvent(
-            path=file_path,
-            event_type=event_type,
-            timestamp=time.time()
-        )
+        with self._lock:
+            self._pending_files[path] = FileEvent(
+                path=file_path,
+                event_type=event_type,
+                timestamp=time.time()
+            )
         
         logger.debug(f"File event: {event_type} - {path.name}")
     
     def _check_pending_files(self):
         """保留中ファイルの準備確認"""
         ready_files = []
-        
-        for path, event in list(self._pending_files.items()):
-            if self._is_file_ready(path):
+
+        with self._lock:
+            pending_items = list(self._pending_files.items())
+
+        for path, event in pending_items:
+            if self._is_file_ready(path, event):
                 ready_files.append(str(path.resolve()))
-                del self._pending_files[path]
-                
                 with self._lock:
+                    self._pending_files.pop(path, None)
                     self._processing.add(path)
         
         if ready_files:
             self.new_files_detected.emit(ready_files)
             self.status_update.emit(f"{len(ready_files)}個のファイルを検出")
     
-    def _is_file_ready(self, path: Path) -> bool:
+    def _is_file_ready(self, path: Path, event: 'FileEvent') -> bool:
         """
-        ファイルが読み取り可能か確認
-        
+        ファイルが読み取り可能か確認（ノンブロッキング）
+
+        前回のタイマーtickで記録したサイズと今回のサイズを比較し、
+        安定していれば読み取りテストを行う。time.sleepは使わない。
+
         Args:
             path: ファイルパス
-            
+            event: ファイルイベント（前回サイズをsizeフィールドに記録）
+
         Returns:
             True: 読み取り可能
         """
         try:
             if not path.exists():
                 return False
-            
+
             stat = path.stat()
-            
+            current_size = stat.st_size
+
             # サイズチェック
-            if stat.st_size == 0:
+            if current_size == 0:
                 return False
-            
-            # 安定性チェック（2秒間サイズ変化なし）
-            size1 = stat.st_size
-            time.sleep(0.5)
-            
-            if not path.exists():
+
+            # 安定性チェック: 前回記録したサイズと比較
+            previous_size = event.size
+            event.size = current_size
+
+            if previous_size == 0 or previous_size != current_size:
+                # 初回またはサイズ変化あり → 次のtickで再チェック
                 return False
-            
-            size2 = path.stat().st_size
-            if size1 != size2:
-                return False
-            
+
             # 書き込みロックチェック
             try:
                 with open(path, 'rb') as f:
@@ -279,7 +283,7 @@ class AsyncFolderMonitor(QObject):
                 return True
             except PermissionError:
                 return False
-                
+
         except (OSError, IOError) as e:
             logger.debug(f"File not ready: {path} - {e}")
             return False
@@ -293,11 +297,12 @@ class AsyncFolderMonitor(QObject):
             if path.is_file() and path.suffix.lower() in self.AUDIO_EXTENSIONS:
                 abs_path = str(path.resolve())
                 if abs_path not in self._processed_files:
-                    self._pending_files[path] = FileEvent(
-                        path=str(path),
-                        event_type='existing',
-                        timestamp=time.time()
-                    )
+                    with self._lock:
+                        self._pending_files[path] = FileEvent(
+                            path=str(path),
+                            event_type='existing',
+                            timestamp=time.time()
+                        )
     
     def mark_as_processed(self, file_path: str, success: bool = True):
         """
@@ -339,6 +344,13 @@ class AsyncFolderMonitor(QObject):
         """処理済みリストを読み込み"""
         try:
             if self._processed_list_path.exists():
+                # ファイルサイズ制限 (50MB)
+                MAX_PROCESSED_SIZE = 50 * 1024 * 1024
+                file_size = self._processed_list_path.stat().st_size
+                if file_size > MAX_PROCESSED_SIZE:
+                    logger.error(f"Processed files list too large: {file_size} bytes, skipping")
+                    self._processed_files = set()
+                    return
                 import json
                 data = json.loads(self._processed_list_path.read_text(encoding='utf-8'))
                 self._processed_files = set(data.get('files', []))

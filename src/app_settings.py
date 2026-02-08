@@ -49,6 +49,9 @@ class AppSettings:
         "enable_preprocessing": False,
         "enable_vocabulary": False,
 
+        # UI設定
+        "dark_mode": False,
+
         # ウィンドウ設定（コンパクトUI）
         "window": {
             "width": 280,
@@ -65,12 +68,10 @@ class AppSettings:
         'completed_folder': (str, type(None)),
         'auto_move_completed': bool,
         'remove_fillers': bool,
-        'add_punctuation': bool,
-        'format_paragraphs': bool,
         'enable_diarization': bool,
         'enable_llm_correction': bool,
-        'use_advanced_llm': bool,
         'enable_preprocessing': bool,
+        'dark_mode': bool,
         'enable_vocabulary': bool,
         'window.width': int,
         'window.height': int,

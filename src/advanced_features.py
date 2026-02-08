@@ -5,8 +5,13 @@
 
 import os
 import sys
-import winreg
 import logging
+
+try:
+    import winreg
+    WINREG_AVAILABLE = True
+except ImportError:
+    WINREG_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +20,12 @@ class StartupManager:
     """Windows スタートアップ管理クラス"""
 
     @staticmethod
-    def get_app_path() -> str:
-        """アプリケーションの実行パスを取得"""
+    def get_app_path(entry_script: str = 'main.py') -> str:
+        """アプリケーションの実行パスを取得
+
+        Args:
+            entry_script: 起動スクリプト名 ('main.py' or 'monitor_app.py')
+        """
         if getattr(sys, 'frozen', False):
             # PyInstallerでビルドされた実行ファイルの場合
             return sys.executable
@@ -24,67 +33,83 @@ class StartupManager:
             # 開発環境の場合
             python_exe = sys.executable
             script_path = os.path.abspath(__file__)
-            main_path = os.path.join(os.path.dirname(script_path), 'main.py')
-            return f'"{python_exe}" "{main_path}"'
+            target_path = os.path.join(os.path.dirname(script_path), entry_script)
+            return f'"{python_exe}" "{target_path}"'
 
     @staticmethod
-    def is_startup_enabled() -> bool:
-        """スタートアップ登録されているかチェック"""
+    def is_startup_enabled(app_name: str = 'KotobaTranscriber') -> bool:
+        """スタートアップ登録されているかチェック
+
+        Args:
+            app_name: レジストリ登録名
+        """
+        if not WINREG_AVAILABLE:
+            return False
         try:
-            key = winreg.OpenKey(
+            with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 r"Software\Microsoft\Windows\CurrentVersion\Run",
                 0,
                 winreg.KEY_READ
-            )
-            try:
-                value, _ = winreg.QueryValueEx(key, "KotobaTranscriber")
-                winreg.CloseKey(key)
-                return True
-            except FileNotFoundError:
-                winreg.CloseKey(key)
-                return False
+            ) as key:
+                try:
+                    winreg.QueryValueEx(key, app_name)
+                    return True
+                except FileNotFoundError:
+                    return False
         except Exception as e:
             logger.error(f"Failed to check startup: {e}")
             return False
 
     @staticmethod
-    def enable_startup() -> bool:
-        """スタートアップに登録"""
+    def enable_startup(app_name: str = 'KotobaTranscriber',
+                       entry_script: str = 'main.py') -> bool:
+        """スタートアップに登録
+
+        Args:
+            app_name: レジストリ登録名
+            entry_script: 起動スクリプト名
+        """
+        if not WINREG_AVAILABLE:
+            logger.error("winreg not available on this platform")
+            return False
         try:
-            app_path = StartupManager.get_app_path()
-            key = winreg.OpenKey(
+            app_path = StartupManager.get_app_path(entry_script=entry_script)
+            with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 r"Software\Microsoft\Windows\CurrentVersion\Run",
                 0,
                 winreg.KEY_WRITE
-            )
-            winreg.SetValueEx(key, "KotobaTranscriber", 0, winreg.REG_SZ, app_path)
-            winreg.CloseKey(key)
-            logger.info(f"Startup enabled: {app_path}")
+            ) as key:
+                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, app_path)
+            logger.info(f"Startup enabled: {app_name} -> {app_path}")
             return True
         except Exception as e:
             logger.error(f"Failed to enable startup: {e}")
             return False
 
     @staticmethod
-    def disable_startup() -> bool:
-        """スタートアップから削除"""
+    def disable_startup(app_name: str = 'KotobaTranscriber') -> bool:
+        """スタートアップから削除
+
+        Args:
+            app_name: レジストリ登録名
+        """
+        if not WINREG_AVAILABLE:
+            return False
         try:
-            key = winreg.OpenKey(
+            with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 r"Software\Microsoft\Windows\CurrentVersion\Run",
                 0,
                 winreg.KEY_WRITE
-            )
-            try:
-                winreg.DeleteValue(key, "KotobaTranscriber")
-                winreg.CloseKey(key)
-                logger.info("Startup disabled")
-                return True
-            except FileNotFoundError:
-                winreg.CloseKey(key)
-                return True
+            ) as key:
+                try:
+                    winreg.DeleteValue(key, app_name)
+                    logger.info(f"Startup disabled: {app_name}")
+                    return True
+                except FileNotFoundError:
+                    return True
         except Exception as e:
             logger.error(f"Failed to disable startup: {e}")
             return False
@@ -120,6 +145,8 @@ class FileOrganizer:
                 while os.path.exists(dest_path):
                     dest_path = os.path.join(dest_folder, f"{base}_{counter}{ext}")
                     counter += 1
+                    if counter > 10000:
+                        raise FileExistsError(f"Too many duplicate files: {filename}")
 
             # ファイルを移動
             import shutil

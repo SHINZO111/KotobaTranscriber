@@ -483,6 +483,12 @@ class DarkTheme:
         palette.setColor(QPalette.Highlight, QColor(c['accent']))
         palette.setColor(QPalette.HighlightedText, QColor("white"))
 
+        # Disabled group for accessibility
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.WindowText, QColor(c['text_disabled']))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.Text, QColor(c['text_disabled']))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ButtonText, QColor(c['text_disabled']))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.Button, QColor(c['button_disabled']))
+
         app.setPalette(palette)
 
 
@@ -498,7 +504,11 @@ class LightTheme:
     def apply(cls, app: QApplication):
         """ライトテーマを適用"""
         app.setStyleSheet("")
-        app.setPalette(QApplication.style().standardPalette())
+        style = app.style()
+        if style is not None:
+            app.setPalette(style.standardPalette())
+        else:
+            app.setPalette(QPalette())
 
 
 def set_theme(app: QApplication, dark_mode: bool = True):

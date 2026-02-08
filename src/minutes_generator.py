@@ -4,6 +4,7 @@ meeting_minutes_generator.py の簡易インターフェースを提供
 """
 
 import logging
+import threading
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
@@ -111,6 +112,17 @@ class MinutesGenerator:
             議事録データ
         """
         import json
+
+        # ファイル存在チェック
+        file_path = Path(transcription_file)
+        if not file_path.exists():
+            raise FileNotFoundError(f"Transcription file not found: {transcription_file}")
+
+        # ファイルサイズ制限 (10MB)
+        MAX_FILE_SIZE = 10 * 1024 * 1024
+        file_size = file_path.stat().st_size
+        if file_size > MAX_FILE_SIZE:
+            raise ValueError(f"Transcription file too large: {file_size} bytes (max: {MAX_FILE_SIZE})")
 
         with open(transcription_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -227,6 +239,7 @@ class MinutesGenerator:
 
 # グローバルインスタンス
 _minutes_generator = None
+_minutes_generator_lock = threading.Lock()
 
 
 def get_minutes_generator() -> MinutesGenerator:
@@ -238,7 +251,9 @@ def get_minutes_generator() -> MinutesGenerator:
     """
     global _minutes_generator
     if _minutes_generator is None:
-        _minutes_generator = MinutesGenerator()
+        with _minutes_generator_lock:
+            if _minutes_generator is None:
+                _minutes_generator = MinutesGenerator()
     return _minutes_generator
 
 

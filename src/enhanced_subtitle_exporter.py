@@ -6,7 +6,7 @@ SRT/VTT/JSON/DOCX形式へのエクスポートをサポート
 
 import json
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Protocol
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -58,11 +58,11 @@ class SRTFormatter(SubtitleFormatter):
     
     def format_time(self, seconds: float) -> str:
         """秒数をSRT時間形式に変換 (HH:MM:SS,mmm)"""
-        td = timedelta(seconds=seconds)
-        hours, remainder = divmod(td.seconds, 3600)
+        seconds = max(0.0, seconds)
+        total_seconds = int(seconds)
+        hours, remainder = divmod(total_seconds, 3600)
         minutes, secs = divmod(remainder, 60)
         milliseconds = int((seconds % 1) * 1000)
-        secs = int(secs)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
     
     def format_segment(self, segment: Dict, index: int) -> str:
@@ -91,11 +91,11 @@ class VTTFormatter(SubtitleFormatter):
     
     def format_time(self, seconds: float) -> str:
         """秒数をVTT時間形式に変換 (HH:MM:SS.mmm)"""
-        td = timedelta(seconds=seconds)
-        hours, remainder = divmod(td.seconds, 3600)
+        seconds = max(0.0, seconds)
+        total_seconds = int(seconds)
+        hours, remainder = divmod(total_seconds, 3600)
         minutes, secs = divmod(remainder, 60)
         milliseconds = int((seconds % 1) * 1000)
-        secs = int(secs)
         return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
     
     def format_segment(self, segment: Dict, index: int) -> str:
@@ -140,7 +140,7 @@ class JSONFormatter:
         output = {
             'version': '1.0',
             'format': 'kotoba-transcription',
-            'generated_at': str(datetime.now()) if 'datetime' in dir() else None,
+            'generated_at': datetime.now().isoformat(),
             'segment_count': len(segments),
             'segments': segments,
             'metadata': metadata or {}
@@ -410,35 +410,39 @@ class EnhancedSubtitleExporter:
         current = None
         
         for segment in segments:
+            seg_start = segment.get('start', 0)
+            seg_end = segment.get('end', 0)
+            seg_text = segment.get('text', '').strip()
+
             if current is None:
                 current = {
-                    'start': segment['start'],
-                    'end': segment['end'],
-                    'text': segment['text'].strip(),
+                    'start': seg_start,
+                    'end': seg_end,
+                    'text': seg_text,
                     'speaker': segment.get('speaker')
                 }
                 continue
-            
-            duration = segment['end'] - current['start']
-            combined_text = current['text'] + ' ' + segment['text'].strip()
-            
+
+            duration = seg_end - current['start']
+            combined_text = current['text'] + ' ' + seg_text
+
             # マージ条件
             same_speaker = segment.get('speaker') == current.get('speaker')
             can_merge = (
-                duration < min_duration and 
+                duration < min_duration and
                 len(combined_text) <= max_chars and
                 same_speaker
             )
-            
+
             if can_merge:
-                current['end'] = segment['end']
+                current['end'] = seg_end
                 current['text'] = combined_text
             else:
                 merged.append(current)
                 current = {
-                    'start': segment['start'],
-                    'end': segment['end'],
-                    'text': segment['text'].strip(),
+                    'start': seg_start,
+                    'end': seg_end,
+                    'text': seg_text,
                     'speaker': segment.get('speaker')
                 }
         
@@ -467,9 +471,9 @@ class EnhancedSubtitleExporter:
         result = []
         
         for segment in segments:
-            text = segment['text'].strip()
-            start = segment['start']
-            end = segment['end']
+            text = segment.get('text', '').strip()
+            start = segment.get('start', 0)
+            end = segment.get('end', 0)
             duration = end - start
             
             # 分割不要チェック

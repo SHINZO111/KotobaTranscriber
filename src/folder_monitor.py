@@ -6,9 +6,11 @@
 import os
 import time
 import logging
+import threading
 from typing import List, Set, Callable
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
+from workers import SharedConstants
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +22,8 @@ class FolderMonitor(QThread):
     new_files_detected = Signal(list)  # 新規ファイル検出
     status_update = Signal(str)  # ステータス更新
 
-    # 対応する音声/動画フォーマット
-    AUDIO_EXTENSIONS = {
-        '.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac',
-        '.wma', '.opus', '.amr', '.3gp', '.webm',
-        '.mp4', '.avi', '.mov', '.mkv'
-    }
+    # 対応する音声/動画フォーマット（SharedConstants から参照）
+    AUDIO_EXTENSIONS = SharedConstants.AUDIO_EXTENSIONS
 
     def __init__(self, folder_path: str, check_interval: int = 10):
         """
@@ -39,6 +37,7 @@ class FolderMonitor(QThread):
         self.folder_path = folder_path
         self.check_interval = check_interval
         self.running = False
+        self._processed_lock = threading.Lock()
         self.processed_files: Set[str] = set()
         self.load_processed_files()
 
@@ -50,6 +49,13 @@ class FolderMonitor(QThread):
             # 監視フォルダ内の.processed_filesファイルから読み込み
             processed_file_path = os.path.join(self.folder_path, '.processed_files.txt')
             if os.path.exists(processed_file_path):
+                # ファイルサイズ制限 (50MB)
+                MAX_PROCESSED_SIZE = 50 * 1024 * 1024
+                file_size = os.path.getsize(processed_file_path)
+                if file_size > MAX_PROCESSED_SIZE:
+                    logger.error(f"Processed files list too large: {file_size} bytes, skipping")
+                    self.processed_files = set()
+                    return
                 with open(processed_file_path, 'r', encoding='utf-8') as f:
                     self.processed_files = set(line.strip() for line in f if line.strip())
                 logger.info(f"Loaded {len(self.processed_files)} processed files")
@@ -63,11 +69,13 @@ class FolderMonitor(QThread):
     def save_processed_files(self):
         """処理済みファイルリストを保存"""
         try:
+            with self._processed_lock:
+                files_copy = sorted(self.processed_files)
             processed_file_path = os.path.join(self.folder_path, '.processed_files.txt')
             with open(processed_file_path, 'w', encoding='utf-8') as f:
-                for file_path in sorted(self.processed_files):
+                for file_path in files_copy:
                     f.write(f"{file_path}\n")
-            logger.debug(f"Saved {len(self.processed_files)} processed files")
+            logger.debug(f"Saved {len(files_copy)} processed files")
         except (IOError, OSError) as e:
             logger.error(f"Failed to save processed files (I/O): {e}")
         except Exception as e:
@@ -91,7 +99,8 @@ class FolderMonitor(QThread):
         abs_path = os.path.abspath(file_path)
 
         # 文字起こしファイルが存在するか、処理済みリストに含まれているか
-        return os.path.exists(transcription_file) or abs_path in self.processed_files
+        with self._processed_lock:
+            return os.path.exists(transcription_file) or abs_path in self.processed_files
 
     def get_unprocessed_files(self) -> List[str]:
         """未処理ファイルを取得"""
@@ -187,7 +196,8 @@ class FolderMonitor(QThread):
         """
         # フルパスを記録
         abs_path = os.path.abspath(file_path)
-        self.processed_files.add(abs_path)
+        with self._processed_lock:
+            self.processed_files.add(abs_path)
         self.save_processed_files()
         logger.info(f"Marked as processed: {abs_path}")
 
@@ -198,8 +208,13 @@ class FolderMonitor(QThread):
         """
         # フルパスで削除
         abs_path = os.path.abspath(file_path)
-        if abs_path in self.processed_files:
-            self.processed_files.remove(abs_path)
+        with self._processed_lock:
+            if abs_path in self.processed_files:
+                self.processed_files.remove(abs_path)
+                needs_save = True
+            else:
+                needs_save = False
+        if needs_save:
             self.save_processed_files()
             logger.info(f"Removed from processed list: {abs_path}")
 

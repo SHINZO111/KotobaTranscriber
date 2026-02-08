@@ -30,6 +30,7 @@ class SubtitleExporter:
         Returns:
             フォーマット済み時間文字列
         """
+        seconds = max(0.0, seconds)
         milliseconds = int((seconds % 1) * 1000)
         total_seconds = int(seconds)
         hours, remainder = divmod(total_seconds, 3600)
@@ -226,29 +227,33 @@ class SubtitleExporter:
         current_segment = None
 
         for segment in segments:
+            seg_start = segment.get("start", 0)
+            seg_end = segment.get("end", 0)
+            seg_text = segment.get("text", "").strip()
+
             if current_segment is None:
                 current_segment = {
-                    "start": segment["start"],
-                    "end": segment["end"],
-                    "text": segment["text"].strip()
+                    "start": seg_start,
+                    "end": seg_end,
+                    "text": seg_text
                 }
                 continue
 
-            duration = segment["end"] - current_segment["start"]
-            combined_text = current_segment["text"] + " " + segment["text"].strip()
+            duration = seg_end - current_segment["start"]
+            combined_text = current_segment["text"] + " " + seg_text
 
             # マージ条件:
             # 1. 現在のセグメントがmin_duration未満
             # 2. 結合後の文字数がmax_chars未満
             if duration < min_duration and len(combined_text) <= max_chars:
-                current_segment["end"] = segment["end"]
+                current_segment["end"] = seg_end
                 current_segment["text"] = combined_text
             else:
                 merged.append(current_segment)
                 current_segment = {
-                    "start": segment["start"],
-                    "end": segment["end"],
-                    "text": segment["text"].strip()
+                    "start": seg_start,
+                    "end": seg_end,
+                    "text": seg_text
                 }
 
         # 最後のセグメントを追加
@@ -275,9 +280,9 @@ class SubtitleExporter:
         result = []
 
         for segment in segments:
-            text = segment["text"].strip()
-            start = segment["start"]
-            end = segment["end"]
+            text = segment.get("text", "").strip()
+            start = segment.get("start", 0)
+            end = segment.get("end", 0)
             duration = end - start
 
             # 分割が必要かチェック
@@ -368,7 +373,7 @@ class SubtitleExporter:
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
                 for segment in segments:
-                    f.write(f"[{segment['start']:.2f}s] {segment['text']}\n")
+                    f.write(f"[{segment.get('start', 0):.2f}s] {segment.get('text', '')}\n")
 
             return True
         except (IOError, OSError) as e:

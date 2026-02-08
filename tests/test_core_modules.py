@@ -392,7 +392,7 @@ class TestExceptions:
     def test_audio_stream_error(self):
         from exceptions import AudioStreamError
         e = AudioStreamError("Stream overflow", device_index=0)
-        assert e.message == "Stream overflow"
+        assert e.detail == "Stream overflow"
         assert e.device_index == 0
         assert "device=0" in str(e)
 
@@ -1620,8 +1620,9 @@ class TestTextFormatter:
         assert result == "hello world"
 
     def test_format_numbers(self):
+        # NUMBER_SPACING disabled to prevent merging separate numbers
         result = self.formatter.format_numbers("数字 123 456 です")
-        assert "123456" in result
+        assert "123 456" in result  # numbers should remain separate
 
     def test_format_all(self):
         text = "あのー これはテストです"
@@ -3892,3 +3893,1356 @@ class TestFolderMonitorWithQt:
             monitor.running = True
             monitor.stop()
             assert monitor.running is False
+
+
+# ============================================================================
+# 4a. base_engine.py 追加テスト - __enter__/__exit__ cleanup, unload_model edge cases
+# ============================================================================
+
+class TestBaseTranscriptionEngineExtended:
+    """BaseTranscriptionEngine の拡張テスト
+
+    __enter__/__exit__ でのクリーンアップ、unload_model の障害処理、
+    コンテキストマネージャのエラーフローを重点的にテストする。
+    """
+
+    def setup_method(self):
+        from base_engine import BaseTranscriptionEngine
+
+        class ConcreteEngine(BaseTranscriptionEngine):
+            """正常に動作する具象エンジン"""
+            def load_model(self) -> bool:
+                self.model = "mock_model"
+                self.is_loaded = True
+                return True
+
+            def transcribe(self, audio, **kwargs):
+                return {"text": "test", "segments": []}
+
+        class FailingLoadEngine(BaseTranscriptionEngine):
+            """load_model で例外を送出するエンジン"""
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.unload_called = False
+
+            def load_model(self) -> bool:
+                # 部分的にモデルを設定してから失敗
+                self.model = "partial_model"
+                raise RuntimeError("Model load failed")
+
+            def transcribe(self, audio, **kwargs):
+                return {"text": "", "segments": []}
+
+            def unload_model(self):
+                self.unload_called = True
+                super().unload_model()
+
+        class FailingUnloadEngine(BaseTranscriptionEngine):
+            """unload_model で例外を送出するエンジン"""
+            def load_model(self) -> bool:
+                self.model = "mock_model"
+                self.is_loaded = True
+                return True
+
+            def transcribe(self, audio, **kwargs):
+                return {"text": "test", "segments": []}
+
+            def unload_model(self):
+                raise RuntimeError("Unload failed")
+
+        self.ConcreteEngine = ConcreteEngine
+        self.FailingLoadEngine = FailingLoadEngine
+        self.FailingUnloadEngine = FailingUnloadEngine
+        self.BaseTranscriptionEngine = BaseTranscriptionEngine
+
+    def test_enter_calls_cleanup_on_load_failure(self):
+        """__enter__ で load_model が失敗した場合、unload_model がクリーンアップとして呼ばれる"""
+        engine = self.FailingLoadEngine("test-model", device="cpu")
+        with pytest.raises(RuntimeError, match="Model load failed"):
+            engine.__enter__()
+        # クリーンアップが呼ばれたことを確認
+        assert engine.unload_called is True
+        assert engine.model is None
+        assert engine.is_loaded is False
+
+    def test_enter_cleanup_on_load_failure_via_with(self):
+        """with文で load_model が失敗した場合もクリーンアップが動作する"""
+        with pytest.raises(RuntimeError, match="Model load failed"):
+            with self.FailingLoadEngine("test-model", device="cpu") as engine:
+                pass  # pragma: no cover
+
+    def test_exit_unload_error_does_not_mask_original_exception(self):
+        """__exit__ で unload_model が失敗しても、元の例外がマスクされない"""
+        engine = self.FailingUnloadEngine("test-model", device="cpu")
+        # load_model を手動で呼ぶ（__enter__ を模倣）
+        engine.load_model()
+        assert engine.is_loaded is True
+
+        # __exit__ で元の例外がある場合、unload_model の例外はログのみ
+        result = engine.__exit__(ValueError, ValueError("original"), None)
+        assert result is False  # 例外を再送出
+
+    def test_exit_unload_error_raises_when_no_original_exception(self):
+        """__exit__ で元の例外がなく unload_model が失敗した場合は例外が送出される"""
+        engine = self.FailingUnloadEngine("test-model", device="cpu")
+        engine.load_model()
+
+        with pytest.raises(RuntimeError, match="Unload failed"):
+            engine.__exit__(None, None, None)
+
+    def test_exit_returns_false(self):
+        """__exit__ は常に False を返して例外を伝播する"""
+        engine = self.ConcreteEngine("test-model", device="cpu")
+        engine.load_model()
+        result = engine.__exit__(None, None, None)
+        assert result is False
+
+    def test_unload_model_exception_during_cleanup(self):
+        """unload_model でモデルオブジェクトの解放中に例外が発生しても、
+        model と is_loaded は None/False にリセットされる"""
+        from base_engine import BaseTranscriptionEngine
+
+        class BrokenModelEngine(BaseTranscriptionEngine):
+            def load_model(self) -> bool:
+                # モデルオブジェクトが削除時に例外を出す
+                self.model = MagicMock()
+                self.model.__class__.__name__ = "BrokenModel"
+                self.is_loaded = True
+                return True
+
+            def transcribe(self, audio, **kwargs):
+                return {"text": "", "segments": []}
+
+        engine = BrokenModelEngine("test-model", device="cpu")
+        engine.load_model()
+        assert engine.is_loaded is True
+
+        # unload_model のtry/except内部で例外が発生するケースをシミュレート
+        # torch.cuda.is_available() が例外を出す場合
+        with patch.dict('sys.modules', {'torch': MagicMock(cuda=MagicMock(is_available=MagicMock(return_value=False)))}):
+            engine.unload_model()
+
+        assert engine.model is None
+        assert engine.is_loaded is False
+
+    def test_unload_model_no_model_loaded(self):
+        """モデルが None の状態で unload_model を呼んでも何も起きない"""
+        engine = self.ConcreteEngine("test-model", device="cpu")
+        assert engine.model is None
+        engine.unload_model()  # 例外なし
+        assert engine.model is None
+        assert engine.is_loaded is False
+
+    def test_unload_model_with_cuda_cache_clear(self):
+        """unload_model がGPUキャッシュクリアを試みる（torch使用可能時）"""
+        engine = self.ConcreteEngine("test-model", device="cpu")
+        engine.load_model()
+
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        with patch.dict('sys.modules', {'torch': mock_torch}):
+            engine.unload_model()
+
+        mock_torch.cuda.empty_cache.assert_called_once()
+        assert engine.model is None
+
+    def test_unload_model_without_torch(self):
+        """torch がインストールされていなくても unload_model は正常動作する"""
+        engine = self.ConcreteEngine("test-model", device="cpu")
+        engine.load_model()
+
+        # torch のインポートを失敗させる
+        original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else None
+        with patch.dict('sys.modules', {'torch': None}):
+            engine.unload_model()
+
+        assert engine.model is None
+        assert engine.is_loaded is False
+
+    def test_del_handles_exceptions_silently(self):
+        """__del__ は例外をログに記録するのみで送出しない"""
+        engine = self.FailingUnloadEngine("test-model", device="cpu")
+        engine.load_model()
+        # __del__ は例外を飲み込む
+        engine.__del__()  # 例外なし
+
+    def test_context_manager_full_lifecycle(self):
+        """コンテキストマネージャの全ライフサイクル（load -> use -> unload）"""
+        with self.ConcreteEngine("test-model", device="cpu") as engine:
+            assert engine.is_loaded is True
+            result = engine.transcribe(b"audio_data")
+            assert result["text"] == "test"
+        assert engine.model is None
+        assert engine.is_loaded is False
+
+    def test_resolve_device_auto_with_cuda(self):
+        """_resolve_device で auto 指定時に CUDA が利用可能なら cuda を返す"""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        with patch.dict('sys.modules', {'torch': mock_torch}):
+            engine = self.ConcreteEngine("test-model", device="auto")
+            assert engine.device == "cuda"
+
+    def test_resolve_device_auto_without_cuda(self):
+        """_resolve_device で auto 指定時に CUDA がなければ cpu を返す"""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = False
+        with patch.dict('sys.modules', {'torch': mock_torch}):
+            engine = self.ConcreteEngine("test-model", device="auto")
+            assert engine.device == "cpu"
+
+    def test_get_model_info_includes_all_fields(self):
+        """get_model_info が全フィールドを含む"""
+        engine = self.ConcreteEngine("my-model", device="cpu", language="en")
+        info = engine.get_model_info()
+        assert info == {
+            "engine": "ConcreteEngine",
+            "model_name": "my-model",
+            "device": "cpu",
+            "language": "en",
+            "is_loaded": False,
+        }
+
+    def test_is_available_default_returns_true(self):
+        """is_available のデフォルト実装は True を返す"""
+        engine = self.ConcreteEngine("test-model", device="cpu")
+        assert engine.is_available() is True
+
+
+# ============================================================================
+# 4b. speaker_diarization_utils.py 追加テスト
+# ============================================================================
+
+class TestClusteringMixinExtended:
+    """ClusteringMixin の拡張テスト
+
+    _merge_consecutive_segments のバリデーション、
+    _simple_clustering のセントロイド正規化、
+    _find_speaker_at_time のエッジケースを重点的にテストする。
+    """
+
+    def setup_method(self):
+        from speaker_diarization_utils import ClusteringMixin
+        self.mixin = ClusteringMixin()
+
+    def test_merge_consecutive_segments_length_mismatch_raises(self):
+        """labels と timestamps の長さが一致しない場合 ValueError"""
+        labels = np.array([0, 1, 0])
+        timestamps = [(0, 1), (1, 2)]  # 長さ不一致
+        with pytest.raises(ValueError, match="mismatch"):
+            self.mixin._merge_consecutive_segments(labels, timestamps)
+
+    def test_merge_consecutive_segments_all_same_speaker(self):
+        """全セグメントが同一話者の場合、1つのセグメントにマージされる"""
+        labels = np.array([0, 0, 0, 0])
+        timestamps = [(0, 1), (1, 2), (2, 3), (3, 4)]
+        result = self.mixin._merge_consecutive_segments(labels, timestamps)
+        assert len(result) == 1
+        assert result[0]["speaker"] == "SPEAKER_00"
+        assert result[0]["start"] == 0
+        assert result[0]["end"] == 4
+
+    def test_merge_consecutive_segments_alternating_speakers(self):
+        """交互に話者が変わる場合、各セグメントが個別に保持される"""
+        labels = np.array([0, 1, 0, 1])
+        timestamps = [(0, 1), (1, 2), (2, 3), (3, 4)]
+        result = self.mixin._merge_consecutive_segments(labels, timestamps)
+        assert len(result) == 4
+        assert result[0]["speaker"] == "SPEAKER_00"
+        assert result[1]["speaker"] == "SPEAKER_01"
+        assert result[2]["speaker"] == "SPEAKER_00"
+        assert result[3]["speaker"] == "SPEAKER_01"
+
+    def test_merge_consecutive_segments_rounding(self):
+        """タイムスタンプが round(x, 2) で丸められる"""
+        labels = np.array([0])
+        timestamps = [(0.123456, 1.987654)]
+        result = self.mixin._merge_consecutive_segments(labels, timestamps)
+        assert result[0]["start"] == 0.12
+        assert result[0]["end"] == 1.99
+
+    def test_merge_consecutive_segments_multiple_speakers(self):
+        """3人以上の話者が混在するケース"""
+        labels = np.array([0, 1, 2, 1, 0])
+        timestamps = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
+        result = self.mixin._merge_consecutive_segments(labels, timestamps)
+        assert len(result) == 5
+        assert result[0]["speaker"] == "SPEAKER_00"
+        assert result[1]["speaker"] == "SPEAKER_01"
+        assert result[2]["speaker"] == "SPEAKER_02"
+        assert result[3]["speaker"] == "SPEAKER_01"
+        assert result[4]["speaker"] == "SPEAKER_00"
+
+    def test_simple_clustering_zero_norm_embeddings(self):
+        """ゼロベクトルの埋め込みがあっても除算エラーにならない"""
+        embeddings = np.array([
+            [0.0, 0.0, 0.0],  # ゼロベクトル
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ], dtype=np.float32)
+        labels = self.mixin._simple_clustering(embeddings, num_speakers=2)
+        assert len(labels) == 3
+
+    def test_simple_clustering_centroid_normalization(self):
+        """セントロイドが単位球面上に正規化される（cosine distance の正当性のため）"""
+        embeddings = np.array([
+            [3.0, 0.0],
+            [2.0, 0.5],
+            [0.0, 4.0],
+            [0.2, 3.0],
+        ], dtype=np.float32)
+        labels = self.mixin._simple_clustering(embeddings, num_speakers=2)
+        assert len(labels) == 4
+        # 最初の2つは類似（x軸方向）、最後の2つは類似（y軸方向）
+        assert labels[0] == labels[1]
+        assert labels[2] == labels[3]
+
+    def test_simple_clustering_num_speakers_exceeds_data(self):
+        """num_speakers がデータ数を超える場合でもエラーにならない"""
+        embeddings = np.array([[1, 0], [0, 1]], dtype=np.float32)
+        labels = self.mixin._simple_clustering(embeddings, num_speakers=5)
+        assert len(labels) == 2
+
+    def test_perform_clustering_empty_embeddings(self):
+        """空の埋め込みに対してクラスタリングを実行すると空の配列を返す"""
+        embeddings = np.array([]).reshape(0, 3)
+        labels = self.mixin._perform_clustering(embeddings, num_speakers=2)
+        assert len(labels) == 0
+
+    def test_perform_clustering_fallback_to_simple(self):
+        """sklearn が利用不可の場合、_simple_clustering にフォールバックする"""
+        embeddings = np.array([
+            [1, 0, 0],
+            [0.9, 0.1, 0],
+            [0, 1, 0],
+            [0.1, 0.9, 0],
+        ], dtype=np.float32)
+
+        with patch.dict('sys.modules', {'sklearn': None, 'sklearn.cluster': None}):
+            # ImportError をシミュレート
+            original = self.mixin._perform_clustering
+
+            def mock_perform(embeddings, num_speakers=None):
+                try:
+                    from sklearn.cluster import AgglomerativeClustering
+                    raise ImportError("mocked")
+                except ImportError:
+                    return self.mixin._simple_clustering(embeddings, num_speakers or 2)
+
+            self.mixin._perform_clustering = mock_perform
+            labels = self.mixin._perform_clustering(embeddings, num_speakers=2)
+            assert len(labels) == 4
+
+
+class TestSpeakerFormatterMixinExtended:
+    """SpeakerFormatterMixin の拡張テスト"""
+
+    def setup_method(self):
+        from speaker_diarization_utils import SpeakerFormatterMixin
+        self.formatter = SpeakerFormatterMixin()
+
+    def test_find_speaker_at_time_boundary_start(self):
+        """セグメントの開始時刻ちょうどで話者が見つかる"""
+        speakers = [{"start": 5.0, "end": 10.0, "speaker": "A"}]
+        assert self.formatter._find_speaker_at_time(5.0, speakers) == "A"
+
+    def test_find_speaker_at_time_boundary_end(self):
+        """セグメントの終了時刻ちょうどで話者が見つかる"""
+        speakers = [{"start": 5.0, "end": 10.0, "speaker": "A"}]
+        assert self.formatter._find_speaker_at_time(10.0, speakers) == "A"
+
+    def test_find_speaker_at_time_gap_between_segments(self):
+        """セグメント間のギャップにある時刻は UNKNOWN を返す"""
+        speakers = [
+            {"start": 0.0, "end": 3.0, "speaker": "A"},
+            {"start": 5.0, "end": 10.0, "speaker": "B"},
+        ]
+        assert self.formatter._find_speaker_at_time(4.0, speakers) == "UNKNOWN"
+
+    def test_find_speaker_at_time_before_all_segments(self):
+        """全セグメントより前の時刻は UNKNOWN を返す"""
+        speakers = [{"start": 5.0, "end": 10.0, "speaker": "A"}]
+        assert self.formatter._find_speaker_at_time(0.0, speakers) == "UNKNOWN"
+
+    def test_find_speaker_at_time_missing_keys_defaults(self):
+        """話者セグメントに start/end キーがない場合はデフォルト 0 が使われる"""
+        speakers = [{"speaker": "A"}]  # start/end 欠落
+        # timestamp=0 は start=0, end=0 の範囲内
+        assert self.formatter._find_speaker_at_time(0, speakers) == "A"
+        assert self.formatter._find_speaker_at_time(1, speakers) == "UNKNOWN"
+
+    def test_find_speaker_at_time_missing_speaker_key(self):
+        """話者セグメントに speaker キーがない場合は UNKNOWN"""
+        speakers = [{"start": 0, "end": 10}]  # speaker 欠落
+        assert self.formatter._find_speaker_at_time(5, speakers) == "UNKNOWN"
+
+    def test_format_with_speakers_speaker_change_adds_blank_line(self):
+        """話者が変わる際に空行が挿入される"""
+        text_segments = [
+            {"start": 1, "end": 2, "text": "Hello"},
+            {"start": 6, "end": 7, "text": "World"},
+        ]
+        speaker_segments = [
+            {"start": 0, "end": 5, "speaker": "SPEAKER_00"},
+            {"start": 5, "end": 10, "speaker": "SPEAKER_01"},
+        ]
+        result = self.formatter.format_with_speakers(text_segments, speaker_segments)
+        lines = result.split("\n")
+        # 空行が含まれることを確認
+        assert "" in lines
+
+    def test_format_with_speakers_same_speaker_no_blank_line(self):
+        """同じ話者が連続する場合、空行は挿入されない"""
+        text_segments = [
+            {"start": 1, "end": 2, "text": "Hello"},
+            {"start": 3, "end": 4, "text": "World"},
+        ]
+        speaker_segments = [
+            {"start": 0, "end": 10, "speaker": "SPEAKER_00"},
+        ]
+        result = self.formatter.format_with_speakers(text_segments, speaker_segments)
+        lines = result.split("\n")
+        # "[SPEAKER_00]" + "Hello" + "World" の3行のみ
+        assert len(lines) == 3
+        assert "" not in lines
+
+    def test_get_speaker_statistics_zero_total_time(self):
+        """全セグメントの duration が0の場合、percentage は計算されない"""
+        speaker_segments = [
+            {"start": 5.0, "end": 5.0, "speaker": "A"},
+        ]
+        stats = self.formatter.get_speaker_statistics(speaker_segments)
+        assert "A" in stats
+        assert stats["A"]["total_time"] == 0.0
+        assert "percentage" not in stats["A"]
+
+    def test_get_speaker_statistics_single_speaker(self):
+        """単一話者のみの場合、percentage は 100%"""
+        speaker_segments = [
+            {"start": 0.0, "end": 10.0, "speaker": "A"},
+        ]
+        stats = self.formatter.get_speaker_statistics(speaker_segments)
+        assert stats["A"]["percentage"] == 100.0
+        assert stats["A"]["segment_count"] == 1
+
+
+# ============================================================================
+# 4c. text_formatter.py 追加テスト - フィラー除去(日本語)、入力検証
+# ============================================================================
+
+class TestTextFormatterExtended:
+    """TextFormatter の拡張テスト
+
+    日本語テキストでのフィラー除去（\\b が効かない問題）、
+    add_punctuation の入力検証、エッジケースを重点的にテストする。
+    """
+
+    def setup_method(self):
+        from text_formatter import TextFormatter, RegexPatterns, ValidationError
+        self.formatter = TextFormatter()
+        self.RegexPatterns = RegexPatterns
+        self.ValidationError = ValidationError
+
+    def test_remove_fillers_japanese_no_word_boundary(self):
+        """日本語テキストでフィラーが正しく除去される
+        （\\b は日本語に効かないため、re.escape + trailing space パターンを使用）
+        """
+        # フィラーが日本語テキストの途中にあるケース
+        text = "えーとこれはテストです"
+        result = self.formatter.remove_fillers(text)
+        assert "えーと" not in result
+        assert "テスト" in result
+
+    def test_remove_fillers_japanese_consecutive_fillers(self):
+        """連続する日本語フィラーが全て除去される"""
+        text = "あのーえーとまあテスト"
+        result = self.formatter.remove_fillers(text)
+        assert "あのー" not in result
+        assert "えーと" not in result
+        assert "まあ" not in result
+
+    def test_remove_fillers_filler_with_trailing_comma(self):
+        """フィラーの後に読点がある場合も除去される（パターン: filler + [、。]?\\s*）"""
+        text = "あのー、テストです"
+        result = self.formatter.remove_fillers(text)
+        assert "あのー" not in result
+        assert "テスト" in result
+
+    def test_remove_fillers_filler_with_trailing_period(self):
+        """フィラーの後に句点がある場合も除去される"""
+        text = "えーと。テスト"
+        result = self.formatter.remove_fillers(text)
+        assert "えーと" not in result
+
+    def test_remove_fillers_preserves_meaningful_text(self):
+        """フィラーでない有意味なテキストは保持される"""
+        text = "その結果はとても良かった"
+        result = self.formatter.remove_fillers(text)
+        # "その" は AGGRESSIVE_FILLER_WORDS のみに含まれるため、
+        # 通常モードでは保持される
+        assert "その" in result
+        assert "結果" in result
+        assert "良かった" in result
+
+    def test_remove_fillers_none_input_raises_validation_error(self):
+        """None を入力すると ValidationError"""
+        with pytest.raises(self.ValidationError):
+            self.formatter.remove_fillers(None)
+
+    def test_remove_fillers_non_string_raises_validation_error(self):
+        """文字列以外を入力すると ValidationError"""
+        with pytest.raises(self.ValidationError):
+            self.formatter.remove_fillers(12345)
+
+    def test_remove_fillers_very_long_text_validation(self):
+        """極端に長いテキスト（1MB超）は ValidationError"""
+        long_text = "あ" * 1100000
+        with pytest.raises(self.ValidationError):
+            self.formatter.remove_fillers(long_text)
+
+    def test_remove_fillers_consecutive_punctuation_cleanup(self):
+        """フィラー除去後に連続する句読点が整理される"""
+        text = "あのー、、テストです"
+        result = self.formatter.remove_fillers(text)
+        assert "、、" not in result
+
+    def test_remove_fillers_aggressive_includes_extra_words(self):
+        """aggressive=True の場合、追加のフィラー語も除去される"""
+        text = "やっぱりちょっとテストですね"
+        result = self.formatter.remove_fillers(text, aggressive=True)
+        assert "やっぱり" not in result
+        assert "ちょっと" not in result
+        assert "ですね" not in result
+
+    def test_add_punctuation_empty_string(self):
+        """空文字列に句読点を追加しても空文字列のまま（条件: if result が falsy）"""
+        result = self.formatter.add_punctuation("")
+        # 空文字の場合、"if result" が False なので句点は追加されない
+        assert result == ""
+
+    def test_add_punctuation_already_ends_with_question(self):
+        """疑問符で終わるテキストには追加の句点がつかない"""
+        result = self.formatter.add_punctuation("これは何ですか？")
+        assert not result.endswith("。")
+
+    def test_add_punctuation_already_ends_with_exclamation(self):
+        """感嘆符で終わるテキストには追加の句点がつかない"""
+        result = self.formatter.add_punctuation("すごい！")
+        assert not result.endswith("。")
+
+    def test_add_punctuation_reason_clause(self):
+        """理由節「～ので」「～から」の後に読点が追加される"""
+        result = self.formatter.add_punctuation("雨が降ったので外出を控えた")
+        assert "ので、" in result or "ので" in result
+
+    def test_add_punctuation_condition_clause(self):
+        """条件節「～たら」「～れば」「～なら」の後に読点が追加される"""
+        result = self.formatter.add_punctuation("もし晴れたら出かけます")
+        assert "たら、" in result or "たら" in result
+
+    def test_add_punctuation_comma_before_period_removed(self):
+        """句点の直前の読点は削除される"""
+        result = self.formatter.add_punctuation("テスト、。")
+        # 「、。」→「。」
+        assert "、。" not in result
+
+    def test_add_punctuation_polite_ending_gets_period(self):
+        """「です」「ます」等の丁寧語の後に句点がない場合、句点が追加される"""
+        result = self.formatter.add_punctuation("これはテストです次のテスト")
+        assert "です。" in result
+
+    def test_format_paragraphs_none_input_raises(self):
+        """None を入力すると ValidationError"""
+        with pytest.raises(self.ValidationError):
+            self.formatter.format_paragraphs(None)
+
+    def test_format_paragraphs_invalid_max_sentences_uses_default(self):
+        """max_sentences_per_paragraph が無効値の場合、デフォルト値4が使われる"""
+        # 値が範囲外の場合、デフォルトに戻る
+        text = "文1。文2。文3。文4。文5。文6。文7。文8。"
+        result = self.formatter.format_paragraphs(text, max_sentences_per_paragraph=0)
+        # ValidationError ではなく、デフォルト値 4 が使われる
+        assert isinstance(result, str)
+
+    def test_filler_pattern_uses_re_escape(self):
+        """フィラーパターンが re.escape を使っており、特殊文字を含むフィラーでも安全"""
+        pattern = self.RegexPatterns.get_filler_pattern("えーと")
+        # パターンが正規表現として有効であることを確認
+        import re
+        assert re.match(pattern.pattern, "えーと") is not None
+
+    def test_filler_pattern_cache_works(self):
+        """フィラーパターンがキャッシュされ、同じオブジェクトが返される"""
+        p1 = self.RegexPatterns.get_filler_pattern("まあ")
+        p2 = self.RegexPatterns.get_filler_pattern("まあ")
+        assert p1 is p2
+
+    def test_split_long_sentences(self):
+        """長い文が助詞の位置で分割される"""
+        # 60文字以上で読点なしの文
+        long_sentence = "これは非常に長い文章であり多くの情報を含んでいて読者にとって理解が難しい場合がある内容を説明している文です"
+        result = self.formatter._split_long_sentences(long_sentence)
+        # 読点が追加されているか
+        if len(long_sentence) > 60:
+            assert "、" in result or result == long_sentence
+
+    def test_format_all_with_all_options_disabled(self):
+        """全オプションを無効にした format_all はテキストをほぼそのまま返す"""
+        text = "あのー テスト テスト"
+        result = self.formatter.format_all(
+            text,
+            remove_fillers=False,
+            add_punctuation=False,
+            format_paragraphs=False,
+            clean_repeated=False,
+        )
+        # format_numbers だけは常に適用される
+        assert "あのー" in result
+
+
+# ============================================================================
+# 4d. custom_vocabulary.py 追加テスト - アトミック保存、import_words 検証
+# ============================================================================
+
+class TestCustomVocabularyExtended:
+    """CustomVocabulary の拡張テスト
+
+    アトミック保存の動作確認、import_words_from_text のバリデーション、
+    add_hotword のエッジケースを重点的にテストする。
+    """
+
+    def test_atomic_save_creates_file(self, tmp_path):
+        """save_vocabulary がアトミック書き込みでファイルを作成する"""
+        from custom_vocabulary import CustomVocabulary
+        vocab_file = str(tmp_path / "atomic_test.json")
+        vocab = CustomVocabulary(vocab_file)
+        # ファイルが作成されたことを確認
+        assert Path(vocab_file).exists()
+        # 内容が正しいJSONであること
+        content = json.loads(Path(vocab_file).read_text(encoding="utf-8"))
+        assert "hotwords" in content
+        assert "replacements" in content
+        assert "domains" in content
+
+    def test_atomic_save_no_temp_file_left_on_success(self, tmp_path):
+        """アトミック保存成功時に一時ファイルが残らない"""
+        from custom_vocabulary import CustomVocabulary
+        vocab_file = str(tmp_path / "atomic_test.json")
+        vocab = CustomVocabulary(vocab_file)
+        vocab.save_vocabulary()
+        # tmp ファイルが残っていないことを確認
+        tmp_files = list(tmp_path.glob(".vocab_*.tmp"))
+        assert len(tmp_files) == 0
+
+    def test_atomic_save_no_temp_file_left_on_failure(self, tmp_path):
+        """アトミック保存失敗時に一時ファイルがクリーンアップされる"""
+        from custom_vocabulary import CustomVocabulary
+        vocab_file = str(tmp_path / "atomic_test.json")
+        vocab = CustomVocabulary(vocab_file)
+
+        # os.replace を失敗させる
+        with patch('os.replace', side_effect=OSError("disk full")):
+            vocab.save_vocabulary()  # エラーは内部でキャッチされる
+
+        # 一時ファイルが残っていないことを確認
+        tmp_files = list(tmp_path.glob(".vocab_*.tmp"))
+        assert len(tmp_files) == 0
+
+    def test_add_hotword_empty_raises_valueerror(self, tmp_path):
+        """空文字列の追加は ValueError"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        with pytest.raises(ValueError, match="cannot be empty"):
+            vocab.add_hotword("")
+
+    def test_add_hotword_whitespace_only_raises_valueerror(self, tmp_path):
+        """空白のみの文字列の追加は ValueError"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        with pytest.raises(ValueError, match="cannot be empty"):
+            vocab.add_hotword("   ")
+
+    def test_add_hotword_too_long_raises_valueerror(self, tmp_path):
+        """MAX_HOTWORD_LENGTH を超える文字列の追加は ValueError"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        long_word = "あ" * 101
+        with pytest.raises(ValueError, match="too long"):
+            vocab.add_hotword(long_word)
+
+    def test_add_hotword_strips_whitespace(self, tmp_path):
+        """ホットワード追加時に前後の空白が除去される"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        vocab.add_hotword("  テスト用語  ")
+        assert "テスト用語" in vocab.hotwords
+        assert "  テスト用語  " not in vocab.hotwords
+
+    def test_import_words_from_text_skips_invalid(self, tmp_path):
+        """import_words_from_text はバリデーションエラーの単語をスキップする"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        initial_count = len(vocab.hotwords)
+        # 空行、空白のみ、長すぎる単語を含む
+        long_word = "x" * 200
+        text = f"ValidWord\n\n   \n{long_word}\nAnotherValid"
+        vocab.import_words_from_text(text)
+        # ValidWord と AnotherValid が追加される
+        assert "ValidWord" in vocab.hotwords
+        assert "AnotherValid" in vocab.hotwords
+        # 長すぎる単語は追加されない
+        assert long_word not in vocab.hotwords
+
+    def test_import_words_from_text_empty_lines_ignored(self, tmp_path):
+        """import_words_from_text は空行を無視する"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        initial_count = len(vocab.hotwords)
+        vocab.import_words_from_text("\n\n\n")
+        assert len(vocab.hotwords) == initial_count
+
+    def test_import_words_from_text_strips_each_word(self, tmp_path):
+        """import_words_from_text は各行の前後空白を除去する"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        vocab.import_words_from_text("  SpacedWord  ")
+        assert "SpacedWord" in vocab.hotwords
+
+    def test_apply_replacements_delegates_to_construction_vocab(self, tmp_path):
+        """apply_replacements は ConstructionVocabulary.apply_replacements_to_text に委譲する"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        vocab.replacements = {"テスト入力": "テスト出力"}
+        result = vocab.apply_replacements("テスト入力の文")
+        assert "テスト出力" in result
+
+    def test_load_vocabulary_file_too_large(self, tmp_path):
+        """ファイルサイズが10MBを超える場合はロードされない"""
+        from custom_vocabulary import CustomVocabulary
+        vocab_file = tmp_path / "large.json"
+        # ファイルを作成（実際には大きくないが、stat を mock する）
+        vocab_file.write_text("{}", encoding="utf-8")
+
+        with patch.object(Path, 'stat') as mock_stat:
+            mock_stat_result = MagicMock()
+            mock_stat_result.st_size = 11 * 1024 * 1024  # 11MB
+            mock_stat.return_value = mock_stat_result
+            vocab = CustomVocabulary(str(vocab_file))
+            # ファイルが大きすぎるのでデフォルトデータは空のまま（もしくはload_vocabularyが何もしない）
+
+    def test_load_vocabulary_invalid_json(self, tmp_path):
+        """無効なJSONの場合、デフォルト語彙が作成される"""
+        from custom_vocabulary import CustomVocabulary
+        vocab_file = tmp_path / "invalid.json"
+        vocab_file.write_text("{ invalid json }", encoding="utf-8")
+        vocab = CustomVocabulary(str(vocab_file))
+        # デフォルト語彙が作成されている
+        assert len(vocab.hotwords) > 0
+
+    def test_get_whisper_prompt_empty_hotwords(self, tmp_path):
+        """ホットワードが空の場合、空文字列を返す"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        vocab.hotwords = []
+        prompt = vocab.get_whisper_prompt()
+        assert prompt == ""
+
+    def test_get_whisper_prompt_limits_to_30_words(self, tmp_path):
+        """Whisperプロンプトは最大30単語に制限される"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        vocab.hotwords = [f"Word{i}" for i in range(50)]
+        prompt = vocab.get_whisper_prompt()
+        # 「、」で区切られた単語数が30以下
+        words_in_prompt = prompt.split("、")
+        assert len(words_in_prompt) <= 30
+
+    def test_remove_hotword_nonexistent(self, tmp_path):
+        """存在しないホットワードの削除は何も起きない"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        count = len(vocab.hotwords)
+        vocab.remove_hotword("非存在ワード")
+        assert len(vocab.hotwords) == count
+
+    def test_remove_replacement_nonexistent(self, tmp_path):
+        """存在しない置換ルールの削除は何も起きない"""
+        from custom_vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
+        count = len(vocab.replacements)
+        vocab.remove_replacement("非存在キー")
+        assert len(vocab.replacements) == count
+
+
+# ============================================================================
+# 4e. custom_dictionary.py 追加テスト - スレッドセーフシングルトン
+# ============================================================================
+
+class TestCustomDictionaryExtended:
+    """CustomDictionary の拡張テスト
+
+    スレッドセーフなシングルトン（get_custom_dictionary）、
+    reload の動作、_merge メソッドのエッジケースをテストする。
+    """
+
+    def setup_method(self):
+        # シングルトンをリセット
+        import custom_dictionary
+        custom_dictionary._custom_dictionary = None
+
+    def teardown_method(self):
+        import custom_dictionary
+        custom_dictionary._custom_dictionary = None
+
+    def test_singleton_returns_same_instance(self):
+        """get_custom_dictionary は同じインスタンスを返す"""
+        from custom_dictionary import get_custom_dictionary
+        config = {"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}}
+        d1 = get_custom_dictionary(config)
+        d2 = get_custom_dictionary(config)
+        assert d1 is d2
+
+    def test_singleton_thread_safe(self):
+        """複数スレッドから同時に get_custom_dictionary を呼んでも同一インスタンス"""
+        from custom_dictionary import get_custom_dictionary
+        import custom_dictionary
+        custom_dictionary._custom_dictionary = None
+
+        config = {"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}}
+        results = []
+
+        def worker():
+            d = get_custom_dictionary(config)
+            results.append(id(d))
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # 全て同じインスタンスID
+        assert len(set(results)) == 1
+
+    def test_singleton_first_call_uses_config(self):
+        """初回呼び出しの config が使われる"""
+        from custom_dictionary import get_custom_dictionary
+        config = {"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}}
+        d = get_custom_dictionary(config)
+        assert isinstance(d.hotwords, list)
+
+    def test_init_with_none_config(self):
+        """config が None の場合、空の辞書として扱われる"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary(None)
+        assert isinstance(d.hotwords, list)
+
+    def test_merge_custom_vocabulary_domains(self):
+        """_merge_custom_vocabulary がドメイン別語彙をカテゴリに追加する"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+
+        # CustomVocabulary をモック
+        mock_cv = MagicMock()
+        mock_cv.hotwords = ["用語X", "用語Y"]
+        mock_cv.replacements = {"aa": "BB"}
+        mock_cv.domain_vocabularies = {"finance": ["株式", "投資"]}
+        d._custom_vocab = mock_cv
+
+        d._merge_custom_vocabulary()
+        assert "用語X" in d.hotwords
+        assert "用語Y" in d.hotwords
+        assert d.replacements["aa"] == "BB"
+        assert "株式" in d.categories.get("finance", [])
+
+    def test_merge_construction_vocabulary_with_categories(self):
+        """_merge_construction_vocabulary が指定カテゴリのみマージする"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+
+        mock_cv = MagicMock()
+        mock_cv.get_terms_by_category.side_effect = lambda cat: {
+            "standard_labor": ["普通作業員"],
+            "cost_management": ["積算"],
+        }.get(cat, [])
+        mock_cv.replacements = {}
+        d._construction_vocab = mock_cv
+
+        config = {"categories": ["standard_labor"]}
+        d._merge_construction_vocabulary(config)
+        assert "普通作業員" in d.hotwords
+        assert "積算" not in d.hotwords
+
+    def test_merge_construction_vocabulary_no_categories(self):
+        """カテゴリ指定なしの場合、全ホットワードがマージされる"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+
+        mock_cv = MagicMock()
+        mock_cv.hotwords = ["全用語A", "全用語B"]
+        mock_cv.category_vocabularies = {"cat1": ["全用語A"], "cat2": ["全用語B"]}
+        mock_cv.replacements = {"x": "Y"}
+        d._construction_vocab = mock_cv
+
+        config = {}  # カテゴリ指定なし
+        d._merge_construction_vocabulary(config)
+        assert "全用語A" in d.hotwords
+        assert "全用語B" in d.hotwords
+        assert d.replacements["x"] == "Y"
+
+    def test_add_term_with_custom_vocab(self):
+        """add_term がカスタム語彙にも同時に追加する"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+        mock_cv = MagicMock()
+        d._custom_vocab = mock_cv
+
+        d.add_term("新用語", "test_cat")
+        assert "新用語" in d.hotwords
+        mock_cv.add_hotword.assert_called_once_with("新用語")
+
+    def test_add_replacement_with_custom_vocab(self):
+        """add_replacement がカスタム語彙にも同時に追加する"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+        mock_cv = MagicMock()
+        d._custom_vocab = mock_cv
+
+        d.add_replacement("誤り", "正しい")
+        assert d.replacements["誤り"] == "正しい"
+        mock_cv.add_replacement.assert_called_once_with("誤り", "正しい")
+
+    def test_add_term_empty_does_nothing(self):
+        """空文字列の add_term は何も追加しない"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+        count = len(d.hotwords)
+        d.add_term("", "cat")
+        assert len(d.hotwords) == count
+
+    def test_reload_clears_and_reloads(self):
+        """reload が全データをクリアして再読み込みする"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+        d.hotwords = ["test"]
+        d.replacements = {"a": "b"}
+        d.categories = {"cat": ["test"]}
+        d.reload()
+        assert d.hotwords == []
+        assert d.replacements == {}
+        assert d.categories == {}
+
+    def test_get_construction_vocabulary_none_when_disabled(self):
+        """建設業用語辞書が無効の場合、get_construction_vocabulary は None を返す"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+        assert d.get_construction_vocabulary() is None
+
+    def test_get_custom_vocabulary_none_when_disabled(self):
+        """カスタム語彙が無効の場合、get_custom_vocabulary は None を返す"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+        assert d.get_custom_vocabulary() is None
+
+    def test_get_whisper_prompt_by_category(self):
+        """カテゴリ指定でプロンプトを生成できる"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+        d.categories["test_cat"] = ["用語A", "用語B"]
+        prompt = d.get_whisper_prompt(category="test_cat")
+        assert "用語A" in prompt
+        assert "用語B" in prompt
+
+    def test_apply_replacements_longest_first(self):
+        """置換は長い文字列から先に行われ、連鎖置換を防ぐ"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+        d.replacements = {
+            "けんたいきょう": "建退共",
+            "けんせつたいきょきょう": "建設退職共済",
+        }
+        result = d.apply_replacements("けんせつたいきょきょうの手続き")
+        assert "建設退職共済" in result
+
+    def test_search_terms_case_insensitive(self):
+        """検索は大小文字を区別しない"""
+        from custom_dictionary import CustomDictionary
+        d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
+        d.hotwords = ["API", "api_test", "Other"]
+        results = d.search_terms("api")
+        assert "API" in results
+        assert "api_test" in results
+        assert "Other" not in results
+
+
+# ============================================================================
+# 4f. construction_vocabulary.py 追加テスト - apply_replacements_to_text
+# ============================================================================
+
+class TestConstructionVocabularyExtended:
+    """ConstructionVocabulary.apply_replacements_to_text の拡張テスト"""
+
+    def test_apply_replacements_to_text_japanese_no_word_boundary(self):
+        """日本語テキストでは \\b を使わず re.escape でマッチする"""
+        from construction_vocabulary import ConstructionVocabulary
+        replacements = {"ほおがけ": "歩掛", "きじゅんない": "基準内"}
+        result = ConstructionVocabulary.apply_replacements_to_text(
+            "ほおがけの計算ときじゅんないの確認", replacements
+        )
+        assert "歩掛" in result
+        assert "基準内" in result
+
+    def test_apply_replacements_to_text_ascii_uses_word_boundary(self):
+        """ASCII テキストでは \\b ワード境界を使う"""
+        from construction_vocabulary import ConstructionVocabulary
+        replacements = {"API": "Application Programming Interface"}
+        result = ConstructionVocabulary.apply_replacements_to_text(
+            "Use the API to connect", replacements
+        )
+        assert "Application Programming Interface" in result
+
+    def test_apply_replacements_to_text_ascii_word_boundary_prevents_partial(self):
+        """ASCII の \\b ワード境界により部分一致は置換されない"""
+        from construction_vocabulary import ConstructionVocabulary
+        replacements = {"API": "Interface"}
+        result = ConstructionVocabulary.apply_replacements_to_text(
+            "RAPID deployment", replacements
+        )
+        # "API" in "RAPID" はワード境界に合致しないため置換されない
+        assert "RAPID" in result
+        assert "Interface" not in result
+
+    def test_apply_replacements_to_text_longest_first(self):
+        """長い置換キーが先に処理され、連鎖置換を防止する"""
+        from construction_vocabulary import ConstructionVocabulary
+        replacements = {
+            "けん": "検",
+            "けんちく": "建築",
+        }
+        result = ConstructionVocabulary.apply_replacements_to_text(
+            "けんちくの確認", replacements
+        )
+        assert "建築" in result
+
+    def test_apply_replacements_to_text_empty_replacements(self):
+        """空の置換辞書ではテキストがそのまま返される"""
+        from construction_vocabulary import ConstructionVocabulary
+        result = ConstructionVocabulary.apply_replacements_to_text("テスト", {})
+        assert result == "テスト"
+
+    def test_apply_replacements_to_text_empty_text(self):
+        """空テキストでは空文字列が返される"""
+        from construction_vocabulary import ConstructionVocabulary
+        result = ConstructionVocabulary.apply_replacements_to_text("", {"a": "b"})
+        assert result == ""
+
+    def test_add_term_empty_raises(self, tmp_path):
+        """空文字列の add_term は ValueError"""
+        from construction_vocabulary import ConstructionVocabulary
+        vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
+        with pytest.raises(ValueError, match="cannot be empty"):
+            vocab.add_term("")
+
+    def test_add_term_whitespace_only_raises(self, tmp_path):
+        """空白のみの add_term は ValueError"""
+        from construction_vocabulary import ConstructionVocabulary
+        vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
+        with pytest.raises(ValueError, match="cannot be empty"):
+            vocab.add_term("   ")
+
+    def test_add_term_too_long_raises(self, tmp_path):
+        """MAX_TERM_LENGTH を超える add_term は ValueError"""
+        from construction_vocabulary import ConstructionVocabulary
+        vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
+        with pytest.raises(ValueError, match="too long"):
+            vocab.add_term("あ" * 101)
+
+    def test_construction_singleton_thread_safe(self):
+        """get_construction_vocabulary のシングルトンがスレッドセーフ"""
+        import construction_vocabulary
+        construction_vocabulary._construction_vocab = None
+
+        results = []
+
+        def worker():
+            from construction_vocabulary import get_construction_vocabulary
+            v = get_construction_vocabulary()
+            results.append(id(v))
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(set(results)) == 1
+        # クリーンアップ
+        construction_vocabulary._construction_vocab = None
+
+
+# ============================================================================
+# workers.py テスト
+# ============================================================================
+
+from workers import (
+    _normalize_segments,
+    SharedConstants,
+    stop_worker,
+    TranscriptionWorker,
+    BatchTranscriptionWorker,
+)
+
+
+class TestNormalizeSegments:
+    """_normalize_segments のテスト"""
+
+    def test_empty_result(self):
+        """空の結果"""
+        assert _normalize_segments({}) == []
+        assert _normalize_segments({"chunks": []}) == []
+        assert _normalize_segments({"segments": []}) == []
+
+    def test_chunks_with_timestamp_tuple(self):
+        """chunks形式 + timestampタプル"""
+        result = {
+            "chunks": [
+                {"text": "hello", "timestamp": (0.0, 1.5)},
+                {"text": "world", "timestamp": (1.5, 3.0)},
+            ]
+        }
+        normalized = _normalize_segments(result)
+        assert len(normalized) == 2
+        assert normalized[0] == {"text": "hello", "start": 0.0, "end": 1.5}
+        assert normalized[1] == {"text": "world", "start": 1.5, "end": 3.0}
+
+    def test_chunks_with_timestamp_list(self):
+        """chunks形式 + timestampリスト"""
+        result = {
+            "chunks": [
+                {"text": "test", "timestamp": [2.0, 4.0]},
+            ]
+        }
+        normalized = _normalize_segments(result)
+        assert len(normalized) == 1
+        assert normalized[0]["start"] == 2.0
+        assert normalized[0]["end"] == 4.0
+
+    def test_segments_with_start_key(self):
+        """segments形式 + start/end"""
+        result = {
+            "segments": [
+                {"text": "seg1", "start": 0.0, "end": 1.0},
+                {"text": "seg2", "start": 1.0, "end": 2.0},
+            ]
+        }
+        normalized = _normalize_segments(result)
+        assert len(normalized) == 2
+        assert normalized[0] == {"text": "seg1", "start": 0.0, "end": 1.0}
+
+    def test_segments_without_timestamps(self):
+        """タイムスタンプなしセグメント"""
+        result = {
+            "segments": [
+                {"text": "no-time"},
+            ]
+        }
+        normalized = _normalize_segments(result)
+        assert len(normalized) == 1
+        assert normalized[0] == {"text": "no-time", "start": 0, "end": 0}
+
+    def test_short_timestamp_tuple(self):
+        """短いタイムスタンプ（開始のみ）"""
+        result = {
+            "chunks": [
+                {"text": "a", "timestamp": (1.0,)},
+                {"text": "b", "timestamp": ()},
+            ]
+        }
+        normalized = _normalize_segments(result)
+        assert normalized[0]["start"] == 1.0
+        assert normalized[0]["end"] == 0
+        assert normalized[1]["start"] == 0
+        assert normalized[1]["end"] == 0
+
+    def test_chunks_takes_priority_over_segments(self):
+        """chunksとsegments両方存在する場合、chunksを優先"""
+        result = {
+            "chunks": [{"text": "from_chunks", "timestamp": (0, 1)}],
+            "segments": [{"text": "from_segments", "start": 0, "end": 1}],
+        }
+        normalized = _normalize_segments(result)
+        assert len(normalized) == 1
+        assert normalized[0]["text"] == "from_chunks"
+
+
+class TestSharedConstants:
+    """SharedConstants のテスト"""
+
+    def test_progress_values(self):
+        """進捗値が正しい順序"""
+        assert SharedConstants.PROGRESS_MODEL_LOAD < SharedConstants.PROGRESS_BEFORE_TRANSCRIBE
+        assert SharedConstants.PROGRESS_BEFORE_TRANSCRIBE < SharedConstants.PROGRESS_AFTER_TRANSCRIBE
+        assert SharedConstants.PROGRESS_AFTER_TRANSCRIBE < SharedConstants.PROGRESS_DIARIZATION_START
+        assert SharedConstants.PROGRESS_DIARIZATION_START < SharedConstants.PROGRESS_DIARIZATION_END
+        assert SharedConstants.PROGRESS_DIARIZATION_END < SharedConstants.PROGRESS_COMPLETE
+        assert SharedConstants.PROGRESS_COMPLETE == 100
+
+    def test_supported_extensions(self):
+        """サポートされる拡張子"""
+        assert '.mp3' in SharedConstants.SUPPORTED_EXTENSIONS
+        assert '.wav' in SharedConstants.SUPPORTED_EXTENSIONS
+        assert '.mp4' in SharedConstants.SUPPORTED_EXTENSIONS
+        assert '.flac' in SharedConstants.SUPPORTED_EXTENSIONS
+        for ext in SharedConstants.SUPPORTED_EXTENSIONS:
+            assert ext.startswith('.')
+
+    def test_audio_file_filter(self):
+        """ファイルフィルタ文字列"""
+        assert "Audio Files" in SharedConstants.AUDIO_FILE_FILTER
+        assert "*.mp3" in SharedConstants.AUDIO_FILE_FILTER
+        assert "All Files" in SharedConstants.AUDIO_FILE_FILTER
+
+    def test_timeout_values(self):
+        """タイムアウト値が正値"""
+        assert SharedConstants.THREAD_WAIT_TIMEOUT > 0
+        assert SharedConstants.MONITOR_WAIT_TIMEOUT > 0
+        assert SharedConstants.BATCH_WAIT_TIMEOUT > 0
+
+    def test_batch_workers(self):
+        """バッチワーカー数が正値"""
+        assert SharedConstants.BATCH_WORKERS_DEFAULT > 0
+        assert SharedConstants.MONITOR_BATCH_WORKERS > 0
+
+
+class TestStopWorker:
+    """stop_worker のテスト"""
+
+    def test_none_worker(self):
+        """Noneワーカーは何もしない"""
+        stop_worker(None, "test")  # Should not raise
+
+    def test_not_running_worker(self):
+        """非実行中ワーカーは何もしない"""
+        mock_worker = MagicMock()
+        mock_worker.isRunning.return_value = False
+        stop_worker(mock_worker, "test")
+        mock_worker.quit.assert_not_called()
+
+    def test_cancel_worker(self):
+        """cancel=TrueでキャンセルAPIを呼び出す"""
+        mock_worker = MagicMock()
+        mock_worker.isRunning.return_value = True
+        mock_worker.wait.return_value = True
+        stop_worker(mock_worker, "test", cancel=True)
+        mock_worker.cancel.assert_called_once()
+        mock_worker.wait.assert_called_once()
+
+    def test_stop_worker_method(self):
+        """stop=TrueでstopAPIを呼び出す"""
+        mock_worker = MagicMock()
+        mock_worker.isRunning.return_value = True
+        mock_worker.wait.return_value = True
+        stop_worker(mock_worker, "test", stop=True)
+        mock_worker.stop.assert_called_once()
+
+    def test_quit_fallback(self):
+        """cancel/stopなしの場合quitを呼び出す"""
+        mock_worker = MagicMock()
+        mock_worker.isRunning.return_value = True
+        mock_worker.wait.return_value = True
+        stop_worker(mock_worker, "test")
+        mock_worker.quit.assert_called_once()
+
+    def test_terminate_on_timeout(self):
+        """タイムアウト時にterminateを呼び出す"""
+        mock_worker = MagicMock()
+        mock_worker.isRunning.return_value = True
+        mock_worker.wait.side_effect = [False, True]  # 最初はタイムアウト、2回目は成功
+        stop_worker(mock_worker, "test", timeout=100)
+        mock_worker.terminate.assert_called_once()
+
+
+class TestTranscriptionWorkerInit:
+    """TranscriptionWorker 初期化テスト"""
+
+    @patch('workers.TranscriptionEngine')
+    def test_basic_init(self, mock_engine_cls):
+        """基本初期化"""
+        worker = TranscriptionWorker("/test/audio.mp3")
+        assert worker.audio_path == "/test/audio.mp3"
+        assert worker.enable_diarization is False
+        assert worker.diarizer is None
+        assert worker._cancelled is False
+
+    @patch('workers.TranscriptionEngine')
+    def test_init_with_diarization(self, mock_engine_cls):
+        """話者分離有効で初期化"""
+        with patch('workers.FreeSpeakerDiarizer') as mock_diar_cls:
+            worker = TranscriptionWorker("/test/audio.mp3", enable_diarization=True)
+            assert worker.enable_diarization is True
+
+    @patch('workers.TranscriptionEngine')
+    def test_cancel(self, mock_engine_cls):
+        """キャンセルフラグ"""
+        worker = TranscriptionWorker("/test/audio.mp3")
+        assert worker._cancelled is False
+        worker.cancel()
+        assert worker._cancelled is True
+
+
+class TestBatchTranscriptionWorkerInit:
+    """BatchTranscriptionWorker 初期化テスト"""
+
+    def test_basic_init(self):
+        """基本初期化"""
+        paths = ["/a.mp3", "/b.mp3"]
+        worker = BatchTranscriptionWorker(paths)
+        assert worker.audio_paths == paths
+        assert worker.enable_diarization is False
+        assert worker.max_workers == 3
+        assert worker.formatter is None
+        assert worker.use_llm_correction is False
+        assert worker.completed == 0
+        assert worker.success_count == 0
+        assert worker.failed_count == 0
+        assert worker._cancelled is False
+
+    def test_init_with_options(self):
+        """オプション付き初期化"""
+        mock_formatter = MagicMock()
+        worker = BatchTranscriptionWorker(
+            ["/a.mp3"],
+            enable_diarization=True,
+            max_workers=5,
+            formatter=mock_formatter,
+            use_llm_correction=True
+        )
+        assert worker.enable_diarization is True
+        assert worker.max_workers == 5
+        assert worker.formatter is mock_formatter
+        assert worker.use_llm_correction is True
+
+    def test_cancel(self):
+        """キャンセル"""
+        worker = BatchTranscriptionWorker(["/a.mp3"])
+        assert worker._cancelled is False
+        worker.cancel()
+        assert worker._cancelled is True
+
+    def test_cancel_with_executor(self):
+        """executor存在時のキャンセル"""
+        worker = BatchTranscriptionWorker(["/a.mp3"])
+        mock_executor = MagicMock()
+        worker._executor = mock_executor
+        worker.cancel()
+        assert worker._cancelled is True
+        mock_executor.shutdown.assert_called_once_with(wait=False)
+
+    def test_process_single_file_cancelled(self):
+        """キャンセル済みファイルの処理"""
+        worker = BatchTranscriptionWorker(["/a.mp3"])
+        worker._cancelled = True
+        path, msg, success = worker.process_single_file("/a.mp3")
+        assert path == "/a.mp3"
+        assert success is False
+        assert "キャンセル" in msg

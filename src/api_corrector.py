@@ -251,7 +251,7 @@ class ClaudeCorrector(BaseAPICorrector):
             corrected = self._call_with_retry(self._call_claude_api, user_content)
             corrected_chunks.append(corrected or chunk)
 
-        return "\n\n".join(corrected_chunks)
+        return "".join(corrected_chunks)
 
     def generate_summary(self, text: str, max_length: int = 200) -> str:
         """
@@ -356,7 +356,7 @@ class OpenAICorrector(BaseAPICorrector):
             corrected = self._call_with_retry(self._call_openai_api, user_content)
             corrected_chunks.append(corrected or chunk)
 
-        return "\n\n".join(corrected_chunks)
+        return "".join(corrected_chunks)
 
     def generate_summary(self, text: str, max_length: int = 200) -> str:
         """

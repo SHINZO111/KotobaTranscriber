@@ -46,7 +46,7 @@ Date: 2025-10-18
 Version: 2.2.0
 """
 
-from typing import Optional, Any, List
+from typing import Optional
 
 __all__ = [
     # Base exception
@@ -236,10 +236,16 @@ class TranscriptionFailedError(TranscriptionError):
     音声認識処理が完全に失敗した場合、または結果が生成できなかった場合に発生します。
     Raised when the speech recognition process fails completely or cannot generate results.
 
+    Attributes:
+        audio_duration (Optional[float]): 音声の長さ（秒）- Audio duration in seconds
+
     Example:
-        raise TranscriptionFailedError("Failed to transcribe audio: model returned empty result")
+        raise TranscriptionFailedError("Failed to transcribe audio", audio_duration=120.5)
     """
-    pass
+
+    def __init__(self, message: str, audio_duration: Optional[float] = None):
+        self.audio_duration = audio_duration
+        super().__init__(message)
 
 
 class ModelLoadError(TranscriptionError):
@@ -474,7 +480,7 @@ class AudioStreamError(RealtimeProcessingError):
     Raised when errors occur during PyAudio stream start, stop, or operations.
 
     Attributes:
-        message (str): エラーメッセージ - Error message
+        detail (str): エラー詳細メッセージ - Error detail message
         device_index (Optional[int]): デバイスインデックス - Device index (if known)
 
     Example:
@@ -482,7 +488,7 @@ class AudioStreamError(RealtimeProcessingError):
     """
 
     def __init__(self, message: str, device_index: Optional[int] = None):
-        self.message = message
+        self.detail = message
         self.device_index = device_index
         error_msg = f"Audio stream error: {message}"
         if device_index is not None:
@@ -853,7 +859,7 @@ if __name__ == "__main__":
         raise AudioStreamError("Stream overflow", device_index=0)
     except AudioStreamError as e:
         print(f"  ✓ {e}")
-        print(f"    Message: {e.message}")
+        print(f"    Detail: {e.detail}")
         print(f"    Device index: {e.device_index}")
         print(f"    Category: {get_error_category(e)}")
     print()

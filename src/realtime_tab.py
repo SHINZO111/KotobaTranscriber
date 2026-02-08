@@ -156,16 +156,27 @@ class RealtimeTranscriptionWorker(QThread):
                     except Exception as e:
                         logger.error(f"Audio processing error: {e}")
 
-                # 終了処理
-                if self.stream:
-                    self.stream.stop_stream()
-                    self.stream.close()
-
-                if self.audio:
-                    self.audio.terminate()
-
             except Exception as e:
                 self.error_occurred.emit(f"録音エラー: {str(e)}")
+            finally:
+                # 終了処理（例外時もリソースを確実に解放）
+                try:
+                    if self.stream:
+                        self.stream.stop_stream()
+                        self.stream.close()
+                except Exception as e:
+                    logger.debug(f"Stream cleanup failed: {e}")
+                try:
+                    if self.audio:
+                        self.audio.terminate()
+                except Exception as e:
+                    logger.debug(f"Audio cleanup failed: {e}")
+                # エンジンの解放
+                try:
+                    if hasattr(self, 'engine') and self.engine is not None:
+                        self.engine.unload_model()
+                except Exception as e:
+                    logger.debug(f"Engine unload failed: {e}")
 
         self.status_changed.emit("停止しました")
 

@@ -61,7 +61,7 @@ class ProgressWorker(QThread):
                 progress_callback=self._emit_progress,
                 **self.kwargs
             )
-            self.result_signal.emit(result if result else {})
+            self.result_signal.emit(result if isinstance(result, dict) else {})
             self.finished_signal.emit(True, "完了しました")
         except Exception as e:
             logger.error(f"Worker error: {e}")
@@ -93,6 +93,10 @@ class MainWindow(QMainWindow):
         self.current_session = None
         self.last_transcription = None
         self.last_minutes = None
+        self.selected_file = None
+
+        # エンジンキャッシュ（モデルの再ロードを防止）
+        self._engine = None
 
         # UI構築
         self.setup_ui()
@@ -345,10 +349,11 @@ class MainWindow(QMainWindow):
         if DARK_THEME_AVAILABLE:
             from PySide6.QtWidgets import QApplication
             app = QApplication.instance()
-            if state == Qt.Checked:
+            if state == Qt.CheckState.Checked.value:
                 DarkTheme.apply(app)
             else:
                 app.setStyleSheet("")
+                app.setPalette(app.style().standardPalette())
 
     def select_audio_file(self):
         """音声ファイルを選択"""
@@ -365,7 +370,7 @@ class MainWindow(QMainWindow):
 
     def start_transcription(self):
         """書き起こしを開始"""
-        if not hasattr(self, 'selected_file'):
+        if self.selected_file is None:
             QMessageBox.warning(self, "警告", "ファイルを選択してください")
             return
 
@@ -379,12 +384,18 @@ class MainWindow(QMainWindow):
         self.worker.result_signal.connect(self.on_transcription_result)
         self.worker.start()
 
+    def _get_engine(self):
+        """キャッシュされたエンジンインスタンスを取得（モデル再ロード防止）"""
+        if self._engine is None:
+            from transcription_engine import TranscriptionEngine
+            self._engine = TranscriptionEngine()
+        if not self._engine.is_available():
+            self._engine.load_model()
+        return self._engine
+
     def _transcribe_task(self, file_path: str, progress_callback=None) -> Dict:
         """書き起こしタスク（バックグラウンド実行）"""
-        from transcription_engine import TranscriptionEngine
-
-        engine = TranscriptionEngine()
-        engine.load_model()
+        engine = self._get_engine()
 
         if progress_callback:
             progress_callback(10, 100, "モデルを読み込み中...")

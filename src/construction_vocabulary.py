@@ -5,6 +5,7 @@ AGEC株式会社の建設業・CM業務に最適化された専門用語管理
 
 import logging
 import json
+import threading
 from pathlib import Path
 from typing import List, Dict, Optional, Set
 import re
@@ -223,6 +224,13 @@ class ConstructionVocabulary:
             return
 
         try:
+            # ファイルサイズ制限 (10MB)
+            MAX_VOCAB_SIZE = 10 * 1024 * 1024
+            file_size = self.vocabulary_file.stat().st_size
+            if file_size > MAX_VOCAB_SIZE:
+                logger.error(f"Vocabulary file too large: {file_size} bytes (max: {MAX_VOCAB_SIZE})")
+                return
+
             with open(self.vocabulary_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
@@ -480,6 +488,7 @@ class ConstructionVocabulary:
 
 # グローバルインスタンス
 _construction_vocab = None
+_construction_vocab_lock = threading.Lock()
 
 
 def get_construction_vocabulary(vocabulary_file: Optional[str] = None) -> ConstructionVocabulary:
@@ -494,7 +503,9 @@ def get_construction_vocabulary(vocabulary_file: Optional[str] = None) -> Constr
     """
     global _construction_vocab
     if _construction_vocab is None:
-        _construction_vocab = ConstructionVocabulary(vocabulary_file)
+        with _construction_vocab_lock:
+            if _construction_vocab is None:
+                _construction_vocab = ConstructionVocabulary(vocabulary_file)
     return _construction_vocab
 
 

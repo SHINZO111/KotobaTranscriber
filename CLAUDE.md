@@ -10,7 +10,11 @@ KotobaTranscriber is a Japanese speech-to-text desktop application using Kotoba-
 
 ### Run the application
 ```bash
+# File transcription (single/batch)
 python src/main.py
+
+# Folder monitoring (system tray, auto-startup, auto-move)
+python src/monitor_app.py
 ```
 
 ### Testing
@@ -64,12 +68,17 @@ python build_release.py
 
 ## Architecture
 
-### Entry point and main module
-`src/main.py` (~1,900 lines) is the monolithic main module containing the PySide6 GUI, threading orchestration, and all tab/panel logic. It imports all other modules and manages the application lifecycle.
+### Two-app structure
+The application is split into two independent executables with shared worker logic:
+
+- `src/main.py` (~500 lines) — File transcription app (single file + batch mode). No tray icon, no folder monitoring.
+- `src/monitor_app.py` (~700 lines) — Folder monitoring app with system tray, auto-startup, and auto-move. Separate mutex (`Local\KotobaTranscriber_Monitor_Mutex`).
+- `src/workers.py` (~550 lines) — Shared module: `SharedConstants`, `TranscriptionWorker`, `BatchTranscriptionWorker`, `stop_worker()`, `_normalize_segments()`. Both apps extend `SharedConstants` (`UIConstants` in main.py, `MonitorUIConstants` in monitor_app.py).
 
 ### Transcription engines (two-model strategy)
 - `src/transcription_engine.py` — Primary engine using Kotoba-Whisper v2.2 via HuggingFace Transformers. Best accuracy for Japanese.
 - `src/faster_whisper_engine.py` — Alternative engine optimized for real-time/low-latency use.
+- Both inherit from `BaseTranscriptionEngine` in `src/base_engine.py`.
 
 ### Post-processing pipeline
 Transcribed text flows through an optional chain: `text_formatter.py` (filler removal, punctuation, paragraphs) → `speaker_diarization_free.py` (SpeechBrain-based speaker separation) → `llm_corrector_standalone.py` (local LLM correction) or `api_corrector.py` (Claude/OpenAI API correction). Each step can be independently enabled/disabled.
@@ -80,9 +89,9 @@ Transcribed text flows through an optional chain: `text_formatter.py` (filler re
 - `enhanced_export.py` / `enhanced_subtitle_exporter.py` — Extended export with segment merging and SRT/VTT formatting
 
 ### Processing modes
-- **Single file**: Direct transcription from the main tab
-- **Batch**: `batch_processor.py` / `enhanced_batch_processor.py` (with checkpointing and memory monitoring)
-- **Folder monitor**: `folder_monitor.py` watches directories via QThread
+- **Single file**: Direct transcription from main.py
+- **Batch**: `enhanced_batch_processor.py` (with checkpointing and memory monitoring)
+- **Folder monitor**: `folder_monitor.py` watches directories via QThread (used by monitor_app.py)
 - **Real-time**: `realtime_tab.py` captures live microphone input via PyAudio + WebRTC VAD
 
 ### Export formats
@@ -94,18 +103,21 @@ TXT, DOCX (`src/export/word_exporter.py`), XLSX (`src/export/excel_exporter.py`)
 - `error_recovery.py`, `enhanced_error_handling.py` — Robust error recovery and retry logic
 
 ### Configuration
+Configuration is split across three files with clear authority:
+
 - `config/config.yaml` — System defaults (model names, device settings, FFmpeg path, API config). Note: audio preprocessing is disabled by default to avoid meta tensor errors.
-- `app_settings.json` — User preferences, persisted as JSON with thread-safe atomic writes and automatic backup rotation (max 5 generations in `.backups/`)
+- `app_settings.json` / `monitor_settings.json` — User preferences per app, persisted as JSON with thread-safe atomic writes and automatic backup rotation (max 5 generations in `.backups/`)
 - API keys: use environment variables `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`
 
-### Qt compatibility layer (legacy)
-`src/qt_compat.py` provides PyQt5/PySide6 compatibility helpers (`exec_dialog()`, `exec_app()`), but most production code imports PySide6 directly.
+Config file priority for tooling:
+- **pytest**: `pytest.ini` is authoritative (not `pyproject.toml`)
+- **coverage**: `.coveragerc` is authoritative (not `pytest.ini` or `pyproject.toml`)
 
 ### Threading model
 Main GUI thread runs the PySide6 event loop. Transcription, batch processing, and folder monitoring each run on separate worker threads (QThread / ThreadPoolExecutor). All engine operations are off the main thread.
 
 ### Exception hierarchy
-`src/exceptions.py` defines 27 typed exceptions under `KotobaTranscriberError`, organized by domain: `FileProcessingError`, `TranscriptionError`, `ConfigurationError`, `BatchProcessingError`, `ResourceError`, `RealtimeProcessingError`, `SecurityError`.
+`src/exceptions.py` defines 33 typed exceptions under `KotobaTranscriberError`, organized by domain: `FileProcessingError`, `TranscriptionError`, `ConfigurationError`, `BatchProcessingError`, `ResourceError`, `RealtimeProcessingError`, `SecurityError`, `APIError`, `ExportError`.
 
 ## Code Style
 

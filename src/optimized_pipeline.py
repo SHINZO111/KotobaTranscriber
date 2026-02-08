@@ -12,7 +12,12 @@ from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from queue import Queue, Empty
-import psutil
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    psutil = None
+    PSUTIL_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +65,7 @@ class MemoryMonitor:
         self._monitoring = False
         self._monitor_thread: Optional[threading.Thread] = None
         self._callbacks: List[Callable[[float], None]] = []
+        self._callbacks_lock = threading.Lock()
     
     def start(self):
         """モニタリング開始"""
@@ -81,7 +87,9 @@ class MemoryMonitor:
             self.peak_mb = max(self.peak_mb, current_mb)
             
             # コールバック実行
-            for callback in self._callbacks:
+            with self._callbacks_lock:
+                callbacks = list(self._callbacks)
+            for callback in callbacks:
                 try:
                     callback(current_mb)
                 except Exception as e:
@@ -96,6 +104,8 @@ class MemoryMonitor:
     
     def get_current_memory_mb(self) -> float:
         """現在のメモリ使用量を取得（MB）"""
+        if not PSUTIL_AVAILABLE:
+            return 0.0
         process = psutil.Process(os.getpid())
         return process.memory_info().rss / 1024 / 1024
     
@@ -108,7 +118,8 @@ class MemoryMonitor:
     
     def register_callback(self, callback: Callable[[float], None]):
         """メモリ使用量コールバックを登録"""
-        self._callbacks.append(callback)
+        with self._callbacks_lock:
+            self._callbacks.append(callback)
     
     def is_memory_available(self, required_mb: float = 500.0) -> bool:
         """必要なメモリが利用可能かチェック"""
@@ -132,6 +143,7 @@ class OptimizedPipeline:
         self._memory_monitor = MemoryMonitor(memory_limit_mb)
         self._executor: Optional[ThreadPoolExecutor] = None
         self._stats = ProcessingStats()
+        self._stats_lock = threading.Lock()
         self._progress_callbacks: List[Callable[[ProcessingStats], None]] = []
         
         # キャッシュディレクトリ作成
@@ -186,10 +198,12 @@ class OptimizedPipeline:
             try:
                 result = future.result()
                 results[file_path] = {"success": True, "result": result}
-                self._stats.processed_files += 1
+                with self._stats_lock:
+                    self._stats.processed_files += 1
             except Exception as e:
                 results[file_path] = {"success": False, "error": str(e)}
-                self._stats.failed_files += 1
+                with self._stats_lock:
+                    self._stats.failed_files += 1
                 logger.error(f"Processing failed for {file_path}: {e}")
             
             # 進捗コールバック
@@ -209,16 +223,16 @@ class OptimizedPipeline:
     def _process_with_stats(self, file_path: str, process_func: Callable) -> Any:
         """統計付きで処理実行"""
         start_time = time.time()
-        
+
         result = process_func(file_path)
-        
+
         duration = time.time() - start_time
-        self._stats.total_duration += duration
-        self._stats.avg_processing_time = (
-            self._stats.total_duration / self._stats.processed_files 
-            if self._stats.processed_files > 0 else 0
-        )
-        
+        with self._stats_lock:
+            self._stats.total_duration += duration
+            self._stats.avg_processing_time = (
+                self._stats.total_duration / max(self._stats.processed_files, 1)
+            )
+
         return result
     
     def get_cache_path(self, file_path: str, suffix: str = ".cache") -> str:

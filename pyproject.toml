@@ -39,7 +39,7 @@ dependencies = [
     "faster-whisper>=1.0.0",
     "speechbrain>=0.5.0",
     "scikit-learn>=1.0.0",
-    "PyQt5>=5.15.0",
+    "PySide6>=6.0.0",
     "numpy>=1.24.0",
     "pandas>=2.0.0",
     "python-docx>=0.8.11",
@@ -128,52 +128,8 @@ disable = [
     "W0212",  # protected-access
 ]
 
-[tool.pytest.ini_options]
-minversion = "7.0"
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-    "-ra",
-    "--strict-markers",
-    "--strict-config",
-    "--showlocals",
-]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
-    "gpu: marks tests that require GPU",
-]
-
-[tool.coverage.run]
-source = ["src"]
-omit = [
-    "*/tests/*",
-    "*/test_*.py",
-    "*/__pycache__/*",
-    "*/venv/*",
-    "*/.venv/*",
-]
-
-[tool.coverage.report]
-precision = 2
-show_missing = true
-skip_covered = false
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
-]
-
-[tool.coverage.html]
-directory = "htmlcov"
+# NOTE: pytest config is authoritative in pytest.ini
+# NOTE: coverage config is authoritative in .coveragerc
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv"]

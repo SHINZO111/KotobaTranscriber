@@ -46,7 +46,7 @@ class StandaloneLLMCorrector:
 
         # デバイス自動選択
         if device == "auto":
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.device = "cuda" if TRANSFORMERS_AVAILABLE and torch.cuda.is_available() else "cpu"
         else:
             self.device = device
 

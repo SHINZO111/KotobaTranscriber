@@ -8,8 +8,13 @@ GPU/CPU/MPSの自動選択と管理を行う
     torch_device = manager.get_torch_device(device)
 """
 
-import torch
 import logging
+
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
 from enum import Enum, auto
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
@@ -71,7 +76,7 @@ class MultiDeviceManager:
         ))
 
         # CUDAデバイス
-        if torch.cuda.is_available():
+        if TORCH_AVAILABLE and torch.cuda.is_available():
             for i in range(torch.cuda.device_count()):
                 try:
                     props = torch.cuda.get_device_properties(i)
@@ -90,7 +95,7 @@ class MultiDeviceManager:
                     logger.warning(f"Failed to query CUDA device {i}: {e}")
 
         # MPS (Apple Silicon)
-        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        if TORCH_AVAILABLE and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             self.devices.append(DeviceInfo(
                 id=0,
                 name="Apple Silicon MPS",
@@ -150,8 +155,11 @@ class MultiDeviceManager:
                 score += d.available_memory_mb / 1000
                 # Compute capabilityが高いほど高スコア
                 if d.compute_capability:
-                    major, minor = map(int, d.compute_capability.split('.'))
-                    score += major * 10 + minor
+                    try:
+                        major, minor = map(int, d.compute_capability.split('.')[:2])
+                        score += major * 10 + minor
+                    except (ValueError, TypeError):
+                        pass
             elif d.type == DeviceType.MPS:
                 score += 50
                 score += d.available_memory_mb / 1000
@@ -163,7 +171,7 @@ class MultiDeviceManager:
         logger.info(f"Selected device: {best.name} ({best.type.name})")
         return best
 
-    def get_torch_device(self, device_info: Optional[DeviceInfo] = None) -> torch.device:
+    def get_torch_device(self, device_info: Optional[DeviceInfo] = None):
         """
         PyTorchデバイスを取得
 
@@ -172,7 +180,13 @@ class MultiDeviceManager:
 
         Returns:
             torch.deviceオブジェクト
+
+        Raises:
+            RuntimeError: torchが利用できない場合
         """
+        if not TORCH_AVAILABLE:
+            raise RuntimeError("PyTorch is not installed")
+
         info = device_info or self._current_device
         if info is None:
             info = self.select_optimal_device()
@@ -183,7 +197,7 @@ class MultiDeviceManager:
             return torch.device("mps")
         return torch.device("cpu")
 
-    def get_optimal_dtype(self, device_info: Optional[DeviceInfo] = None) -> torch.dtype:
+    def get_optimal_dtype(self, device_info: Optional[DeviceInfo] = None):
         """
         デバイスに最適なdtypeを取得
 
@@ -192,7 +206,13 @@ class MultiDeviceManager:
 
         Returns:
             torch.dtype（CUDA/MPS: float16, CPU: float32）
+
+        Raises:
+            RuntimeError: torchが利用できない場合
         """
+        if not TORCH_AVAILABLE:
+            raise RuntimeError("PyTorch is not installed")
+
         info = device_info or self._current_device
         if info is None:
             info = self.select_optimal_device()
@@ -249,8 +269,8 @@ class DeviceContext:
         self.preference = preference
         self.required_memory_mb = required_memory_mb
         self.device_info: Optional[DeviceInfo] = None
-        self.device: Optional[torch.device] = None
-        self.dtype: Optional[torch.dtype] = None
+        self.device = None  # torch.device when available
+        self.dtype = None  # torch.dtype when available
 
     def __enter__(self):
         self.device_info = self.manager.select_optimal_device(
@@ -263,7 +283,7 @@ class DeviceContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         # クリーンアップ
-        if torch.cuda.is_available():
+        if TORCH_AVAILABLE and torch.cuda.is_available():
             torch.cuda.empty_cache()
 
 

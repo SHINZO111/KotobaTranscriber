@@ -4,7 +4,7 @@
 """
 
 import re
-from typing import List, Dict, Pattern
+from typing import List, Dict
 import logging
 from validators import Validator, ValidationError
 
@@ -75,12 +75,15 @@ class RegexPatterns:
     NUMBER_SPACING = re.compile(r'(\d+)\s+(\d+)')
 
     # Dynamically compiled patterns cache
-    _pattern_cache: Dict[str, Pattern] = {}
+    _pattern_cache: Dict[str, re.Pattern] = {}
 
     @classmethod
-    def get_filler_pattern(cls, filler: str) -> Pattern:
+    def get_filler_pattern(cls, filler: str) -> re.Pattern:
         """
         Get or create a cached pattern for filler word removal
+
+        Uses a pattern without \\b word boundaries since \\b does not work
+        correctly for Japanese text (Japanese characters are all \\w class).
 
         Args:
             filler: Filler word to create pattern for
@@ -90,12 +93,14 @@ class RegexPatterns:
         """
         key = f"filler_{filler}"
         if key not in cls._pattern_cache:
-            pattern = r'\b' + re.escape(filler) + r'\b[、。]?\s*'
+            # Japanese text has no word boundaries between characters,
+            # so use lookaround-free pattern with optional trailing punctuation
+            pattern = re.escape(filler) + r'[、。]?\s*'
             cls._pattern_cache[key] = re.compile(pattern, re.IGNORECASE)
         return cls._pattern_cache[key]
 
     @classmethod
-    def get_conjunction_pattern(cls, conjunction: str) -> Pattern:
+    def get_conjunction_pattern(cls, conjunction: str) -> re.Pattern:
         """
         Get or create a cached pattern for conjunction punctuation
 
@@ -112,7 +117,7 @@ class RegexPatterns:
         return cls._pattern_cache[key]
 
     @classmethod
-    def get_quote_verb_pattern(cls, verb: str) -> Pattern:
+    def get_quote_verb_pattern(cls, verb: str) -> re.Pattern:
         """
         Get or create a cached pattern for quote verb punctuation
 
@@ -129,7 +134,7 @@ class RegexPatterns:
         return cls._pattern_cache[key]
 
     @classmethod
-    def get_polite_ending_pattern(cls, ending: str) -> Pattern:
+    def get_polite_ending_pattern(cls, ending: str) -> re.Pattern:
         """
         Get or create a cached pattern for polite ending punctuation
 
@@ -150,20 +155,23 @@ class TextFormatter:
     """テキスト整形クラス"""
 
     # フィラー語・言い淀みのリスト（レベル1: 控えめ - 明らかに不要なもののみ）
+    # NOTE: 単一文字のフィラー('あ','え','ん')は意味のある日本語単語の一部を
+    # 破壊するため含めない。長音符付き('あー','えー','んー')のみ安全。
     FILLER_WORDS = [
-        'あー', 'あ', 'ああ', 'あのー', 'あの',
-        'えー', 'え', 'ええ', 'えっと', 'えーと',
-        'その', 'そのー',
+        'あー', 'ああ', 'あのー', 'あの',
+        'えー', 'ええ', 'えっと', 'えーと',
+        'そのー',
         'まあ', 'まー',
-        'うん', 'うーん',
-        'んー', 'ん',
-        'はい',
+        'うーん',
+        'んー',
         'なんか', 'なんて',
         'ごめん', 'ごめんなさい',  # 不要な謝罪表現
     ]
 
     # 積極的削除用の追加フィラー語（レベル2: aggressive=True 時のみ使用）
+    # 'その','はい','うん' は文脈により意味を持つため aggressive のみ
     AGGRESSIVE_FILLER_WORDS = [
+        'その', 'はい', 'うん',
         'ちょっと', 'やっぱり', 'やはり', 'やっぱ',
         'まあまあ', 'とりあえず', 'いわゆる',
         'ですです', 'ですね', 'ますね',
@@ -466,14 +474,9 @@ class TextFormatter:
         Returns:
             数字が整形されたテキスト
         """
-        # 漢数字をアラビア数字に変換（オプション）
-        # ここでは基本的な整形のみ
-        result = text
-
-        # 数字の前後のスペースを調整（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.NUMBER_SPACING.sub(r'\1\2', result)
-
-        return result
+        # NOTE: NUMBER_SPACING pattern disabled - it incorrectly merges
+        # separate numbers (e.g., "10 20" → "1020", "3月 15日" → "315日")
+        return text
 
     def format_all(self, text: str,
                    remove_fillers: bool = True,

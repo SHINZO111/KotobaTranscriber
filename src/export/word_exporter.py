@@ -4,6 +4,7 @@ Wordエクスポートモジュール
 """
 
 import logging
+import threading
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
@@ -283,11 +284,14 @@ class WordExporter:
 
 # グローバルインスタンス
 _word_exporter = None
+_word_exporter_lock = threading.Lock()
 
 
 def get_word_exporter() -> WordExporter:
     """Wordエクスポーターのシングルトンインスタンスを取得"""
     global _word_exporter
     if _word_exporter is None:
-        _word_exporter = WordExporter()
+        with _word_exporter_lock:
+            if _word_exporter is None:
+                _word_exporter = WordExporter()
     return _word_exporter

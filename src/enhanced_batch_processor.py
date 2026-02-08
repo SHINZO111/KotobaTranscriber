@@ -7,7 +7,11 @@ import os
 import json
 import logging
 import time
-import psutil
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 from typing import List, Dict, Any, Optional, Callable
 from pathlib import Path
 from datetime import datetime
@@ -79,6 +83,9 @@ class CheckpointManager:
             logger.error(f"Failed to save checkpoint: {e}")
             return False
 
+    # チェックポイントファイルの最大サイズ (10MB)
+    MAX_CHECKPOINT_SIZE = 10 * 1024 * 1024
+
     def load(self, batch_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         チェックポイントを読み込み
@@ -93,8 +100,19 @@ class CheckpointManager:
             if not self.checkpoint_file.exists():
                 return None
 
+            # ファイルサイズ制限チェック
+            file_size = self.checkpoint_file.stat().st_size
+            if file_size > self.MAX_CHECKPOINT_SIZE:
+                logger.error(f"Checkpoint file too large: {file_size} bytes (max: {self.MAX_CHECKPOINT_SIZE})")
+                return None
+
             with open(self.checkpoint_file, 'r', encoding='utf-8') as f:
                 checkpoint = json.load(f)
+
+            # スキーマ検証
+            if not self._validate_checkpoint(checkpoint):
+                logger.error("Checkpoint schema validation failed")
+                return None
 
             # バッチIDが指定されている場合は確認
             if batch_id and checkpoint.get("batch_id") != batch_id:
@@ -107,6 +125,47 @@ class CheckpointManager:
         except Exception as e:
             logger.error(f"Failed to load checkpoint: {e}")
             return None
+
+    def _validate_checkpoint(self, checkpoint: Dict[str, Any]) -> bool:
+        """
+        チェックポイントデータのスキーマを検証
+
+        Args:
+            checkpoint: チェックポイントデータ
+
+        Returns:
+            有効な場合True
+        """
+        if not isinstance(checkpoint, dict):
+            return False
+
+        # 必須キーの確認
+        required_keys = {"batch_id", "processed_files", "failed_files", "remaining_files"}
+        if not required_keys.issubset(checkpoint.keys()):
+            logger.warning(f"Checkpoint missing required keys: {required_keys - checkpoint.keys()}")
+            return False
+
+        # batch_idは文字列であること
+        if not isinstance(checkpoint.get("batch_id"), str):
+            return False
+
+        # リストフィールドの検証
+        for key in ("processed_files", "remaining_files"):
+            value = checkpoint.get(key, [])
+            if not isinstance(value, list):
+                return False
+            if not all(isinstance(item, str) for item in value):
+                logger.warning(f"Checkpoint {key} contains non-string entries")
+                return False
+
+        # failed_filesはdictのリストであること
+        failed = checkpoint.get("failed_files", [])
+        if not isinstance(failed, list):
+            return False
+        if not all(isinstance(item, dict) for item in failed):
+            return False
+
+        return True
 
     def clear(self) -> bool:
         """チェックポイントを削除"""
@@ -325,7 +384,8 @@ class EnhancedBatchProcessor:
                     result = future.result()
                     with self._lock:
                         self.processed_files.append(file_path)
-                        self.remaining_files.remove(file_path)
+                        if file_path in self.remaining_files:
+                            self.remaining_files.remove(file_path)
                         self.stats["processed_count"] += 1
 
                 except Exception as e:
@@ -335,7 +395,8 @@ class EnhancedBatchProcessor:
                             "error": str(e),
                             "timestamp": datetime.now().isoformat()
                         })
-                        self.remaining_files.remove(file_path)
+                        if file_path in self.remaining_files:
+                            self.remaining_files.remove(file_path)
                         self.stats["failed_count"] += 1
 
                 # 進捗コールバック
@@ -374,6 +435,8 @@ class EnhancedBatchProcessor:
 
     def _adjust_workers(self):
         """ワーカー数を動的に調整"""
+        if not PSUTIL_AVAILABLE:
+            return
         try:
             process = psutil.Process()
             memory_mb = process.memory_info().rss / 1024 / 1024
