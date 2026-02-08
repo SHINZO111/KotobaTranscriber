@@ -5246,3 +5246,50 @@ class TestBatchTranscriptionWorkerInit:
         assert path == "/a.mp3"
         assert success is False
         assert "キャンセル" in msg
+
+
+# ============================================================================
+# time_utils.py テスト
+# ============================================================================
+
+from time_utils import format_time_hms, format_time_srt, format_time_vtt
+
+
+class TestTimeUtils:
+    """時間フォーマットユーティリティのテスト"""
+
+    def test_format_time_hms_seconds_only(self):
+        assert format_time_hms(45) == "00:45"
+
+    def test_format_time_hms_minutes_seconds(self):
+        assert format_time_hms(125) == "02:05"
+
+    def test_format_time_hms_with_hours(self):
+        assert format_time_hms(3661) == "1:01:01"
+
+    def test_format_time_hms_zero(self):
+        assert format_time_hms(0) == "00:00"
+
+    def test_format_time_srt_basic(self):
+        assert format_time_srt(3661.5) == "01:01:01,500"
+
+    def test_format_time_srt_zero(self):
+        assert format_time_srt(0) == "00:00:00,000"
+
+    def test_format_time_srt_negative_clamped(self):
+        assert format_time_srt(-5.0) == "00:00:00,000"
+
+    def test_format_time_vtt_basic(self):
+        assert format_time_vtt(3661.5) == "01:01:01.500"
+
+    def test_format_time_vtt_zero(self):
+        assert format_time_vtt(0) == "00:00:00.000"
+
+    def test_format_time_vtt_negative_clamped(self):
+        assert format_time_vtt(-5.0) == "00:00:00.000"
+
+    def test_format_time_srt_milliseconds(self):
+        assert format_time_srt(1.234) == "00:00:01,234"
+
+    def test_format_time_vtt_milliseconds(self):
+        assert format_time_vtt(1.234) == "00:00:01.234"

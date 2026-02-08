@@ -4,6 +4,7 @@ enhanced_subtitle_exporter.py - 強化字幕エクスポートモジュール
 SRT/VTT/JSON/DOCX形式へのエクスポートをサポート
 """
 
+import html
 import json
 import re
 from datetime import datetime, timedelta
@@ -11,6 +12,7 @@ from typing import List, Dict, Any, Optional, Protocol
 from abc import ABC, abstractmethod
 from pathlib import Path
 import logging
+from time_utils import format_time_srt, format_time_vtt
 
 try:
     from docx import Document
@@ -58,12 +60,7 @@ class SRTFormatter(SubtitleFormatter):
     
     def format_time(self, seconds: float) -> str:
         """秒数をSRT時間形式に変換 (HH:MM:SS,mmm)"""
-        seconds = max(0.0, seconds)
-        total_seconds = int(seconds)
-        hours, remainder = divmod(total_seconds, 3600)
-        minutes, secs = divmod(remainder, 60)
-        milliseconds = int((seconds % 1) * 1000)
-        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+        return format_time_srt(seconds)
     
     def format_segment(self, segment: Dict, index: int) -> str:
         """SRTセグメントをフォーマット"""
@@ -91,12 +88,7 @@ class VTTFormatter(SubtitleFormatter):
     
     def format_time(self, seconds: float) -> str:
         """秒数をVTT時間形式に変換 (HH:MM:SS.mmm)"""
-        seconds = max(0.0, seconds)
-        total_seconds = int(seconds)
-        hours, remainder = divmod(total_seconds, 3600)
-        minutes, secs = divmod(remainder, 60)
-        milliseconds = int((seconds % 1) * 1000)
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
+        return format_time_vtt(seconds)
     
     def format_segment(self, segment: Dict, index: int) -> str:
         """VTTセグメントをフォーマット"""
@@ -110,7 +102,7 @@ class VTTFormatter(SubtitleFormatter):
         # 話者情報を追加
         speaker = segment.get('speaker')
         if speaker:
-            text = f"<v {speaker}>{text}</v>"
+            text = f"<v {html.escape(speaker)}>{html.escape(text)}</v>"
         
         return f"{start} --> {end}\n{text}\n"
     

@@ -3,10 +3,12 @@
 SRT/VTT形式の字幕ファイル生成
 """
 
+import html
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
+from time_utils import format_time_srt, format_time_vtt
 
 logger = logging.getLogger(__name__)
 
@@ -19,34 +21,14 @@ class SubtitleExporter:
         pass
 
     @staticmethod
-    def _format_time(seconds: float, separator: str) -> str:
-        """
-        秒数を時間形式に変換する共通メソッド
-
-        Args:
-            seconds: 秒数
-            separator: ミリ秒区切り文字（SRT: ","、VTT: "."）
-
-        Returns:
-            フォーマット済み時間文字列
-        """
-        seconds = max(0.0, seconds)
-        milliseconds = int((seconds % 1) * 1000)
-        total_seconds = int(seconds)
-        hours, remainder = divmod(total_seconds, 3600)
-        minutes, secs = divmod(remainder, 60)
-
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}{separator}{milliseconds:03d}"
-
-    @staticmethod
     def format_srt_time(seconds: float) -> str:
         """秒数をSRT時間形式に変換 (HH:MM:SS,mmm)"""
-        return SubtitleExporter._format_time(seconds, ",")
+        return format_time_srt(seconds)
 
     @staticmethod
     def format_vtt_time(seconds: float) -> str:
         """秒数をVTT時間形式に変換 (HH:MM:SS.mmm)"""
-        return SubtitleExporter._format_time(seconds, ".")
+        return format_time_vtt(seconds)
 
     def export_srt(self,
                    segments: List[Dict[str, Any]],
@@ -175,7 +157,7 @@ class SubtitleExporter:
             # 話者情報を追加
             speaker = self._get_speaker_for_time(start, speaker_segments)
             if speaker:
-                text = f"<v {speaker}>{text}</v>"
+                text = f"<v {html.escape(speaker)}>{html.escape(text)}</v>"
 
             lines.append(f"{self.format_vtt_time(start)} --> {self.format_vtt_time(end)}")
             lines.append(text)

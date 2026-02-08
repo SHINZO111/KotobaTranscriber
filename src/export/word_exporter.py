@@ -7,21 +7,11 @@ import logging
 import threading
 from pathlib import Path
 from typing import List, Dict, Optional, Any
-from dataclasses import dataclass
 from datetime import datetime
+from time_utils import format_time_hms
+from export.common import ExportOptions
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ExportOptions:
-    """エクスポートオプション"""
-    include_timestamps: bool = True
-    include_speaker_labels: bool = True
-    format_type: str = "meeting"
-    template_path: Optional[str] = None
-    company_name: str = "AGEC株式会社"
-    project_name: str = ""
 
 
 class WordExporter:
@@ -103,7 +93,7 @@ class WordExporter:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to export Word transcription: {e}")
+            logger.error(f"Failed to export Word transcription: {e}", exc_info=True)
             return False
 
     def export_meeting_minutes(
@@ -269,17 +259,12 @@ class WordExporter:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to export Word meeting minutes: {e}")
+            logger.error(f"Failed to export Word meeting minutes: {e}", exc_info=True)
             return False
 
     def _format_time(self, seconds: float) -> str:
         """秒数を時:分:秒形式に変換"""
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        if hours > 0:
-            return f"{hours}:{minutes:02d}:{secs:02d}"
-        return f"{minutes:02d}:{secs:02d}"
+        return format_time_hms(seconds)
 
 
 # グローバルインスタンス
