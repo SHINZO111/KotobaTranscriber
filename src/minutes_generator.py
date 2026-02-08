@@ -7,6 +7,7 @@ import logging
 import threading
 from typing import List, Dict, Optional, Any
 from pathlib import Path
+from export.common import atomic_write_text
 
 # 既存のMeetingMinutesGeneratorをインポート
 from meeting_minutes_generator import (
@@ -159,14 +160,13 @@ class MinutesGenerator:
                 logger.error(f"Unknown format: {format_type}")
                 return False
 
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(content)
+            atomic_write_text(output_path, content)
 
             logger.info(f"Minutes saved to {output_path}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to save minutes: {e}")
+            logger.error(f"Failed to save minutes: {e}", exc_info=True)
             return False
 
     def extract_action_items(self, text: str) -> List[Dict[str, str]]:

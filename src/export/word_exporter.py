@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 from time_utils import format_time_hms
-from export.common import ExportOptions
+from export.common import ExportOptions, atomic_save
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,8 @@ class WordExporter:
                 text_para.add_run(f"[{time_str}] ").bold = True
                 text_para.add_run(text)
 
-            doc.save(output_path)
+            with atomic_save(output_path) as tmp_path:
+                doc.save(tmp_path)
             logger.info(f"Word transcription exported to {output_path}")
             return True
 
@@ -254,7 +255,8 @@ class WordExporter:
                 p.add_run("備考:\n").bold = True
                 p.add_run(minutes_data["notes"])
 
-            doc.save(output_path)
+            with atomic_save(output_path) as tmp_path:
+                doc.save(tmp_path)
             logger.info(f"Word meeting minutes exported to {output_path}")
             return True
 

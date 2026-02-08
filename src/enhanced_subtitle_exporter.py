@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import logging
 from time_utils import format_time_srt, format_time_vtt
+from export.common import atomic_write_text, validate_export_path, validate_segments
 
 try:
     from docx import Document
@@ -286,26 +287,28 @@ class EnhancedSubtitleExporter:
         """
         options = options or {}
         format_type = format_type.lower()
-        
+
         try:
+            validate_export_path(output_path)
+            validate_segments(segments)
             if format_type in self.FORMATTERS:
                 return self._export_subtitle(segments, output_path, format_type)
             
             elif format_type == 'json':
                 content = self.json_formatter.format(
-                    segments, 
+                    segments,
                     options.get('metadata')
                 )
-                Path(output_path).write_text(content, encoding='utf-8')
+                atomic_write_text(output_path, content)
                 return True
-            
+
             elif format_type == 'txt':
                 content = self.txt_formatter.format(
                     segments,
                     include_timestamps=options.get('include_timestamps', True),
                     include_speakers=options.get('include_speakers', True)
                 )
-                Path(output_path).write_text(content, encoding='utf-8')
+                atomic_write_text(output_path, content)
                 return True
             
             elif format_type == 'docx':
@@ -333,7 +336,7 @@ class EnhancedSubtitleExporter:
         formatter_class = self.FORMATTERS[format_type]
         formatter = formatter_class()
         content = formatter.format_segments(segments)
-        Path(output_path).write_text(content, encoding='utf-8')
+        atomic_write_text(output_path, content)
         return True
     
     def export_auto(

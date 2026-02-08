@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 from time_utils import format_time_hms
-from export.common import ExportOptions
+from export.common import ExportOptions, atomic_save
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,8 @@ class ExcelExporter:
                 for cell in row:
                     cell.alignment = Alignment(wrap_text=True, vertical="top")
 
-            wb.save(output_path)
+            with atomic_save(output_path) as tmp_path:
+                wb.save(tmp_path)
             logger.info(f"Excel transcription exported to {output_path}")
             return True
 
@@ -288,7 +289,8 @@ class ExcelExporter:
                     if cell.value:
                         cell.border = thin_border
 
-            wb.save(output_path)
+            with atomic_save(output_path) as tmp_path:
+                wb.save(tmp_path)
             logger.info(f"Excel meeting minutes exported to {output_path}")
             return True
 

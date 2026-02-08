@@ -10,7 +10,7 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 import io
 from time_utils import format_time_hms
-from export.common import ExportOptions
+from export.common import ExportOptions, atomic_save, atomic_write_text, validate_export_path, validate_segments
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,8 @@ class ExcelExporter:
                 for cell in row:
                     cell.alignment = Alignment(wrap_text=True, vertical="top")
 
-            wb.save(output_path)
+            with atomic_save(output_path) as tmp_path:
+                wb.save(tmp_path)
             logger.info(f"Excel transcription exported to {output_path}")
             return True
 
@@ -294,7 +295,8 @@ class ExcelExporter:
                     if cell.value:
                         cell.border = thin_border
 
-            wb.save(output_path)
+            with atomic_save(output_path) as tmp_path:
+                wb.save(tmp_path)
             logger.info(f"Excel meeting minutes exported to {output_path}")
             return True
 
@@ -385,7 +387,8 @@ class WordExporter:
                 text_para.add_run(f"[{time_str}] ").bold = True
                 text_para.add_run(text)
 
-            doc.save(output_path)
+            with atomic_save(output_path) as tmp_path:
+                doc.save(tmp_path)
             logger.info(f"Word transcription exported to {output_path}")
             return True
 
@@ -552,7 +555,8 @@ class WordExporter:
                 p.add_run("備考:\n").bold = True
                 p.add_run(minutes_data["notes"])
 
-            doc.save(output_path)
+            with atomic_save(output_path) as tmp_path:
+                doc.save(tmp_path)
             logger.info(f"Word meeting minutes exported to {output_path}")
             return True
 
@@ -595,6 +599,10 @@ class EnhancedExporter:
         """
         options = options or ExportOptions()
 
+        validate_export_path(output_path)
+        if data_type == "transcription":
+            validate_segments(data.get("segments", []))
+
         if format_type in ["excel", "xlsx"]:
             if data_type == "meeting_minutes":
                 return self.excel_exporter.export_meeting_minutes(data, output_path, options)
@@ -631,8 +639,7 @@ class EnhancedExporter:
                     lines.append(f"[{speaker}] {text}")
                 content = "\n".join(lines)
 
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(content)
+            atomic_write_text(output_path, content)
 
             logger.info(f"Text exported to {output_path}")
             return True
@@ -655,8 +662,7 @@ class EnhancedExporter:
                     lines.append(f"- **{speaker}**: {text}")
                 content = "\n".join(lines)
 
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(content)
+            atomic_write_text(output_path, content)
 
             logger.info(f"Markdown exported to {output_path}")
             return True

@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
 from time_utils import format_time_srt, format_time_vtt
+from export.common import atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,7 @@ class SubtitleExporter:
         """
         try:
             srt_content = self.generate_srt_content(segments, speaker_segments)
-
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(srt_content)
+            atomic_write_text(output_path, srt_content)
 
             logger.info(f"SRT exported: {output_path}")
             return True
@@ -79,9 +78,7 @@ class SubtitleExporter:
         """
         try:
             vtt_content = self.generate_vtt_content(segments, speaker_segments)
-
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(vtt_content)
+            atomic_write_text(output_path, vtt_content)
 
             logger.info(f"VTT exported: {output_path}")
             return True
@@ -353,9 +350,11 @@ class SubtitleExporter:
     def _export_txt(self, segments: List[Dict[str, Any]], output_path: str) -> bool:
         """プレーンテキストでエクスポート"""
         try:
-            with open(output_path, 'w', encoding='utf-8') as f:
-                for segment in segments:
-                    f.write(f"[{segment.get('start', 0):.2f}s] {segment.get('text', '')}\n")
+            content = ''.join(
+                f"[{segment.get('start', 0):.2f}s] {segment.get('text', '')}\n"
+                for segment in segments
+            )
+            atomic_write_text(output_path, content)
 
             return True
         except (IOError, OSError) as e:

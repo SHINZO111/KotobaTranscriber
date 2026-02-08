@@ -111,8 +111,9 @@ class MeetingModeRecorder:
         self.on_auto_save: Optional[Callable[[], None]] = None
         self.on_speaker_detected: Optional[Callable[[str], None]] = None
 
-        # 出力ディレクトリ
-        self.output_dir = Path("recordings/meetings")
+        # 出力ディレクトリ（configから取得可能）
+        output_dir = self.config.get('output_dir', "recordings/meetings")
+        self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"MeetingModeRecorder initialized (split: {self.auto_split_duration}s)")
