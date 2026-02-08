@@ -4,6 +4,7 @@
 """
 
 import logging
+import threading
 import numpy as np
 from typing import Optional, Callable
 from PySide6.QtWidgets import (
@@ -58,8 +59,8 @@ class RealtimeTranscriptionWorker(QThread):
         self.vad_threshold = vad_threshold
 
         self.engine: Optional[FasterWhisperEngine] = None
-        self.is_running = False
-        self.is_paused = False
+        self._running_event = threading.Event()
+        self._paused_event = threading.Event()
 
         # PyAudio関連
         self.audio = None
@@ -68,6 +69,7 @@ class RealtimeTranscriptionWorker(QThread):
 
         # バッファ（最大60秒分でメモリを制限）
         self.audio_buffer = []
+        self._buffer_lock = threading.Lock()
         self.buffer_samples = int(sample_rate * buffer_duration)
         self._max_buffer_samples = sample_rate * 60
 
@@ -94,6 +96,19 @@ class RealtimeTranscriptionWorker(QThread):
             return True
 
         except Exception as e:
+            # 部分的に初期化されたリソースをクリーンアップ
+            if self.engine is not None:
+                try:
+                    self.engine.unload_model()
+                except Exception:
+                    pass
+                self.engine = None
+            if self.audio is not None:
+                try:
+                    self.audio.terminate()
+                except Exception:
+                    pass
+                self.audio = None
             self.error_occurred.emit(f"初期化エラー: {str(e)}")
             return False
 
@@ -102,7 +117,7 @@ class RealtimeTranscriptionWorker(QThread):
         if not self.initialize():
             return
 
-        self.is_running = True
+        self._running_event.set()
         self.status_changed.emit("録音準備完了 - 開始ボタンをクリックしてください")
 
         # オーディオストリーム開始
@@ -118,8 +133,8 @@ class RealtimeTranscriptionWorker(QThread):
 
                 self.status_changed.emit("🎤 録音中...")
 
-                while self.is_running:
-                    if self.is_paused:
+                while self._running_event.is_set():
+                    if self._paused_event.is_set():
                         self.msleep(100)
                         continue
 
@@ -139,19 +154,23 @@ class RealtimeTranscriptionWorker(QThread):
                         self.volume_changed.emit(float(volume))
 
                         # バッファに追加（メモリ保護: 最大サイズを超えたら古いサンプルを破棄）
-                        self.audio_buffer.extend(audio_float)
-                        if len(self.audio_buffer) > self._max_buffer_samples:
-                            self.audio_buffer = self.audio_buffer[-self._max_buffer_samples:]
+                        with self._buffer_lock:
+                            self.audio_buffer.extend(audio_float)
+                            if len(self.audio_buffer) > self._max_buffer_samples:
+                                self.audio_buffer = self.audio_buffer[-self._max_buffer_samples:]
 
                         # VADチェック
                         is_speech = self._check_vad(data)
 
                         # バッファが満タンまたは音声終了時に処理
-                        if len(self.audio_buffer) >= self.buffer_samples or (not is_speech and len(self.audio_buffer) > self.sample_rate * 0.5):
-                            if len(self.audio_buffer) > self.sample_rate * 0.3:  # 最低0.3秒
+                        with self._buffer_lock:
+                            buf_len = len(self.audio_buffer)
+                        if buf_len >= self.buffer_samples or (not is_speech and buf_len > self.sample_rate * 0.5):
+                            if buf_len > self.sample_rate * 0.3:  # 最低0.3秒
                                 self._process_buffer()
                             else:
-                                self.audio_buffer = []  # 短すぎる場合は破棄
+                                with self._buffer_lock:
+                                    self.audio_buffer = []  # 短すぎる場合は破棄
 
                     except Exception as e:
                         logger.error(f"Audio processing error: {e}")
@@ -192,13 +211,17 @@ class RealtimeTranscriptionWorker(QThread):
 
     def _process_buffer(self):
         """バッファの音声を処理"""
-        if not self.engine or not self.audio_buffer:
+        if not self.engine:
             return
 
-        try:
-            # NumPy配列に変換
+        with self._buffer_lock:
+            if not self.audio_buffer:
+                return
+            # NumPy配列に変換してバッファをクリア
             audio_data = np.array(self.audio_buffer, dtype=np.float32)
+            self.audio_buffer = []
 
+        try:
             # 文字起こし
             result = self.engine.transcribe(
                 audio_data,
@@ -212,26 +235,22 @@ class RealtimeTranscriptionWorker(QThread):
             if text:
                 self.text_ready.emit(text)
 
-            # バッファをクリア
-            self.audio_buffer = []
-
         except Exception as e:
             logger.error(f"Transcription error: {e}")
-            self.audio_buffer = []  # エラー時もクリア
 
     def stop(self):
         """停止"""
-        self.is_running = False
+        self._running_event.clear()
         self.wait(3000)  # 最大3秒待機
 
     def pause(self):
         """一時停止"""
-        self.is_paused = True
+        self._paused_event.set()
         self.status_changed.emit("⏸️ 一時停止中")
 
     def resume(self):
         """再開"""
-        self.is_paused = False
+        self._paused_event.clear()
         self.status_changed.emit("🎤 録音中...")
 
 
@@ -434,7 +453,7 @@ class RealtimeTab(QWidget):
         if not self.worker:
             return
 
-        if self.worker.is_paused:
+        if self.worker._paused_event.is_set():
             self.worker.resume()
             self.pause_button.setText("⏸️ 一時停止")
         else:

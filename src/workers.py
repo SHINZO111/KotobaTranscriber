@@ -418,7 +418,7 @@ class TranscriptionWorker(QThread):
         self.engine = TranscriptionEngine()
         self.enable_diarization = enable_diarization
         self.diarizer = None
-        self._cancelled = False
+        self._cancel_event = threading.Event()
 
         if enable_diarization:
             try:
@@ -430,7 +430,7 @@ class TranscriptionWorker(QThread):
     def cancel(self):
         """文字起こし処理をキャンセル"""
         logger.info("Transcription cancellation requested")
-        self._cancelled = True
+        self._cancel_event.set()
 
     def run(self):
         """文字起こし実行"""
@@ -459,7 +459,7 @@ class TranscriptionWorker(QThread):
                 return
 
             # キャンセルチェック（モデルロード後）
-            if self._cancelled:
+            if self._cancel_event.is_set():
                 logger.info("Transcription cancelled after model load")
                 self.error.emit("文字起こしがキャンセルされました")
                 return
@@ -515,7 +515,7 @@ class TranscriptionWorker(QThread):
                 logger.warning(f"Transcription returned empty text for: {self.audio_path}")
 
             # キャンセルチェック（文字起こし後、話者分離前）
-            if self._cancelled:
+            if self._cancel_event.is_set():
                 logger.info("Transcription cancelled before diarization")
                 self.error.emit("文字起こしがキャンセルされました")
                 return

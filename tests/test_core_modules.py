@@ -5172,7 +5172,7 @@ class TestTranscriptionWorkerInit:
         assert worker.audio_path == "/test/audio.mp3"
         assert worker.enable_diarization is False
         assert worker.diarizer is None
-        assert worker._cancelled is False
+        assert not worker._cancel_event.is_set()
 
     @patch('workers.TranscriptionEngine')
     def test_init_with_diarization(self, mock_engine_cls):
@@ -5185,9 +5185,9 @@ class TestTranscriptionWorkerInit:
     def test_cancel(self, mock_engine_cls):
         """キャンセルフラグ"""
         worker = TranscriptionWorker("/test/audio.mp3")
-        assert worker._cancelled is False
+        assert not worker._cancel_event.is_set()
         worker.cancel()
-        assert worker._cancelled is True
+        assert worker._cancel_event.is_set()
 
 
 class TestBatchTranscriptionWorkerInit:

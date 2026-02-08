@@ -257,7 +257,10 @@ class OptimizedPipeline:
     
     def get_stats(self) -> ProcessingStats:
         """統計情報を取得"""
-        return self._stats
+        with self._stats_lock:
+            # 浅いコピーで一貫したスナップショットを返す
+            import copy
+            return copy.copy(self._stats)
 
 
 class PipelineStage:

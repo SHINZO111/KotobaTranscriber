@@ -273,8 +273,6 @@ def with_error_handling(error_message: str = None,
                 msg = error_message or str(e)
                 context = {
                     "function": func.__name__,
-                    "args": str(args),
-                    "kwargs": str(kwargs)
                 }
                 handler.handle(e, severity=severity, context=context)
                 
@@ -325,11 +323,23 @@ class FileOperationGuard:
             dir_path = os.path.dirname(file_path)
             if dir_path:
                 os.makedirs(dir_path, exist_ok=True)
-            
-            # 書き込み
-            with open(file_path, 'w', encoding=encoding) as f:
-                f.write(content)
-            
+
+            # アトミック書き込み
+            import tempfile
+            fd, tmp_path = tempfile.mkstemp(
+                dir=dir_path or '.', suffix='.tmp'
+            )
+            try:
+                with os.fdopen(fd, 'w', encoding=encoding) as f:
+                    f.write(content)
+                os.replace(tmp_path, file_path)
+            except BaseException:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+
             return True
         
         except PermissionError:

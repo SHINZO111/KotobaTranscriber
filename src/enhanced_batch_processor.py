@@ -308,7 +308,10 @@ class EnhancedBatchProcessor:
         MAX_CHECKPOINT_FAILURES = 3
 
         try:
-            while self.remaining_files and not self._cancel_event.is_set():
+            while not self._cancel_event.is_set():
+                with self._lock:
+                    if not self.remaining_files:
+                        break
                 # 一時停止チェック（キャンセルも監視）
                 while self._pause_event.is_set() and not self._cancel_event.is_set():
                     time.sleep(0.5)
@@ -319,7 +322,8 @@ class EnhancedBatchProcessor:
 
                 # 現在のバッチを処理
                 batch_size = self.current_workers * self.BATCH_SIZE_MULTIPLIER
-                current_batch = self.remaining_files[:batch_size]
+                with self._lock:
+                    current_batch = self.remaining_files[:batch_size]
 
                 self._process_batch(current_batch, processor_func, progress_callback, batch_id)
 

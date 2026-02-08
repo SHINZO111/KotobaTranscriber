@@ -137,6 +137,19 @@ class FasterWhisperEngine(BaseTranscriptionEngine):
             logger.warning("Model not loaded, loading now...")
             self.load_model()
 
+        # 入力検証
+        if sample_rate <= 0:
+            raise ValueError(f"sample_rate must be positive, got {sample_rate}")
+        if audio.size == 0:
+            return {
+                "text": "",
+                "segments": [],
+                "language": self.language,
+                "duration": 0.0,
+                "processing_time": 0.0,
+                "realtime_factor": 0.0
+            }
+
         try:
             start_time = time.time()
 
@@ -188,7 +201,7 @@ class FasterWhisperEngine(BaseTranscriptionEngine):
 
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
-            audio_duration = len(audio) / sample_rate
+            audio_duration = len(audio) / sample_rate if sample_rate > 0 else 0.0
             raise TranscriptionFailedError(str(e), audio_duration)
 
     def transcribe_stream(self,
@@ -323,7 +336,7 @@ class TransformersWhisperEngine(BaseTranscriptionEngine):
 
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
-            audio_duration = len(audio) / sample_rate
+            audio_duration = len(audio) / sample_rate if sample_rate > 0 else 0.0
             raise TranscriptionFailedError(str(e), audio_duration)
 
     def is_available(self) -> bool:

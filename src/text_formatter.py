@@ -4,6 +4,7 @@
 """
 
 import re
+import threading
 from typing import List, Dict
 import logging
 from validators import Validator, ValidationError
@@ -76,6 +77,7 @@ class RegexPatterns:
 
     # Dynamically compiled patterns cache
     _pattern_cache: Dict[str, re.Pattern] = {}
+    _cache_lock = threading.Lock()
 
     @classmethod
     def get_filler_pattern(cls, filler: str) -> re.Pattern:
@@ -92,12 +94,13 @@ class RegexPatterns:
             Compiled regex pattern
         """
         key = f"filler_{filler}"
-        if key not in cls._pattern_cache:
-            # Japanese text has no word boundaries between characters,
-            # so use lookaround-free pattern with optional trailing punctuation
-            pattern = re.escape(filler) + r'[、。]?\s*'
-            cls._pattern_cache[key] = re.compile(pattern, re.IGNORECASE)
-        return cls._pattern_cache[key]
+        with cls._cache_lock:
+            if key not in cls._pattern_cache:
+                # Japanese text has no word boundaries between characters,
+                # so use lookaround-free pattern with optional trailing punctuation
+                pattern = re.escape(filler) + r'[、。]?\s*'
+                cls._pattern_cache[key] = re.compile(pattern, re.IGNORECASE)
+            return cls._pattern_cache[key]
 
     @classmethod
     def get_conjunction_pattern(cls, conjunction: str) -> re.Pattern:
@@ -111,10 +114,11 @@ class RegexPatterns:
             Compiled regex pattern
         """
         key = f"conj_{conjunction}"
-        if key not in cls._pattern_cache:
-            pattern = r'([^、。！？\n])(' + re.escape(conjunction) + r')'
-            cls._pattern_cache[key] = re.compile(pattern)
-        return cls._pattern_cache[key]
+        with cls._cache_lock:
+            if key not in cls._pattern_cache:
+                pattern = r'([^、。！？\n])(' + re.escape(conjunction) + r')'
+                cls._pattern_cache[key] = re.compile(pattern)
+            return cls._pattern_cache[key]
 
     @classmethod
     def get_quote_verb_pattern(cls, verb: str) -> re.Pattern:
@@ -128,10 +132,11 @@ class RegexPatterns:
             Compiled regex pattern
         """
         key = f"quote_{verb}"
-        if key not in cls._pattern_cache:
-            pattern = r'と(' + re.escape(verb) + ')'
-            cls._pattern_cache[key] = re.compile(pattern)
-        return cls._pattern_cache[key]
+        with cls._cache_lock:
+            if key not in cls._pattern_cache:
+                pattern = r'と(' + re.escape(verb) + ')'
+                cls._pattern_cache[key] = re.compile(pattern)
+            return cls._pattern_cache[key]
 
     @classmethod
     def get_polite_ending_pattern(cls, ending: str) -> re.Pattern:
@@ -145,10 +150,11 @@ class RegexPatterns:
             Compiled regex pattern
         """
         key = f"polite_{ending}"
-        if key not in cls._pattern_cache:
-            pattern = r'(' + re.escape(ending) + r')([^。！？\n])'
-            cls._pattern_cache[key] = re.compile(pattern)
-        return cls._pattern_cache[key]
+        with cls._cache_lock:
+            if key not in cls._pattern_cache:
+                pattern = r'(' + re.escape(ending) + r')([^。！？\n])'
+                cls._pattern_cache[key] = re.compile(pattern)
+            return cls._pattern_cache[key]
 
 
 class TextFormatter:

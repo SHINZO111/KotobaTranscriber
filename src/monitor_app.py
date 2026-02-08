@@ -302,7 +302,7 @@ class MonitorWindow(QMainWindow):
         """システムトレイアイコンのツールチップを更新"""
         tooltip = "KotobaTranscriber Monitor\n"
 
-        if self.folder_monitor and self.folder_monitor.running:
+        if self.folder_monitor and not self.folder_monitor._stop_event.is_set():
             tooltip += "フォルダ監視: 実行中\n"
         else:
             tooltip += "フォルダ監視: 停止中\n"
@@ -624,20 +624,32 @@ class MonitorWindow(QMainWindow):
 
         # 監視中の場合は再起動
         if self.folder_monitor and self.folder_monitor.isRunning():
+            try:
+                self.folder_monitor.new_files_detected.disconnect(self.on_monitor_new_files)
+                self.folder_monitor.status_update.disconnect(self.on_monitor_status)
+            except (RuntimeError, TypeError):
+                pass  # 既に切断済み
             self.folder_monitor.stop()
             self.folder_monitor.wait()
 
-            self.folder_monitor = FolderMonitor(
-                self.monitored_folder,
-                check_interval=value
-            )
+            try:
+                self.folder_monitor = FolderMonitor(
+                    self.monitored_folder,
+                    check_interval=value
+                )
 
-            self.folder_monitor.new_files_detected.connect(self.on_monitor_new_files)
-            self.folder_monitor.status_update.connect(self.on_monitor_status)
-            self.folder_monitor.start()
+                self.folder_monitor.new_files_detected.connect(self.on_monitor_new_files)
+                self.folder_monitor.status_update.connect(self.on_monitor_status)
+                self.folder_monitor.start()
 
-            logger.info(f"Folder monitor restarted with new interval: {value}s")
-            self.statusBar().showMessage(f"監視間隔を{value}秒に変更しました")
+                logger.info(f"Folder monitor restarted with new interval: {value}s")
+                self.statusBar().showMessage(f"監視間隔を{value}秒に変更しました")
+            except Exception as e:
+                logger.error(f"Failed to restart folder monitor: {e}")
+                self.folder_monitor = None
+                self.monitor_folder_button.setText("監視開始")
+                self.monitor_folder_button.setStyleSheet(SharedConstants.BUTTON_STYLE_MONITOR)
+                self.statusBar().showMessage(f"監視の再起動に失敗しました: {e}")
 
     # ---------------------------------------------------------------
     # 起動設定

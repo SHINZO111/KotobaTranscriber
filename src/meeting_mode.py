@@ -96,9 +96,10 @@ class MeetingModeRecorder:
         self.current_segment: Optional[RecordingSegment] = None
         self.segment_index = 0
 
-        # オーディオバッファ
+        # オーディオバッファ（最大100MB）
         self.audio_buffer: List[bytes] = []
         self.buffer_lock = threading.Lock()
+        self._max_buffer_bytes = 100 * 1024 * 1024  # 100MB
 
         # スレッド
         self.recording_thread: Optional[threading.Thread] = None
@@ -210,6 +211,11 @@ class MeetingModeRecorder:
             return
 
         with self.buffer_lock:
+            # メモリ保護: バッファサイズ上限チェック
+            current_size = sum(len(chunk) for chunk in self.audio_buffer)
+            if current_size + len(audio_data) > self._max_buffer_bytes:
+                logger.warning(f"Audio buffer limit reached ({self._max_buffer_bytes} bytes), forcing segment rotation")
+                self._rotate_segment()
             self.audio_buffer.append(audio_data)
 
         # セグメント時間をチェック

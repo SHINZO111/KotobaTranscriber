@@ -19,7 +19,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 import logging
 
-from transcription_engine import TranscriptionEngine
 from text_formatter import TextFormatter
 from llm_corrector_standalone import StandaloneLLMCorrector
 from app_settings import AppSettings
@@ -321,6 +320,7 @@ class MainWindow(QMainWindow):
                         self.statusBar().showMessage("文字起こし完了!")
                         QMessageBox.information(self, "完了", "文字起こしが完了しました")
                         logger.info("Transcription finished successfully")
+                        self.worker = None
                         return
 
                 self.statusBar().showMessage("AIで文章を補正中...")
@@ -387,6 +387,7 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             logger.error(f"Auto-save failed: {e}")
+            self.statusBar().showMessage(f"自動保存に失敗しました: {e}")
 
     def select_batch_files(self):
         """複数ファイル選択"""
