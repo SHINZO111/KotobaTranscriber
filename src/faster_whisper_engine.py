@@ -300,8 +300,8 @@ class TransformersWhisperEngine(BaseTranscriptionEngine):
             return True
 
         except Exception as e:
-            logger.error(f"Failed to load transformers model: {e}")
-            raise ModelLoadError(f"Failed to load transformers model: {e}")
+            logger.error(f"Failed to load transformers model: {e}", exc_info=True)
+            raise ModelLoadError(f"Failed to load transformers model: {e}") from e
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> Dict[str, Any]:
         """音声を文字起こし"""

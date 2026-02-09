@@ -173,7 +173,7 @@ class RealtimeTranscriptionWorker(QThread):
                                     self.audio_buffer = []  # 短すぎる場合は破棄
 
                     except Exception as e:
-                        logger.error(f"Audio processing error: {e}")
+                        logger.error(f"Audio processing error: {e}", exc_info=True)
 
             except Exception as e:
                 self.error_occurred.emit(f"録音エラー: {str(e)}")
@@ -236,12 +236,16 @@ class RealtimeTranscriptionWorker(QThread):
                 self.text_ready.emit(text)
 
         except Exception as e:
-            logger.error(f"Transcription error: {e}")
+            logger.error(f"Transcription error: {e}", exc_info=True)
 
     def stop(self):
         """停止"""
         self._running_event.clear()
         self.wait(3000)  # 最大3秒待機
+
+    def is_paused(self) -> bool:
+        """一時停止中かどうか（スレッドセーフ）"""
+        return self._paused_event.is_set()
 
     def pause(self):
         """一時停止"""
@@ -453,7 +457,7 @@ class RealtimeTab(QWidget):
         if not self.worker:
             return
 
-        if self.worker._paused_event.is_set():
+        if self.worker.is_paused():
             self.worker.resume()
             self.pause_button.setText("⏸️ 一時停止")
         else:

@@ -77,7 +77,7 @@ class Validator:
         try:
             path = Path(path).resolve()
         except Exception as e:
-            raise ValidationError(f"Invalid path format: {e}")
+            raise ValidationError(f"Invalid path format: {e}") from e
 
         # 許可されるディレクトリのチェック
         if allowed_dirs:
@@ -193,8 +193,8 @@ class Validator:
 
         try:
             int_value = int(value)
-        except (TypeError, ValueError):
-            raise ValidationError(f"{name} must be an integer, got: {type(value).__name__}")
+        except (TypeError, ValueError) as e:
+            raise ValidationError(f"{name} must be an integer, got: {type(value).__name__}") from e
 
         if int_value < min_value:
             raise ValidationError(f"{name} must be >= {min_value}, got: {int_value}")

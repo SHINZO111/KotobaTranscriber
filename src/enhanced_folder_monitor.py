@@ -205,18 +205,16 @@ class AsyncFolderMonitor(QObject):
         if path.suffix.lower() not in self.AUDIO_EXTENSIONS:
             return
         
-        # 重複チェック
+        # 重複チェック + 保留リストに追加（単一ロックで TOCTOU 防止）
         with self._lock:
             if path in self._processing:
                 return
-            
+
             # 処理済みチェック
             abs_path = str(path.resolve())
             if abs_path in self._processed_files:
                 return
-        
-        # 保留リストに追加
-        with self._lock:
+
             self._pending_files[path] = FileEvent(
                 path=file_path,
                 event_type=event_type,

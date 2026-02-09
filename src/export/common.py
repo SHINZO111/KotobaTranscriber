@@ -88,6 +88,10 @@ def validate_export_path(output_path: str) -> None:
     """
     if not output_path:
         raise ValueError("Output path cannot be empty")
+    # パストラバーサル検出
+    parts = str(output_path).replace('/', os.sep).split(os.sep)
+    if '..' in parts:
+        raise ValueError(f"Path traversal detected: {output_path}")
     parent = os.path.dirname(output_path)
     if parent and not os.path.isdir(parent):
         raise ValueError(f"Parent directory does not exist: {parent}")

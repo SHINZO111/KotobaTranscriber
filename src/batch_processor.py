@@ -133,7 +133,7 @@ class BatchProcessor:
                            f"({processing_time:.2f}s)")
 
             except Exception as e:
-                logger.error(f"Failed to process {file_path}: {e}")
+                logger.error(f"Failed to process {file_path}: {e}", exc_info=True)
 
                 batch_results.append({
                     "file_path": file_path,
@@ -242,7 +242,7 @@ class BatchProcessor:
             # psutilが利用できない場合はスキップ
             pass
         except Exception as e:
-            logger.error(f"Error adjusting batch size: {e}")
+            logger.error(f"Error adjusting batch size: {e}", exc_info=True)
 
     def get_stats(self) -> Dict[str, Any]:
         """

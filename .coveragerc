@@ -32,7 +32,6 @@ omit =
     */advanced_features.py
     */optimized_pipeline.py
     */enhanced_batch_processor.py
-    */enhanced_export.py
     */export/*
     */__init__.py
 

@@ -91,11 +91,11 @@ class BaseAPICorrector(ABC):
                         corrected_seg["text"] = corrected_text
                         corrected_seg["corrected"] = True
                     except Exception as e:
-                        logger.warning(f"Segment correction failed, keeping original: {e}")
+                        logger.warning(f"Segment correction failed, keeping original: {e}", exc_info=True)
                 result.append(corrected_seg)
             return result
         except Exception as e:
-            logger.error(f"correct_segments failed, returning original segments: {e}")
+            logger.error(f"correct_segments failed, returning original segments: {e}", exc_info=True)
             return segments
 
     @abstractmethod

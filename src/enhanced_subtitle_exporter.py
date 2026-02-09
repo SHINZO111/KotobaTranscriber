@@ -75,8 +75,8 @@ class SRTFormatter(SubtitleFormatter):
         # 話者情報を追加
         speaker = segment.get('speaker')
         if speaker:
-            text = f"[{speaker}] {text}"
-        
+            text = f"[{html.escape(speaker)}] {text}"
+
         return f"{index}\n{start} --> {end}\n{text}\n"
     
     def generate_header(self) -> str:

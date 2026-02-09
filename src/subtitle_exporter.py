@@ -117,7 +117,7 @@ class SubtitleExporter:
             # 話者情報を追加
             speaker = self._get_speaker_for_time(start, speaker_segments)
             if speaker:
-                text = f"[{speaker}] {text}"
+                text = f"[{html.escape(speaker)}] {text}"
 
             lines.append(str(subtitle_index))
             lines.append(f"{self.format_srt_time(start)} --> {self.format_srt_time(end)}")

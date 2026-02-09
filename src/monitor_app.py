@@ -301,7 +301,7 @@ class MonitorWindow(QMainWindow):
         """システムトレイアイコンのツールチップを更新"""
         tooltip = "KotobaTranscriber Monitor\n"
 
-        if self.folder_monitor and not self.folder_monitor._stop_event.is_set():
+        if self.folder_monitor and self.folder_monitor.isRunning():
             tooltip += "フォルダ監視: 実行中\n"
         else:
             tooltip += "フォルダ監視: 停止中\n"

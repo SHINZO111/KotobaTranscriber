@@ -58,7 +58,7 @@ class StartupManager:
                 except FileNotFoundError:
                     return False
         except Exception as e:
-            logger.error(f"Failed to check startup: {e}")
+            logger.error(f"Failed to check startup: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -85,7 +85,7 @@ class StartupManager:
             logger.info(f"Startup enabled: {app_name} -> {app_path}")
             return True
         except Exception as e:
-            logger.error(f"Failed to enable startup: {e}")
+            logger.error(f"Failed to enable startup: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -111,7 +111,7 @@ class StartupManager:
                 except FileNotFoundError:
                     return True
         except Exception as e:
-            logger.error(f"Failed to disable startup: {e}")
+            logger.error(f"Failed to disable startup: {e}", exc_info=True)
             return False
 
 
@@ -179,6 +179,9 @@ class FileOrganizer:
                     while os.path.exists(trans_dest):
                         trans_dest = os.path.join(dest_folder, f"{base}_{counter}{ext}")
                         counter += 1
+                        if counter > 10000:
+                            logger.error(f"Too many duplicate transcription files: {trans_filename}")
+                            break
 
                 shutil.move(transcription_file, trans_dest)
                 logger.info(f"Transcription moved: {transcription_file} -> {trans_dest}")
@@ -186,7 +189,7 @@ class FileOrganizer:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to move file: {e}")
+            logger.error(f"Failed to move file: {e}", exc_info=True)
             return False
 
 
