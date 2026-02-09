@@ -7,7 +7,7 @@ import logging
 import re
 import threading
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from datetime import datetime
 from enum import Enum
 
@@ -555,6 +555,192 @@ class MeetingMinutesGenerator:
                 speakers.add(speaker)
         return sorted(list(speakers))
 
+    def generate_dict(
+        self,
+        segments: List[Dict],
+        title: str = "会議",
+        date: Optional[str] = None,
+        location: str = "",
+        attendees: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        generate_minutes() の辞書形式ラッパー
+
+        Returns:
+            議事録データ（辞書形式）
+        """
+        minutes = self.generate_minutes(
+            segments=segments, title=title, date=date,
+            location=location, attendees=attendees,
+        )
+        return {
+            "title": minutes.title,
+            "date": minutes.date,
+            "location": minutes.location,
+            "attendees": minutes.attendees,
+            "agenda": minutes.agenda,
+            "decisions": minutes.decisions,
+            "confirmations": minutes.confirmations,
+            "action_items": [
+                {
+                    "description": item.description,
+                    "assignee": item.assignee,
+                    "due_date": item.due_date,
+                    "priority": item.priority,
+                    "status": item.status,
+                }
+                for item in minutes.action_items
+            ],
+            "statements": [
+                {
+                    "speaker": stmt.speaker,
+                    "text": stmt.text,
+                    "timestamp": stmt.timestamp,
+                    "statement_type": stmt.statement_type.value,
+                }
+                for stmt in minutes.statements
+            ],
+            "next_meeting": minutes.next_meeting,
+            "notes": minutes.notes,
+            "text_format": minutes.to_text(),
+            "markdown_format": minutes.to_markdown(),
+        }
+
+    def generate_from_file(
+        self,
+        transcription_file: str,
+        title: str = "会議",
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        書き起こしファイルから議事録を生成
+
+        Args:
+            transcription_file: 書き起こしファイルパス（JSON）
+            title: 会議タイトル
+
+        Returns:
+            議事録データ（辞書形式）
+        """
+        import json
+        from pathlib import Path
+
+        file_path = Path(transcription_file)
+        if not file_path.exists():
+            raise FileNotFoundError(f"Transcription file not found: {transcription_file}")
+
+        MAX_FILE_SIZE = 10 * 1024 * 1024
+        file_size = file_path.stat().st_size
+        if file_size > MAX_FILE_SIZE:
+            raise ValueError(f"Transcription file too large: {file_size} bytes (max: {MAX_FILE_SIZE})")
+
+        with open(transcription_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        segments = data.get('segments', [])
+        return self.generate_dict(segments, title=title, **kwargs)
+
+    def save_minutes(
+        self,
+        minutes_data: Dict[str, Any],
+        output_path: str,
+        format_type: str = "markdown"
+    ) -> bool:
+        """
+        議事録をファイルに保存
+
+        Args:
+            minutes_data: 議事録データ（辞書形式）
+            output_path: 出力ファイルパス
+            format_type: 形式 ('text', 'markdown', 'json')
+
+        Returns:
+            成功したかどうか
+        """
+        from export.common import atomic_write_text
+        try:
+            if format_type == "text":
+                content = minutes_data.get("text_format", "")
+            elif format_type == "markdown":
+                content = minutes_data.get("markdown_format", "")
+            elif format_type == "json":
+                import json
+                content = json.dumps(minutes_data, ensure_ascii=False, indent=2)
+            else:
+                logger.error(f"Unknown format: {format_type}")
+                return False
+
+            atomic_write_text(output_path, content)
+            logger.info(f"Minutes saved to {output_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to save minutes: {e}", exc_info=True)
+            return False
+
+    def extract_action_items_from_text(self, text: str) -> List[Dict[str, str]]:
+        """
+        テキストからアクションアイテムを抽出
+
+        Args:
+            text: 入力テキスト
+
+        Returns:
+            アクションアイテムリスト
+        """
+        action_items = []
+        lines = text.split('\n')
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            action_keywords = ['する', '確認', '準備', '調整', '連絡', '報告', '依頼']
+            if any(kw in line for kw in action_keywords):
+                assignee_match = re.search(
+                    r'([一-龠々〆ヵヶぁ-んァ-ンーa-zA-Z・]+)(?:さん|様|殿|くん|君)', line
+                )
+                assignee = assignee_match.group(1) if assignee_match else None
+                action_items.append({
+                    "description": line,
+                    "assignee": assignee,
+                    "due_date": None,
+                    "priority": "中"
+                })
+
+        return action_items
+
+    def classify_statements_list(self, statements: List[str]) -> Dict[str, List[str]]:
+        """
+        発言リストを分類
+
+        Args:
+            statements: 発言テキストのリスト
+
+        Returns:
+            分類された発言辞書
+        """
+        classified = {
+            "decisions": [],
+            "confirmations": [],
+            "action_items": [],
+            "general": []
+        }
+
+        for stmt in statements:
+            stmt_type = self.classify_statement(stmt)
+            if stmt_type == StatementType.DECISION:
+                classified["decisions"].append(stmt)
+            elif stmt_type == StatementType.CONFIRMATION:
+                classified["confirmations"].append(stmt)
+            elif stmt_type == StatementType.ACTION_ITEM:
+                classified["action_items"].append(stmt)
+            else:
+                classified["general"].append(stmt)
+
+        return classified
+
 
 # グローバルインスタンス
 _minutes_generator = None
@@ -574,6 +760,25 @@ def get_minutes_generator() -> MeetingMinutesGenerator:
             if _minutes_generator is None:
                 _minutes_generator = MeetingMinutesGenerator()
     return _minutes_generator
+
+
+def quick_generate(
+    segments: List[Dict],
+    title: str = "会議",
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    簡易議事録生成関数
+
+    Args:
+        segments: 書き起こしセグメント
+        title: 会議タイトル
+
+    Returns:
+        議事録データ（辞書形式）
+    """
+    generator = get_minutes_generator()
+    return generator.generate_dict(segments, title=title, **kwargs)
 
 
 if __name__ == "__main__":

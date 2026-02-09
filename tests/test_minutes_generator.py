@@ -10,21 +10,21 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from minutes_generator import MinutesGenerator, get_minutes_generator, quick_generate
 from meeting_minutes_generator import (
     MeetingMinutesGenerator,
     MeetingMinutes,
     StatementType,
-    get_minutes_generator as get_base_generator
+    get_minutes_generator,
+    quick_generate,
 )
 
 
 class TestMinutesGenerator(unittest.TestCase):
-    """MinutesGeneratorのテスト"""
+    """MeetingMinutesGeneratorのテスト"""
 
     def setUp(self):
         """テスト前のセットアップ"""
-        self.generator = MinutesGenerator()
+        self.generator = MeetingMinutesGenerator()
         self.test_segments = [
             {"speaker": "田中", "text": "本日の会議を始めます。", "start": 0},
             {"speaker": "佐藤", "text": "進捗状況を報告します。", "start": 10},
@@ -36,11 +36,10 @@ class TestMinutesGenerator(unittest.TestCase):
     def test_initialization(self):
         """初期化テスト"""
         self.assertIsNotNone(self.generator)
-        self.assertIsNotNone(self.generator._generator)
 
-    def test_generate(self):
+    def test_generate_dict(self):
         """議事録生成テスト"""
-        minutes = self.generator.generate(
+        minutes = self.generator.generate_dict(
             segments=self.test_segments,
             title="テスト会議",
             date="2026年2月3日",
@@ -57,7 +56,7 @@ class TestMinutesGenerator(unittest.TestCase):
 
     def test_generate_decisions(self):
         """決定事項抽出テスト"""
-        minutes = self.generator.generate(
+        minutes = self.generator.generate_dict(
             segments=self.test_segments,
             title="テスト会議"
         )
@@ -68,7 +67,7 @@ class TestMinutesGenerator(unittest.TestCase):
 
     def test_generate_action_items(self):
         """アクションアイテム抽出テスト"""
-        minutes = self.generator.generate(
+        minutes = self.generator.generate_dict(
             segments=self.test_segments,
             title="テスト会議"
         )
@@ -76,15 +75,15 @@ class TestMinutesGenerator(unittest.TestCase):
         # アクションアイテムが抽出されているか
         self.assertIn("action_items", minutes)
 
-    def test_extract_action_items(self):
+    def test_extract_action_items_from_text(self):
         """アクションアイテム抽出メソッドテスト"""
         test_text = "佐藤さんに資料を準備してもらいます。来週までに。"
-        items = self.generator.extract_action_items(test_text)
+        items = self.generator.extract_action_items_from_text(test_text)
 
         self.assertGreater(len(items), 0)
         # 担当者が抽出されているか
 
-    def test_classify_statements(self):
+    def test_classify_statements_list(self):
         """発言分類テスト"""
         statements = [
             "外壁材はタイルに決定しました。",
@@ -92,14 +91,14 @@ class TestMinutesGenerator(unittest.TestCase):
             "調整をお願いします。"
         ]
 
-        classified = self.generator.classify_statements(statements)
+        classified = self.generator.classify_statements_list(statements)
         self.assertIn("decisions", classified)
         self.assertIn("confirmations", classified)
         self.assertIn("action_items", classified)
 
     def test_save_minutes(self):
         """議事録保存テスト"""
-        minutes = self.generator.generate(
+        minutes = self.generator.generate_dict(
             segments=self.test_segments,
             title="テスト会議"
         )

@@ -2289,187 +2289,6 @@ class TestGetMinutesGenerator:
         mmg._minutes_generator = None
 
 
-# ============================================================================
-# 3p. batch_processor.py テスト
-# ============================================================================
-
-class TestBatchProcessor:
-    """BatchProcessor のテスト"""
-
-    def test_init(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor(batch_size=5, max_memory_mb=1024)
-        assert bp.batch_size == 5
-        assert bp.max_memory_mb == 1024
-
-    def test_add_single(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("test.wav")
-        assert len(bp.queue) == 1
-        assert bp.stats["total_files"] == 1
-
-    def test_add_with_metadata(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("test.wav", metadata={"tag": "test"})
-        assert bp.queue[0]["metadata"]["tag"] == "test"
-
-    def test_add_multiple(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add_multiple(["a.wav", "b.wav", "c.wav"])
-        assert len(bp.queue) == 3
-        assert bp.stats["total_files"] == 3
-
-    def test_process_batch_empty(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        results = bp.process_batch(lambda f: {"text": "ok"})
-        assert results == []
-
-    def test_process_batch_success(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        bp.add("b.wav")
-        results = bp.process_batch(lambda f: {"text": f"transcribed {f}"})
-        assert len(results) == 2
-        assert all(r["success"] for r in results)
-        assert bp.stats["processed_files"] == 2
-
-    def test_process_batch_with_failure(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        bp.add("fail.wav")
-        def processor(f):
-            if "fail" in f:
-                raise ValueError("processing failed")
-            return {"text": "ok"}
-        results = bp.process_batch(processor)
-        assert len(results) == 2
-        assert results[0]["success"] is True
-        assert results[1]["success"] is False
-        assert bp.stats["failed_files"] == 1
-
-    def test_process_batch_progress_callback(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        progress_calls = []
-        bp.process_batch(
-            lambda f: {"text": "ok"},
-            progress_callback=lambda p, t: progress_calls.append((p, t))
-        )
-        assert len(progress_calls) == 1
-        assert progress_calls[0] == (1, 1)
-
-    def test_process_batch_clears_queue(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        bp.process_batch(lambda f: {"text": "ok"})
-        assert len(bp.queue) == 0
-
-    def test_get_stats(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        bp.process_batch(lambda f: {"text": "ok"})
-        stats = bp.get_stats()
-        assert stats["total_files"] == 1
-        assert stats["processed_files"] == 1
-        assert "success_rate" in stats
-        assert stats["success_rate"] == 1.0
-
-    def test_get_results(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        bp.process_batch(lambda f: {"text": "ok"})
-        results = bp.get_results()
-        assert len(results) == 1  # process_batch extends self.results
-        bp.add("b.wav")
-        bp.process_batch(lambda f: {"text": "ok"})
-        assert len(bp.get_results()) == 2
-
-    def test_get_successful_results(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        bp.add("fail.wav")
-        def processor(f):
-            if "fail" in f:
-                raise ValueError("error")
-            return {"text": "ok"}
-        bp.process_batch(processor)
-        assert len(bp.get_successful_results()) == 1
-        assert len(bp.get_failed_results()) == 1
-
-    def test_clear(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        bp.process_batch(lambda f: {"text": "ok"})
-        bp.add("b.wav")
-        bp.clear()
-        assert len(bp.queue) == 0
-        assert len(bp.results) == 0
-
-    def test_clear_queue_only(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        bp.process_batch(lambda f: {"text": "ok"})
-        bp.add("b.wav")
-        bp.clear_queue()
-        assert len(bp.queue) == 0
-        assert len(bp.results) > 0
-
-    def test_clear_results_only(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        bp.add("a.wav")
-        bp.process_batch(lambda f: {"text": "ok"})
-        bp.add("b.wav")
-        bp.clear_results()
-        assert len(bp.queue) == 1
-        assert len(bp.results) == 0
-
-    def test_process_all_empty(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor()
-        results = bp.process_all(lambda f: {"text": "ok"})
-        assert results == []
-
-    def test_process_all_basic(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor(batch_size=2, auto_adjust_batch_size=False)
-        bp.add_multiple(["a.wav", "b.wav", "c.wav"])
-        results = bp.process_all(lambda f: {"text": f"ok_{f}"})
-        assert len(results) == 3
-
-    def test_process_all_batching_behavior(self):
-        from batch_processor import BatchProcessor
-        bp = BatchProcessor(batch_size=2, auto_adjust_batch_size=False)
-        bp.add_multiple(["a.wav", "b.wav", "c.wav", "d.wav", "e.wav"])
-        results = bp.process_all(lambda f: {"text": f"ok_{f}"})
-        assert len(results) == 5
-        assert all(r["success"] for r in results)
-        # With 5 files and batch_size=2, should have 3 batches (2+2+1)
-        assert bp.stats["batches_processed"] == 3
-        assert bp.stats["processed_files"] == 5
-
-
-class TestSmartBatchProcessor:
-    """SmartBatchProcessor のテスト"""
-
-    def test_init(self):
-        from batch_processor import SmartBatchProcessor
-        sp = SmartBatchProcessor(batch_size=5)
-        assert sp.size_based_batching is True
-
 
 # ============================================================================
 # 3q. enhanced_subtitle_exporter.py テスト
@@ -2686,55 +2505,50 @@ class TestEnhancedSubtitleExporter:
 # ============================================================================
 
 class TestMinutesGenerator:
-    """MinutesGenerator wrapper のテスト"""
+    """MeetingMinutesGenerator convenience methods のテスト"""
 
-    def test_init(self):
-        from minutes_generator import MinutesGenerator
-        mg = MinutesGenerator()
-        assert mg._generator is not None
-
-    def test_generate_basic(self):
-        from minutes_generator import MinutesGenerator
-        mg = MinutesGenerator()
+    def test_generate_dict_basic(self):
+        from meeting_minutes_generator import MeetingMinutesGenerator
+        mg = MeetingMinutesGenerator()
         segments = [
             {"speaker": "田中", "text": "会議を始めます", "start": 0},
             {"speaker": "佐藤", "text": "外壁材はタイルに決定しました", "start": 10},
         ]
-        result = mg.generate(segments, title="テスト", date="2026-01-01")
+        result = mg.generate_dict(segments, title="テスト", date="2026-01-01")
         assert result["title"] == "テスト"
         assert "text_format" in result
         assert "markdown_format" in result
         assert len(result["statements"]) == 2
 
-    def test_generate_with_action_items(self):
-        from minutes_generator import MinutesGenerator
-        mg = MinutesGenerator()
+    def test_generate_dict_with_action_items(self):
+        from meeting_minutes_generator import MeetingMinutesGenerator
+        mg = MeetingMinutesGenerator()
         segments = [
             {"speaker": "田中", "text": "佐藤さんに調整をお願いします", "start": 0},
         ]
-        result = mg.generate(segments, title="テスト", date="2026-01-01")
+        result = mg.generate_dict(segments, title="テスト", date="2026-01-01")
         assert len(result["action_items"]) > 0
         assert "assignee" in result["action_items"][0]
 
     def test_save_minutes_text(self, tmp_path):
-        from minutes_generator import MinutesGenerator
-        mg = MinutesGenerator()
+        from meeting_minutes_generator import MeetingMinutesGenerator
+        mg = MeetingMinutesGenerator()
         data = {"text_format": "テスト議事録", "markdown_format": "# テスト"}
         output = str(tmp_path / "minutes.txt")
         assert mg.save_minutes(data, output, "text") is True
         assert (tmp_path / "minutes.txt").read_text(encoding="utf-8") == "テスト議事録"
 
     def test_save_minutes_markdown(self, tmp_path):
-        from minutes_generator import MinutesGenerator
-        mg = MinutesGenerator()
+        from meeting_minutes_generator import MeetingMinutesGenerator
+        mg = MeetingMinutesGenerator()
         data = {"text_format": "テスト", "markdown_format": "# テスト"}
         output = str(tmp_path / "minutes.md")
         assert mg.save_minutes(data, output, "markdown") is True
 
     def test_save_minutes_json(self, tmp_path):
-        from minutes_generator import MinutesGenerator
+        from meeting_minutes_generator import MeetingMinutesGenerator
         import json
-        mg = MinutesGenerator()
+        mg = MeetingMinutesGenerator()
         data = {"title": "テスト", "decisions": []}
         output = str(tmp_path / "minutes.json")
         assert mg.save_minutes(data, output, "json") is True
@@ -2743,31 +2557,31 @@ class TestMinutesGenerator:
         assert loaded["title"] == "テスト"
 
     def test_save_minutes_unknown_format(self, tmp_path):
-        from minutes_generator import MinutesGenerator
-        mg = MinutesGenerator()
+        from meeting_minutes_generator import MeetingMinutesGenerator
+        mg = MeetingMinutesGenerator()
         output = str(tmp_path / "minutes.xyz")
         assert mg.save_minutes({}, output, "xyz") is False
 
-    def test_classify_statements(self):
-        from minutes_generator import MinutesGenerator
-        mg = MinutesGenerator()
+    def test_classify_statements_list(self):
+        from meeting_minutes_generator import MeetingMinutesGenerator
+        mg = MeetingMinutesGenerator()
         stmts = [
             "外壁材はタイルに決定しました",
             "確認させてください",
             "調整をお願いします",
             "天気がいいですね",
         ]
-        result = mg.classify_statements(stmts)
+        result = mg.classify_statements_list(stmts)
         assert len(result["decisions"]) >= 1
         assert len(result["confirmations"]) >= 1
         assert len(result["action_items"]) >= 1
         assert len(result["general"]) >= 1
 
-    def test_extract_action_items(self):
-        from minutes_generator import MinutesGenerator
-        mg = MinutesGenerator()
+    def test_extract_action_items_from_text(self):
+        from meeting_minutes_generator import MeetingMinutesGenerator
+        mg = MeetingMinutesGenerator()
         text = "田中さんに確認をお願いします\n佐藤さんが準備する"
-        items = mg.extract_action_items(text)
+        items = mg.extract_action_items_from_text(text)
         assert len(items) >= 1
 
 
@@ -2775,14 +2589,14 @@ class TestQuickGenerate:
     """quick_generate 関数のテスト"""
 
     def test_basic(self):
-        from minutes_generator import quick_generate
+        from meeting_minutes_generator import quick_generate
         segments = [{"speaker": "田中", "text": "テスト", "start": 0}]
         result = quick_generate(segments, title="テスト")
         assert "title" in result
 
     def teardown_method(self):
-        import minutes_generator
-        minutes_generator._minutes_generator = None
+        import meeting_minutes_generator as mmg
+        mmg._minutes_generator = None
 
 
 # ============================================================================

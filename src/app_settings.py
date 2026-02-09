@@ -136,14 +136,15 @@ class AppSettings:
         """アプリケーション終了時のクリーンアップ"""
         try:
             self.save_immediate()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to save settings during shutdown: {e}", exc_info=True)
 
     def __del__(self):
         """デストラクタ：保留中のタイマーをクリーンアップ"""
         try:
             self.cancel_pending_save()
         except Exception:
+            # デストラクタではロガーが利用不可の場合がある
             pass
 
     def _validate_key(self, key: str) -> None:

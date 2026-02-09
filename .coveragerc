@@ -21,7 +21,6 @@ omit =
     */vocabulary_dialog.py
     */dark_theme.py
     */folder_monitor.py
-    */meeting_mode.py
     */faster_whisper_engine.py
     */transcription_engine.py
     */llm_corrector_standalone.py

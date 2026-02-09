@@ -4,6 +4,7 @@
 
 import logging
 import os
+import re
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -113,3 +114,133 @@ def validate_segments(segments: List[Dict], max_count: int = MAX_EXPORT_SEGMENTS
         raise TypeError("Segments must be a list")
     if len(segments) > max_count:
         raise ValueError(f"Too many segments: {len(segments)} > {max_count}")
+
+
+# --- Segment manipulation ---
+
+
+def merge_short_segments(
+    segments: List[Dict],
+    min_duration: float = 1.0,
+    max_chars: int = 40,
+) -> List[Dict]:
+    """
+    短いセグメントをマージして見やすくする（話者情報対応）
+
+    Args:
+        segments: 元のセグメントリスト
+        min_duration: 最小表示時間（秒）
+        max_chars: 最大文字数
+
+    Returns:
+        マージ済みセグメントリスト
+    """
+    if not segments:
+        return []
+
+    merged = []
+    current = None
+
+    for segment in segments:
+        seg_start = segment.get("start", 0)
+        seg_end = segment.get("end", 0)
+        seg_text = segment.get("text", "").strip()
+
+        if current is None:
+            current = {
+                "start": seg_start,
+                "end": seg_end,
+                "text": seg_text,
+                "speaker": segment.get("speaker"),
+            }
+            continue
+
+        duration = seg_end - current["start"]
+        combined_text = current["text"] + " " + seg_text
+
+        same_speaker = segment.get("speaker") == current.get("speaker")
+        can_merge = (
+            duration < min_duration
+            and len(combined_text) <= max_chars
+            and same_speaker
+        )
+
+        if can_merge:
+            current["end"] = seg_end
+            current["text"] = combined_text
+        else:
+            merged.append(current)
+            current = {
+                "start": seg_start,
+                "end": seg_end,
+                "text": seg_text,
+                "speaker": segment.get("speaker"),
+            }
+
+    if current:
+        merged.append(current)
+
+    return merged
+
+
+def split_long_segments(
+    segments: List[Dict],
+    max_chars: int = 40,
+    max_duration: float = 5.0,
+) -> List[Dict]:
+    """
+    長いセグメントを分割（話者情報保持）
+
+    Args:
+        segments: 元のセグメントリスト
+        max_chars: 最大文字数
+        max_duration: 最大表示時間（秒）
+
+    Returns:
+        分割済みセグメントリスト
+    """
+    result = []
+
+    for segment in segments:
+        text = segment.get("text", "").strip()
+        start = segment.get("start", 0)
+        end = segment.get("end", 0)
+        duration = end - start
+
+        if len(text) <= max_chars and duration <= max_duration:
+            result.append(segment)
+            continue
+
+        # 文で分割
+        sentences = re.split(r'([。！？\.!?])', text)
+        sentences = [s for s in sentences if s]
+
+        current_text = ""
+        current_start = start
+        time_per_char = duration / len(text) if text else 0
+
+        for sentence in sentences:
+            if not current_text:
+                current_text = sentence
+            elif len(current_text) + len(sentence) <= max_chars:
+                current_text += sentence
+            else:
+                current_end = current_start + (len(current_text) * time_per_char)
+                result.append({
+                    "start": current_start,
+                    "end": min(current_end, end),
+                    "text": current_text,
+                    "speaker": segment.get("speaker"),
+                })
+                current_text = sentence
+                current_start = current_end
+
+        if current_text:
+            result.append({
+                "start": current_start,
+                "end": end,
+                "text": current_text,
+                "speaker": segment.get("speaker"),
+            })
+
+    return result

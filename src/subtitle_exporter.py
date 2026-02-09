@@ -4,12 +4,15 @@ SRT/VTT形式の字幕ファイル生成
 """
 
 import html
-import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
 from time_utils import format_time_srt, format_time_vtt
-from export.common import atomic_write_text
+from export.common import (
+    atomic_write_text,
+    merge_short_segments as _merge_short_segments,
+    split_long_segments as _split_long_segments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -188,121 +191,15 @@ class SubtitleExporter:
                             segments: List[Dict[str, Any]],
                             min_duration: float = 1.0,
                             max_chars: int = 40) -> List[Dict[str, Any]]:
-        """
-        短いセグメントをマージして見やすくする
-
-        Args:
-            segments: 元のセグメントリスト
-            min_duration: 最小表示時間（秒）
-            max_chars: 最大文字数
-
-        Returns:
-            マージ済みセグメントリスト
-        """
-        if not segments:
-            return []
-
-        merged = []
-        current_segment = None
-
-        for segment in segments:
-            seg_start = segment.get("start", 0)
-            seg_end = segment.get("end", 0)
-            seg_text = segment.get("text", "").strip()
-
-            if current_segment is None:
-                current_segment = {
-                    "start": seg_start,
-                    "end": seg_end,
-                    "text": seg_text
-                }
-                continue
-
-            duration = seg_end - current_segment["start"]
-            combined_text = current_segment["text"] + " " + seg_text
-
-            # マージ条件:
-            # 1. 現在のセグメントがmin_duration未満
-            # 2. 結合後の文字数がmax_chars未満
-            if duration < min_duration and len(combined_text) <= max_chars:
-                current_segment["end"] = seg_end
-                current_segment["text"] = combined_text
-            else:
-                merged.append(current_segment)
-                current_segment = {
-                    "start": seg_start,
-                    "end": seg_end,
-                    "text": seg_text
-                }
-
-        # 最後のセグメントを追加
-        if current_segment:
-            merged.append(current_segment)
-
-        return merged
+        """短いセグメントをマージして見やすくする"""
+        return _merge_short_segments(segments, min_duration, max_chars)
 
     def split_long_segments(self,
                            segments: List[Dict[str, Any]],
                            max_chars: int = 40,
                            max_duration: float = 5.0) -> List[Dict[str, Any]]:
-        """
-        長いセグメントを分割
-
-        Args:
-            segments: 元のセグメントリスト
-            max_chars: 最大文字数
-            max_duration: 最大表示時間（秒）
-
-        Returns:
-            分割済みセグメントリスト
-        """
-        result = []
-
-        for segment in segments:
-            text = segment.get("text", "").strip()
-            start = segment.get("start", 0)
-            end = segment.get("end", 0)
-            duration = end - start
-
-            # 分割が必要かチェック
-            if len(text) <= max_chars and duration <= max_duration:
-                result.append(segment)
-                continue
-
-            # 文で分割
-            sentences = re.split(r'([。！？])', text)
-            sentences = [s for s in sentences if s]
-
-            # 文を結合して適切な長さに
-            current_text = ""
-            current_start = start
-            time_per_char = duration / len(text) if text else 0
-
-            for i, sentence in enumerate(sentences):
-                if not current_text:
-                    current_text = sentence
-                elif len(current_text) + len(sentence) <= max_chars:
-                    current_text += sentence
-                else:
-                    # セグメントを確定
-                    current_end = current_start + (len(current_text) * time_per_char)
-                    result.append({
-                        "start": current_start,
-                        "end": min(current_end, end),
-                        "text": current_text
-                    })
-                    current_text = sentence
-                    current_start = current_end
-
-            # 最後のセグメント
-            if current_text:
-                result.append({
-                    "start": current_start,
-                    "end": end,
-                    "text": current_text
-                })
-
-        return result
+        """長いセグメントを分割"""
+        return _split_long_segments(segments, max_chars, max_duration)
 
     def export_auto(self,
                    segments: List[Dict[str, Any]],
