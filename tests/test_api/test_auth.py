@@ -16,15 +16,18 @@ except ImportError:
 
 try:
     from api.main import app
-    from api.auth import API_TOKEN
+    from api.auth import get_token_manager
     APP_AVAILABLE = True
 except ImportError:
     APP_AVAILABLE = False
-    API_TOKEN = ""
 
 
 def _auth_headers():
-    return {"Authorization": f"Bearer {API_TOKEN}"}
+    if APP_AVAILABLE:
+        token_manager = get_token_manager()
+        token = token_manager.get_current_token()
+        return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": "Bearer invalid_token"}
 
 
 @pytest.mark.skipif(not HTTPX_AVAILABLE, reason="httpx not installed")
@@ -69,7 +72,9 @@ class TestAuthMiddleware:
     async def test_malformed_auth_header_returns_401(self):
         """Bearer プレフィックスなしのAuthorizationヘッダーで401"""
         transport = ASGITransport(app=app)
-        headers = {"Authorization": f"Token {API_TOKEN}"}
+        token_manager = get_token_manager()
+        token = token_manager.get_current_token()
+        headers = {"Authorization": f"Token {token}"}
         async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as client:
             response = await client.get("/api/settings")
             assert response.status_code == 401

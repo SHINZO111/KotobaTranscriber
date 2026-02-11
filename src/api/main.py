@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.auth import TokenAuthMiddleware, API_TOKEN
+from api.auth import TokenAuthMiddleware, get_token_manager
 from api.event_bus import get_event_bus
 from api.websocket import manager
 from api.routers import (
@@ -43,6 +43,12 @@ async def lifespan(app: FastAPI):
         loop = asyncio.get_running_loop()
         bus = get_event_bus()
         bus.set_loop(loop)
+
+        # TokenManager 初期化
+        token_manager = get_token_manager()
+        current_token = token_manager.get_current_token()
+        logger.info(f"TokenManager initialized (TTL: {token_manager._ttl_seconds}s)")
+
         logger.info("KotobaTranscriber API started")
     except Exception as e:
         logger.error(f"EventBus initialization failed: {e}")
@@ -173,10 +179,12 @@ def main():
 
     async def startup_with_port_notify(*args, **kwargs):
         await original_startup(*args, **kwargs)
+        token_manager = get_token_manager()
+        current_token = token_manager.get_current_token()
         for s in server.servers:
             for sock in s.sockets:
                 addr = sock.getsockname()
-                port_info = {"port": addr[1], "host": addr[0], "token": API_TOKEN}
+                port_info = {"port": addr[1], "host": addr[0], "token": current_token}
                 print(json.dumps(port_info), flush=True)
                 return
 

@@ -605,12 +605,14 @@ class TestExportExtensionValidation:
             pytest.skip("httpx not installed")
         try:
             from api.main import app
-            from api.auth import API_TOKEN
+            from api.auth import get_token_manager
         except ImportError:
             pytest.skip("FastAPI app not importable")
 
+        token_manager = get_token_manager()
+        token = token_manager.get_current_token()
         transport = ASGITransport(app=app)
-        headers = {"Authorization": f"Bearer {API_TOKEN}"}
+        headers = {"Authorization": f"Bearer {token}"}
         async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as client:
             response = await client.post(
                 "/api/export/srt",

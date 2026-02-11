@@ -11,14 +11,27 @@ if src_dir not in sys.path:
 
 # API認証トークン（テスト用）
 try:
-    from api.auth import API_TOKEN
+    from api.auth import get_token_manager, _reset_token_manager_for_test
+    TOKEN_MANAGER_AVAILABLE = True
 except ImportError:
-    API_TOKEN = ""
+    TOKEN_MANAGER_AVAILABLE = False
 
 
 def auth_headers():
     """テスト用認証ヘッダーを返すヘルパー"""
-    return {"Authorization": f"Bearer {API_TOKEN}"}
+    if TOKEN_MANAGER_AVAILABLE:
+        token_manager = get_token_manager()
+        token = token_manager.get_current_token()
+        return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": "Bearer invalid_token"}
+
+
+@pytest.fixture(autouse=True)
+def reset_token_manager():
+    """各テスト前にTokenManagerをリセット（autouse=Trueで全テストに適用）"""
+    if TOKEN_MANAGER_AVAILABLE:
+        _reset_token_manager_for_test()
+    yield
 
 
 @pytest.fixture

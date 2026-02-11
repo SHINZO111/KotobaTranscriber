@@ -35,11 +35,10 @@ except ImportError:
 
 try:
     from api.main import app
-    from api.auth import API_TOKEN
+    from api.auth import get_token_manager
     APP_AVAILABLE = True
 except ImportError:
     APP_AVAILABLE = False
-    API_TOKEN = ""
 
 try:
     from api.event_bus import EventBus
@@ -184,7 +183,11 @@ class TestSchemaEdgeCases:
 
 def _auth_headers():
     """テスト用認証ヘッダーを返す"""
-    return {"Authorization": f"Bearer {API_TOKEN}"}
+    if APP_AVAILABLE:
+        token_manager = get_token_manager()
+        token = token_manager.get_current_token()
+        return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": "Bearer invalid_token"}
 
 
 @pytest.mark.skipif(not HTTPX_AVAILABLE, reason="httpx not installed")
