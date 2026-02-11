@@ -42,7 +42,7 @@ class MonitorUIConstants(SharedConstants):
     """モニターアプリ固有のUI定数"""
     # 監視間隔範囲
     MONITOR_INTERVAL_MIN = 5
-    MONITOR_INTERVAL_MAX = 60
+    MONITOR_INTERVAL_MAX = 9999  # 上限なし（実質無制限）
     MONITOR_INTERVAL_DEFAULT = 10
 
     # ウィンドウサイズ制限

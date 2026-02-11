@@ -197,6 +197,23 @@ class FolderMonitorService(threading.Thread):
         logger.info(f"Folder monitoring started: {self.folder_path}")
         self._bus.emit("status_update", {"status": f"フォルダ監視開始: {self.folder_path}"})
 
+        # 起動時に即座に全ファイルスキャン
+        try:
+            logger.info("Initial scan: checking all files in folder")
+            unprocessed_files = self.get_unprocessed_files()
+
+            if unprocessed_files:
+                logger.info(f"Initial scan: found {len(unprocessed_files)} unprocessed files")
+                self._bus.emit("status_update", {
+                    "status": f"初回スキャン: {len(unprocessed_files)}個の未処理ファイルを検出"
+                })
+                self._bus.emit("new_files_detected", {"files": unprocessed_files})
+            else:
+                logger.info("Initial scan: no unprocessed files found")
+                self._bus.emit("status_update", {"status": "初回スキャン: 未処理ファイルなし"})
+        except Exception as e:
+            logger.error(f"Error in initial scan: {e}")
+
         while not self._stop_event.is_set():
             try:
                 unprocessed_files = self.get_unprocessed_files()

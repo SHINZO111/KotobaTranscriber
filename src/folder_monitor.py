@@ -234,9 +234,24 @@ class FolderMonitor(QThread):
         logger.info(f"Folder monitoring started: {self.folder_path}")
         self.status_update.emit(f"フォルダ監視開始: {self.folder_path}")
 
+        # 起動時に即座に全ファイルスキャン
+        try:
+            logger.info("Initial scan: checking all files in folder")
+            unprocessed_files = self.get_unprocessed_files()
+
+            if unprocessed_files:
+                logger.info(f"Initial scan: found {len(unprocessed_files)} unprocessed files")
+                self.status_update.emit(f"初回スキャン: {len(unprocessed_files)}個の未処理ファイルを検出")
+                self.new_files_detected.emit(unprocessed_files)
+            else:
+                logger.info("Initial scan: no unprocessed files found")
+                self.status_update.emit("初回スキャン: 未処理ファイルなし")
+        except Exception as e:
+            logger.error(f"Error in initial scan: {e}")
+
         while not self._stop_event.is_set():
             try:
-                # 未処理ファイルをチェック
+                # 定期的に未処理ファイルをチェック
                 unprocessed_files = self.get_unprocessed_files()
 
                 if unprocessed_files:

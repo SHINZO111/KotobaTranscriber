@@ -138,7 +138,7 @@ class ExportResponse(BaseModel):
 class MonitorRequest(BaseModel):
     """フォルダ監視リクエスト"""
     folder_path: str = Field(..., description="監視フォルダパス")
-    check_interval: int = Field(10, ge=5, le=60, description="チェック間隔（秒）")
+    check_interval: int = Field(10, ge=5, le=9999, description="チェック間隔（秒、上限なし）")
     enable_diarization: bool = Field(False, description="話者分離を有効にする")
     auto_move: bool = Field(False, description="完了ファイルを自動移動")
     completed_folder: Optional[str] = Field(None, description="完了フォルダパス")
