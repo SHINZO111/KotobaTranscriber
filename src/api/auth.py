@@ -50,6 +50,47 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
 
 
 def verify_websocket_token(websocket: WebSocket) -> bool:
-    """WebSocket接続時のトークン検証（クエリパラメータ ?token=xxx）"""
+    """
+    WebSocket接続時のトークン検証（クエリパラメータ ?token=xxx）
+
+    ⚠️ DEPRECATED: クエリパラメータはURL履歴に記録されるため非推奨。
+    代わりに verify_websocket_token_from_header() を使用してください。
+    """
     token = websocket.query_params.get("token", "")
+    return secrets.compare_digest(token, API_TOKEN)
+
+
+def verify_websocket_token_from_header(websocket: WebSocket) -> bool:
+    """
+    WebSocket接続時のトークン検証（Authorizationヘッダ）
+
+    ハンドシェイク時の初期HTTPリクエストから Authorization: Bearer <token> ヘッダを検証します。
+    クエリパラメータ方式と異なり、トークンがURL履歴やプロキシログに記録されません。
+
+    Args:
+        websocket: WebSocket接続オブジェクト
+
+    Returns:
+        bool: トークンが有効な場合True、無効な場合False
+
+    Examples:
+        >>> # 正しい使用例
+        >>> if not verify_websocket_token_from_header(websocket):
+        >>>     await websocket.close(code=1008, reason="Authentication required")
+        >>>     return False
+    """
+    auth_header = websocket.headers.get("authorization", "")
+
+    # Bearer プレフィックスチェック（大文字小文字区別あり）
+    if not auth_header.startswith("Bearer "):
+        return False
+
+    # トークン抽出とstrip
+    token = auth_header[7:].strip()
+
+    # トークン長チェック（最小20文字）
+    if not token or len(token) < 20:
+        return False
+
+    # 定数時間比較
     return secrets.compare_digest(token, API_TOKEN)

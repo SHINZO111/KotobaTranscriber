@@ -9,6 +9,8 @@ from typing import Set
 
 from fastapi import WebSocket
 
+from .auth import verify_websocket_token_from_header
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,11 +23,23 @@ class ConnectionManager:
         self.active_connections: Set[WebSocket] = set()
 
     async def connect(self, websocket: WebSocket) -> bool:
-        """新しいWebSocket接続を受け入れ。成功時True、拒否時False。"""
+        """
+        新しいWebSocket接続を受け入れ。成功時True、拒否時False。
+
+        認証チェック（Authorizationヘッダ）を実施後、接続数制限を確認します。
+        """
+        # 認証チェック（Authorizationヘッダ）
+        if not verify_websocket_token_from_header(websocket):
+            await websocket.close(code=1008, reason="Authentication required")
+            logger.warning("WebSocket rejected: invalid or missing authorization")
+            return False
+
+        # 接続数制限チェック
         if len(self.active_connections) >= self.MAX_CONNECTIONS:
             await websocket.close(code=1008, reason="Maximum connections reached")
             logger.warning(f"WebSocket rejected: max connections ({self.MAX_CONNECTIONS}) reached")
             return False
+
         await websocket.accept()
         self.active_connections.add(websocket)
         logger.info(f"WebSocket connected. Active: {len(self.active_connections)}")

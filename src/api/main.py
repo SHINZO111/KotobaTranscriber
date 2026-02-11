@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.auth import TokenAuthMiddleware, API_TOKEN, verify_websocket_token
+from api.auth import TokenAuthMiddleware, API_TOKEN
 from api.event_bus import get_event_bus
 from api.websocket import manager
 from api.routers import (
@@ -122,10 +122,11 @@ app.include_router(export.router, prefix="/api", tags=["export"])
 # WebSocket エンドポイント
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket接続 — EventBus からのイベントをリアルタイム配信"""
-    if not verify_websocket_token(websocket):
-        await websocket.close(code=4003, reason="Invalid token")
-        return
+    """
+    WebSocket接続 — EventBus からのイベントをリアルタイム配信
+
+    認証チェックは ConnectionManager.connect() 内で実施されます。
+    """
     accepted = await manager.connect(websocket)
     if not accepted:
         return

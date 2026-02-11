@@ -20,7 +20,7 @@ except ImportError:
 
 try:
     from api.main import app
-    from api.auth import API_TOKEN, verify_websocket_token
+    from api.auth import API_TOKEN, verify_websocket_token, verify_websocket_token_from_header
     APP_AVAILABLE = True
 except ImportError:
     APP_AVAILABLE = False
@@ -49,6 +49,7 @@ class TestWebSocketConnectionLimit:
         """制限内の接続は受け入れられる"""
         mgr = ConnectionManager()
         ws = AsyncMock()
+        ws.headers = {"authorization": f"Bearer {API_TOKEN}"}
         result = await mgr.connect(ws)
         assert result is True
         assert mgr.connection_count() == 1
@@ -62,6 +63,7 @@ class TestWebSocketConnectionLimit:
         connections = []
         for i in range(mgr.MAX_CONNECTIONS):
             ws = AsyncMock()
+            ws.headers = {"authorization": f"Bearer {API_TOKEN}"}
             await mgr.connect(ws)
             connections.append(ws)
 
@@ -69,6 +71,7 @@ class TestWebSocketConnectionLimit:
 
         # 制限超過 — 拒否される
         ws_over = AsyncMock()
+        ws_over.headers = {"authorization": f"Bearer {API_TOKEN}"}
         result = await mgr.connect(ws_over)
         assert result is False
         ws_over.close.assert_awaited_once_with(code=1008, reason="Maximum connections reached")
@@ -82,6 +85,7 @@ class TestWebSocketConnectionLimit:
         connections = []
         for i in range(mgr.MAX_CONNECTIONS):
             ws = AsyncMock()
+            ws.headers = {"authorization": f"Bearer {API_TOKEN}"}
             await mgr.connect(ws)
             connections.append(ws)
 
@@ -91,6 +95,7 @@ class TestWebSocketConnectionLimit:
 
         # 新しい接続が受け入れられる
         ws_new = AsyncMock()
+        ws_new.headers = {"authorization": f"Bearer {API_TOKEN}"}
         await mgr.connect(ws_new)
         ws_new.accept.assert_awaited_once()
         assert mgr.connection_count() == mgr.MAX_CONNECTIONS
@@ -101,7 +106,9 @@ class TestWebSocketConnectionLimit:
         mgr = ConnectionManager()
 
         ws_good = AsyncMock()
+        ws_good.headers = {"authorization": f"Bearer {API_TOKEN}"}
         ws_bad = AsyncMock()
+        ws_bad.headers = {"authorization": f"Bearer {API_TOKEN}"}
         ws_bad.send_text.side_effect = Exception("connection lost")
 
         await mgr.connect(ws_good)
@@ -116,6 +123,7 @@ class TestWebSocketConnectionLimit:
         """同じ接続の複数回disconnectはエラーにならない"""
         mgr = ConnectionManager()
         ws = AsyncMock()
+        ws.headers = {"authorization": f"Bearer {API_TOKEN}"}
         await mgr.connect(ws)
         mgr.disconnect(ws)
         mgr.disconnect(ws)  # 2回目もエラーにならない
@@ -123,12 +131,12 @@ class TestWebSocketConnectionLimit:
 
 
 # ============================================================
-# WebSocket トークン検証テスト
+# WebSocket トークン検証テスト（旧クエリパラメータ版 - 非推奨）
 # ============================================================
 
 @pytest.mark.skipif(not APP_AVAILABLE, reason="FastAPI app not importable")
 class TestWebSocketTokenVerification:
-    """WebSocket トークン検証のテスト"""
+    """WebSocket トークン検証のテスト（旧クエリパラメータ版）"""
 
     def test_verify_valid_token(self):
         """正しいトークンでTrue"""
@@ -153,6 +161,161 @@ class TestWebSocketTokenVerification:
         ws = MagicMock()
         ws.query_params = {}
         assert verify_websocket_token(ws) is False
+
+
+# ============================================================
+# WebSocket トークン検証テスト（新Authorizationヘッダ版）
+# ============================================================
+
+@pytest.mark.skipif(not APP_AVAILABLE, reason="FastAPI app not importable")
+class TestWebSocketTokenVerificationFromHeader:
+    """WebSocket トークン検証のテスト（Authorizationヘッダ版）"""
+
+    def test_verify_valid_token_from_header(self):
+        """正しいBearerトークンでTrue"""
+        from api.auth import verify_websocket_token_from_header
+        ws = MagicMock()
+        ws.headers = {"authorization": f"Bearer {API_TOKEN}"}
+        assert verify_websocket_token_from_header(ws) is True
+
+    def test_verify_invalid_token_from_header(self):
+        """不正なトークンでFalse"""
+        from api.auth import verify_websocket_token_from_header
+        ws = MagicMock()
+        ws.headers = {"authorization": "Bearer invalid_token_xyz"}
+        assert verify_websocket_token_from_header(ws) is False
+
+    def test_verify_missing_authorization_header(self):
+        """AuthorizationヘッダなしでFalse"""
+        from api.auth import verify_websocket_token_from_header
+        ws = MagicMock()
+        ws.headers = {}
+        assert verify_websocket_token_from_header(ws) is False
+
+    def test_verify_empty_bearer_token(self):
+        """空のBearerトークンでFalse"""
+        from api.auth import verify_websocket_token_from_header
+        ws = MagicMock()
+        ws.headers = {"authorization": "Bearer "}
+        assert verify_websocket_token_from_header(ws) is False
+
+    def test_verify_no_bearer_prefix(self):
+        """BearerプレフィックスなしでFalse"""
+        from api.auth import verify_websocket_token_from_header
+        ws = MagicMock()
+        ws.headers = {"authorization": API_TOKEN}
+        assert verify_websocket_token_from_header(ws) is False
+
+    def test_verify_lowercase_bearer_prefix(self):
+        """小文字bearerプレフィックスでFalse（大文字小文字区別）"""
+        from api.auth import verify_websocket_token_from_header
+        ws = MagicMock()
+        ws.headers = {"authorization": f"bearer {API_TOKEN}"}
+        assert verify_websocket_token_from_header(ws) is False
+
+    def test_verify_short_token(self):
+        """トークン長不足でFalse（20文字未満）"""
+        from api.auth import verify_websocket_token_from_header
+        ws = MagicMock()
+        ws.headers = {"authorization": "Bearer short"}
+        assert verify_websocket_token_from_header(ws) is False
+
+    def test_verify_token_with_whitespace(self):
+        """トークンに前後スペースがあってもstrip処理される"""
+        from api.auth import verify_websocket_token_from_header
+        ws = MagicMock()
+        ws.headers = {"authorization": f"Bearer  {API_TOKEN}  "}
+        # strip()されるので正しいトークンとして扱われる
+        assert verify_websocket_token_from_header(ws) is True
+
+
+# ============================================================
+# WebSocket接続の統合テスト（Authorizationヘッダ認証）
+# ============================================================
+
+@pytest.mark.skipif(not APP_AVAILABLE, reason="FastAPI app not importable")
+class TestWebSocketConnectionWithAuth:
+    """WebSocket接続時の認証統合テスト"""
+
+    @pytest.mark.asyncio
+    async def test_connect_with_valid_authorization_header(self):
+        """正しいAuthorizationヘッダで接続成功"""
+        from api.websocket import ConnectionManager
+        ws = AsyncMock()
+        ws.headers = {"authorization": f"Bearer {API_TOKEN}"}
+
+        mgr = ConnectionManager()
+        result = await mgr.connect(ws)
+
+        assert result is True
+        ws.accept.assert_awaited_once()
+        assert mgr.connection_count() == 1
+
+    @pytest.mark.asyncio
+    async def test_connect_without_authorization_header(self):
+        """Authorizationヘッダなしで接続拒否"""
+        from api.websocket import ConnectionManager
+        ws = AsyncMock()
+        ws.headers = {}
+
+        mgr = ConnectionManager()
+        result = await mgr.connect(ws)
+
+        assert result is False
+        ws.close.assert_awaited_once_with(code=1008, reason="Authentication required")
+        ws.accept.assert_not_awaited()
+        assert mgr.connection_count() == 0
+
+    @pytest.mark.asyncio
+    async def test_connect_with_invalid_token(self):
+        """不正なトークンで接続拒否"""
+        from api.websocket import ConnectionManager
+        ws = AsyncMock()
+        ws.headers = {"authorization": "Bearer invalid_token_xyz"}
+
+        mgr = ConnectionManager()
+        result = await mgr.connect(ws)
+
+        assert result is False
+        ws.close.assert_awaited_once_with(code=1008, reason="Authentication required")
+        ws.accept.assert_not_awaited()
+        assert mgr.connection_count() == 0
+
+    @pytest.mark.asyncio
+    async def test_connect_with_no_bearer_prefix(self):
+        """BearerプレフィックスなしのAuthorizationヘッダで接続拒否"""
+        from api.websocket import ConnectionManager
+        ws = AsyncMock()
+        ws.headers = {"authorization": API_TOKEN}
+
+        mgr = ConnectionManager()
+        result = await mgr.connect(ws)
+
+        assert result is False
+        ws.close.assert_awaited_once_with(code=1008, reason="Authentication required")
+        ws.accept.assert_not_awaited()
+        assert mgr.connection_count() == 0
+
+    @pytest.mark.asyncio
+    async def test_auth_checked_before_connection_limit(self):
+        """認証チェックが接続数制限より先に実行される"""
+        from api.websocket import ConnectionManager
+        mgr = ConnectionManager()
+
+        # 制限まで有効な接続を追加
+        for i in range(mgr.MAX_CONNECTIONS):
+            ws_valid = AsyncMock()
+            ws_valid.headers = {"authorization": f"Bearer {API_TOKEN}"}
+            await mgr.connect(ws_valid)
+
+        # 認証なしで接続試行 — 認証エラーが先に発生
+        ws_no_auth = AsyncMock()
+        ws_no_auth.headers = {}
+        result = await mgr.connect(ws_no_auth)
+
+        assert result is False
+        ws_no_auth.close.assert_awaited_once_with(code=1008, reason="Authentication required")
+        # "Maximum connections reached" ではなく "Authentication required" が理由
 
 
 # ============================================================
