@@ -28,7 +28,7 @@ except ImportError:
     logging.warning("watchdog not available, falling back to polling")
 
 from PySide6.QtCore import QObject, Signal, QTimer
-from workers import SharedConstants
+from constants import SharedConstants
 
 logger = logging.getLogger(__name__)
 

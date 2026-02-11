@@ -11,7 +11,7 @@ import threading
 from typing import List, Set, Callable
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
-from workers import SharedConstants
+from constants import SharedConstants
 
 logger = logging.getLogger(__name__)
 
