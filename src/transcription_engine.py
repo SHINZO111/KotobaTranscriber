@@ -440,11 +440,6 @@ class TranscriptionEngine(BaseTranscriptionEngine):
             logger.error(f"Chunk length validation failed: {e}")
             raise
 
-        # CRITICAL: スレッドセーフなモデルロードチェック（TOCTOU脆弱性を回避）
-        with self._model_lock:
-            if self.model is None:
-                self.load_model()
-
         # 動画ファイルの場合: ffmpegで音声抽出（ASCII safe WAVに変換）
         # 音声ファイルで非ASCIIパスの場合: 一時ファイルにコピー
         temp_ascii_path = None
@@ -534,8 +529,14 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                     generate_kwargs["initial_prompt"] = prompt
                     logger.info(f"Using hotwords prompt: {prompt[:100]}...")
 
-            # CRITICAL: モデル推論は排他制御が必要（PyTorchモデルの内部状態保護）
+            # CRITICAL: モデルロード〜推論をアトミックに実行（PyTorchモデルの内部状態保護）
+            # RLockにより load_model() 内での再入は安全
             with self._model_lock:
+                # モデル未ロードなら load_model() を呼び出す（ダブルチェックロッキング）
+                if self.model is None:
+                    self.load_model()
+
+                # 推論実行（ロック保持したまま）
                 result = self.model(
                     str(processed_audio_path),  # Pathオブジェクトを文字列に変換
                     chunk_length_s=chunk_length_s,
@@ -562,9 +563,10 @@ class TranscriptionEngine(BaseTranscriptionEngine):
 
         finally:
             # CUDAメモリキャッシュをクリア（メモリリーク防止）
+            # ロック外で実行（性能のため）
             if self.device == "cuda" and torch.cuda.is_available():
                 torch.cuda.empty_cache()
-                logger.info("CUDA cache cleared")
+                logger.debug("CUDA cache cleared")
 
             # 一時ファイルの削除（すべての一時ファイルをクリーンアップ）
             with self._temp_files_lock:
