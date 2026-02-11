@@ -5,6 +5,7 @@
 
 import logging
 import threading
+import time as _time
 import numpy as np
 from typing import Optional, Callable
 from PySide6.QtWidgets import (
@@ -68,10 +69,13 @@ class RealtimeTranscriptionWorker(QThread):
         self.vad = None
 
         # バッファ（最大60秒分でメモリを制限）
-        self.audio_buffer = []
         self._buffer_lock = threading.Lock()
         self.buffer_samples = int(sample_rate * buffer_duration)
         self._max_buffer_samples = sample_rate * 60
+        # NumPyリングバッファ: float32 (4B/要素) vs Pythonリスト (28B/要素) で約7倍メモリ効率改善
+        self._ring_buffer = np.zeros(self._max_buffer_samples, dtype=np.float32)
+        self._write_pos = 0  # 現在のバッファ内有効サンプル数（兼書き込みポインタ）
+        self._last_volume_emit = 0.0  # volume_changed スロットリング用
 
     def initialize(self) -> bool:
         """エンジンとオーディオを初期化"""
@@ -149,28 +153,45 @@ class RealtimeTranscriptionWorker(QThread):
                         audio_chunk = np.frombuffer(data, dtype=np.int16)
                         audio_float = audio_chunk.astype(np.float32) / 32768.0
 
-                        # 音量レベル計算
+                        # 音量レベル計算（~10Hz にスロットリング）
                         volume = np.abs(audio_float).mean()
-                        self.volume_changed.emit(float(volume))
+                        now = _time.monotonic()
+                        if now - self._last_volume_emit >= 0.1:
+                            self.volume_changed.emit(float(volume))
+                            self._last_volume_emit = now
 
-                        # バッファに追加（メモリ保護: 最大サイズを超えたら古いサンプルを破棄）
+                        # リングバッファに追加（メモリ保護: 最大サイズを超えたら古いサンプルを破棄）
                         with self._buffer_lock:
-                            self.audio_buffer.extend(audio_float)
-                            if len(self.audio_buffer) > self._max_buffer_samples:
-                                self.audio_buffer = self.audio_buffer[-self._max_buffer_samples:]
+                            n = len(audio_float)
+                            space = self._max_buffer_samples - self._write_pos
+                            if n <= space:
+                                self._ring_buffer[self._write_pos:self._write_pos + n] = audio_float
+                                self._write_pos += n
+                            else:
+                                # バッファが溢れる場合: 古いデータを捨てて末尾のみ保持
+                                if n >= self._max_buffer_samples:
+                                    # 新データだけでバッファ全体を超える場合
+                                    self._ring_buffer[:] = audio_float[-self._max_buffer_samples:]
+                                    self._write_pos = self._max_buffer_samples
+                                else:
+                                    # 既存データをシフトして新データを追加
+                                    keep = self._max_buffer_samples - n
+                                    self._ring_buffer[:keep] = self._ring_buffer[self._write_pos - keep:self._write_pos]
+                                    self._ring_buffer[keep:keep + n] = audio_float
+                                    self._write_pos = self._max_buffer_samples
 
                         # VADチェック
                         is_speech = self._check_vad(data)
 
                         # バッファが満タンまたは音声終了時に処理
                         with self._buffer_lock:
-                            buf_len = len(self.audio_buffer)
+                            buf_len = self._write_pos
                         if buf_len >= self.buffer_samples or (not is_speech and buf_len > self.sample_rate * 0.5):
                             if buf_len > self.sample_rate * 0.3:  # 最低0.3秒
                                 self._process_buffer()
                             else:
                                 with self._buffer_lock:
-                                    self.audio_buffer = []  # 短すぎる場合は破棄
+                                    self._write_pos = 0  # 短すぎる場合は破棄
 
                     except Exception as e:
                         logger.error(f"Audio processing error: {e}", exc_info=True)
@@ -215,11 +236,11 @@ class RealtimeTranscriptionWorker(QThread):
             return
 
         with self._buffer_lock:
-            if not self.audio_buffer:
+            if self._write_pos == 0:
                 return
-            # NumPy配列に変換してバッファをクリア
-            audio_data = np.array(self.audio_buffer, dtype=np.float32)
-            self.audio_buffer = []
+            # リングバッファから有効範囲をコピーしてクリア
+            audio_data = self._ring_buffer[:self._write_pos].copy()
+            self._write_pos = 0
 
         try:
             # 文字起こし

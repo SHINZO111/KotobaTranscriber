@@ -5,6 +5,7 @@ AGEC株式会社の建設業・CM業務に最適化された専門用語管理
 
 import logging
 import json
+import os
 import threading
 from pathlib import Path
 from typing import List, Dict, Optional, Set

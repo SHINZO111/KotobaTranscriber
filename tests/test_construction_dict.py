@@ -4,6 +4,7 @@
 
 import unittest
 import json
+import shutil
 import tempfile
 import os
 from pathlib import Path
@@ -26,9 +27,7 @@ class TestConstructionVocabulary(unittest.TestCase):
 
     def tearDown(self):
         """テスト後のクリーンアップ"""
-        if self.vocab_file.exists():
-            self.vocab_file.unlink()
-        os.rmdir(self.temp_dir)
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_initialization(self):
         """初期化テスト"""

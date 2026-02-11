@@ -268,7 +268,7 @@ if __name__ == "__main__":
     # テスト用コード
     logging.basicConfig(level=logging.INFO)
 
-    test_folder = r"F:\VoiceToText\KotobaTranscriber\test_watch"
+    test_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "test_watch")
     os.makedirs(test_folder, exist_ok=True)
 
     monitor = FolderMonitor(test_folder, check_interval=5)

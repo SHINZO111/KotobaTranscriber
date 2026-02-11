@@ -517,15 +517,15 @@ class TestPyQt5GUIStability(unittest.TestCase):
         if not self.qt_available:
             self.skipTest("Qt not available")
 
-        from PySide6.QtCore import QThread, Signal
+        from PySide6.QtCore import QThread, Signal, Qt
         import time
 
         class TestWorker(QThread):
-            finished = Signal(str)
+            done = Signal(str)
 
             def run(self):
                 time.sleep(0.1)
-                self.finished.emit("completed")
+                self.done.emit("completed")
 
         worker = TestWorker()
         result = []
@@ -533,9 +533,10 @@ class TestPyQt5GUIStability(unittest.TestCase):
         def on_finish(msg):
             result.append(msg)
 
-        worker.finished.connect(on_finish)
+        # DirectConnectionでイベントループ不要に
+        worker.done.connect(on_finish, Qt.ConnectionType.DirectConnection)
         worker.start()
-        worker.wait(1000)
+        worker.wait(2000)
 
         self.assertEqual(result, ["completed"])
         self.result.add_pass("Thread safety verified")

@@ -253,7 +253,7 @@ class TestRealtimeTab(unittest.TestCase):
 
         self.assertEqual(worker.model_size, "base")
         self.assertEqual(worker.device, "cpu")
-        self.assertFalse(worker.is_running)
+        self.assertFalse(worker.isRunning())
 
         logger.info("✓ Worker initialization test passed")
 

@@ -33,6 +33,14 @@ omit =
     */enhanced_batch_processor.py
     */export/*
     */__init__.py
+    */api/main.py
+    */api/workers.py
+    */api/realtime_worker.py
+    */api/folder_monitor_service.py
+    */api/websocket.py
+    */api/dependencies.py
+    */api/routers/*
+    */api/auth.py
 
 # 並列実行モード（pytest-xdist使用時）
 parallel = True

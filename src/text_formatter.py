@@ -467,20 +467,6 @@ class TextFormatter:
         result = RegexPatterns.REPEATED_WORDS.sub(r'\1', text)
         return result
 
-    def format_numbers(self, text: str) -> str:
-        """
-        数字の表記を統一
-
-        Args:
-            text: 入力テキスト
-
-        Returns:
-            数字が整形されたテキスト
-        """
-        # NOTE: NUMBER_SPACING pattern disabled - it incorrectly merges
-        # separate numbers (e.g., "10 20" → "1020", "3月 15日" → "315日")
-        return text
-
     def format_all(self, text: str,
                    remove_fillers: bool = True,
                    add_punctuation: bool = True,

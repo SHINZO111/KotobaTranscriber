@@ -368,7 +368,7 @@ class ErrorRecoveryManager:
 
 
 # デコレータ版
-class resilient:
+class Resilient:
     """
     エラー回復デコレータ
     
@@ -411,6 +411,10 @@ class resilient:
                 )
         
         return wrapper
+
+
+# 後方互換エイリアス
+resilient = Resilient
 
 
 if __name__ == "__main__":
@@ -462,7 +466,7 @@ if __name__ == "__main__":
     # デコレータテスト
     print("\n4. Decorator Test:")
     
-    @resilient(max_retries=2, fallback_value="Default")
+    @Resilient(max_retries=2, fallback_value="Default")
     def decorated_function(file_path: str):
         raise TimeoutError("Simulated timeout")
     

@@ -61,6 +61,8 @@ class MemoryOptimizer:
         self.critical_threshold = critical_threshold_mb
         self._baseline_memory = 0
         self._peak_memory = 0
+        # psutil.Process をキャッシュ（毎回生成のオーバーヘッド削減）
+        self._process = psutil.Process() if PSUTIL_AVAILABLE else None
     
     @contextmanager
     def optimized_inference(self, device: str = "cuda"):
@@ -131,8 +133,7 @@ class MemoryOptimizer:
                 system_percent=0, system_available_mb=0
             )
         
-        process = psutil.Process()
-        memory_info = process.memory_info()
+        memory_info = self._process.memory_info()
         system_memory = psutil.virtual_memory()
         
         status = MemoryStatus(

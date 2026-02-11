@@ -8,10 +8,12 @@
   "enable_llm_correction": true,
   "enable_preprocessing": false,
   "enable_vocabulary": false,
+  "dark_mode": false,
   "window": {
     "width": 280,
     "height": 450,
     "x": 100,
     "y": 100
-  }
+  },
+  "theme": "dark"
 }

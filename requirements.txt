@@ -27,8 +27,14 @@ scikit-learn>=1.0.0
 # Punctuation
 # punctuators  # 必要に応じてインストール
 
-# GUI (LGPL v3 - 商用利用可能)
+# GUI (LGPL v3 - 商用利用可能, 段階的移行中)
 PySide6>=6.5.0
+
+# Web API Backend (Tauri移行用)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+pydantic>=2.5.0
 
 # Utilities
 numpy>=1.24.0

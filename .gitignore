@@ -58,6 +58,11 @@ bandit-report.json
 *.egg-info/
 .eggs/
 
+# Environment / Secrets
+.env
+.env.*
+*.env
+
 # Temporary files
 *.tmp
 *.temp

@@ -113,10 +113,27 @@ class DarkTheme:
         QPushButton#primary {{
             background-color: {c['success']};
             color: {c['background']};
+            font-size: 11pt;
         }}
 
         QPushButton#primary:hover {{
             background-color: #5fd9c0;
+        }}
+
+        QPushButton#primary:disabled {{
+            background-color: {c['button_disabled']};
+            color: {c['text_disabled']};
+        }}
+
+        /* セカンダリボタン（アウトライン） */
+        QPushButton#secondary {{
+            background-color: transparent;
+            color: {c['accent']};
+            border: 2px solid {c['accent']};
+        }}
+
+        QPushButton#secondary:hover {{
+            background-color: {c['surface']};
         }}
 
         /* 警告ボタン（オレンジ） */
@@ -127,12 +144,26 @@ class DarkTheme:
 
         /* 危険ボタン（赤） */
         QPushButton#danger {{
+            background-color: transparent;
+            color: {c['error']};
+            border: 1px solid {c['error']};
+        }}
+
+        QPushButton#danger:hover {{
             background-color: {c['error']};
             color: white;
         }}
 
-        QPushButton#danger:hover {{
-            background-color: #ff5a5a;
+        /* フラットボタン（リンク風） */
+        QPushButton#flat {{
+            background-color: transparent;
+            color: {c['accent']};
+            border: none;
+            text-decoration: underline;
+        }}
+
+        QPushButton#flat:hover {{
+            color: {c['accent_hover']};
         }}
 
         /* ラインエディット */
@@ -493,17 +524,235 @@ class DarkTheme:
 
 
 class LightTheme:
-    """ライトテーマ（デフォルト）"""
+    """ライトテーマ — モダンなフラットデザイン"""
+
+    COLORS = {
+        "background": "#fafafa",
+        "surface": "#ffffff",
+        "elevated": "#f5f5f5",
+
+        "text_primary": "#212121",
+        "text_secondary": "#757575",
+        "text_disabled": "#bdbdbd",
+
+        "accent": "#1976d2",
+        "accent_hover": "#1565c0",
+        "accent_pressed": "#0d47a1",
+
+        "success": "#2e7d32",
+        "success_hover": "#1b5e20",
+        "warning": "#f57c00",
+        "error": "#d32f2f",
+        "error_hover": "#b71c1c",
+        "info": "#0288d1",
+
+        "border": "#e0e0e0",
+        "border_focus": "#1976d2",
+
+        "button_bg": "#1976d2",
+        "button_hover": "#1565c0",
+        "button_pressed": "#0d47a1",
+        "button_disabled": "#e0e0e0",
+    }
 
     @classmethod
     def get_stylesheet(cls) -> str:
         """ライトテーマ用スタイルシート"""
-        return """"""  # デフォルトを使用
+        c = cls.COLORS
+
+        return f"""
+        QWidget {{
+            font-family: "Segoe UI", "Meiryo UI", sans-serif;
+            font-size: 10pt;
+        }}
+
+        QMainWindow {{
+            background-color: {c['background']};
+        }}
+
+        QGroupBox {{
+            background-color: {c['surface']};
+            border: 1px solid {c['border']};
+            border-radius: 8px;
+            margin-top: 12px;
+            padding: 12px 8px 8px 8px;
+            font-weight: bold;
+            color: {c['text_primary']};
+        }}
+
+        QGroupBox::title {{
+            subcontrol-origin: margin;
+            left: 12px;
+            padding: 0 6px;
+            color: {c['accent']};
+            font-size: 10pt;
+        }}
+
+        QPushButton {{
+            background-color: {c['button_bg']};
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 20px;
+            font-weight: bold;
+            font-size: 10pt;
+        }}
+
+        QPushButton:hover {{
+            background-color: {c['button_hover']};
+        }}
+
+        QPushButton:pressed {{
+            background-color: {c['button_pressed']};
+        }}
+
+        QPushButton:disabled {{
+            background-color: {c['button_disabled']};
+            color: {c['text_disabled']};
+        }}
+
+        QPushButton#primary {{
+            background-color: {c['success']};
+            color: white;
+            font-size: 11pt;
+        }}
+
+        QPushButton#primary:hover {{
+            background-color: {c['success_hover']};
+        }}
+
+        QPushButton#primary:disabled {{
+            background-color: {c['button_disabled']};
+            color: {c['text_disabled']};
+        }}
+
+        QPushButton#secondary {{
+            background-color: {c['surface']};
+            color: {c['accent']};
+            border: 2px solid {c['accent']};
+        }}
+
+        QPushButton#secondary:hover {{
+            background-color: {c['elevated']};
+        }}
+
+        QPushButton#warning {{
+            background-color: {c['warning']};
+            color: white;
+        }}
+
+        QPushButton#warning:hover {{
+            background-color: #e65100;
+        }}
+
+        QPushButton#danger {{
+            background-color: transparent;
+            color: {c['error']};
+            border: 1px solid {c['error']};
+        }}
+
+        QPushButton#danger:hover {{
+            background-color: {c['error']};
+            color: white;
+        }}
+
+        QPushButton#flat {{
+            background-color: transparent;
+            color: {c['accent']};
+            border: none;
+            text-decoration: underline;
+        }}
+
+        QPushButton#flat:hover {{
+            color: {c['accent_hover']};
+        }}
+
+        QCheckBox {{
+            color: {c['text_primary']};
+            spacing: 8px;
+            font-size: 10pt;
+        }}
+
+        QCheckBox::indicator {{
+            width: 18px;
+            height: 18px;
+            border: 2px solid {c['border']};
+            border-radius: 4px;
+            background-color: {c['surface']};
+        }}
+
+        QCheckBox::indicator:checked {{
+            background-color: {c['accent']};
+            border: 2px solid {c['accent']};
+        }}
+
+        QCheckBox::indicator:hover {{
+            border: 2px solid {c['accent']};
+        }}
+
+        QLabel {{
+            color: {c['text_primary']};
+        }}
+
+        QLabel#subtitle {{
+            color: {c['text_secondary']};
+            font-size: 9pt;
+        }}
+
+        QListWidget {{
+            background-color: {c['surface']};
+            border: 1px solid {c['border']};
+            border-radius: 6px;
+            outline: none;
+        }}
+
+        QListWidget::item {{
+            padding: 6px 8px;
+            border-bottom: 1px solid {c['elevated']};
+        }}
+
+        QListWidget::item:selected {{
+            background-color: {c['accent']};
+            color: white;
+        }}
+
+        QProgressBar {{
+            border: none;
+            border-radius: 4px;
+            background-color: {c['elevated']};
+            text-align: center;
+        }}
+
+        QProgressBar::chunk {{
+            background-color: {c['accent']};
+            border-radius: 4px;
+        }}
+
+        QStatusBar {{
+            background-color: {c['surface']};
+            color: {c['text_secondary']};
+            border-top: 1px solid {c['border']};
+            font-size: 9pt;
+        }}
+
+        QStatusBar::item {{
+            border: none;
+        }}
+
+        QToolTip {{
+            background-color: {c['text_primary']};
+            color: {c['surface']};
+            border: none;
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 9pt;
+        }}
+        """
 
     @classmethod
     def apply(cls, app: QApplication):
         """ライトテーマを適用"""
-        app.setStyleSheet("")
+        app.setStyleSheet(cls.get_stylesheet())
         style = app.style()
         if style is not None:
             app.setPalette(style.standardPalette())

@@ -15,8 +15,14 @@ from datetime import datetime
 
 
 class ReleaseBuilder:
-    def __init__(self, version: str = "2.1.0"):
+    def __init__(self, version: str = "2.2.0", mode: str = "tauri"):
+        """
+        Args:
+            version: リリースバージョン
+            mode: "tauri" (新しい Tauri + FastAPI ビルド) or "legacy" (PySide6 ビルド)
+        """
         self.version = version
+        self.mode = mode
         self.project_root = Path(__file__).parent
         self.dist_dir = self.project_root / "dist"
         self.release_dir = self.project_root / "releases"
@@ -35,18 +41,17 @@ class ReleaseBuilder:
         color = colors.get(level, colors["INFO"])
         print(f"{color}[{timestamp}] [{level}] {message}{colors['RESET']}")
 
-    def run_command(self, command: list, description: str = ""):
+    def run_command(self, command: list, description: str = "", cwd: Path = None):
         """コマンドを実行"""
         if description:
             self.log(f"実行中: {description}")
         try:
-            # Windowsで正しく動作するように、シェルを使用
             result = subprocess.run(
                 command,
                 check=True,
                 capture_output=True,
                 text=True,
-                shell=True
+                cwd=str(cwd) if cwd else None,
             )
             if result.stdout:
                 self.log(result.stdout)
@@ -78,7 +83,10 @@ class ReleaseBuilder:
 
     def build_pyinstaller(self):
         """PyInstallerでビルド"""
-        self.log("PyInstallerでビルド中...", "INFO")
+        if self.mode == "tauri":
+            return self.build_backend_pyinstaller()
+
+        self.log("PyInstallerでビルド中 (レガシーモード)...", "INFO")
         self.log("(これには数分～数十分かかる場合があります)", "WARNING")
 
         spec_file = self.project_root / "build.spec"
@@ -93,6 +101,68 @@ class ReleaseBuilder:
             return False
 
         self.log("PyInstallerビルド完了", "SUCCESS")
+        return True
+
+    def build_backend_pyinstaller(self):
+        """PyInstallerで API バックエンドをビルド（Tauri sidecar 用）"""
+        self.log("PyInstallerでバックエンドをビルド中 (Tauri sidecar)...", "INFO")
+        self.log("(これには数分～数十分かかる場合があります)", "WARNING")
+
+        spec_file = self.project_root / "build_backend.spec"
+        if not spec_file.exists():
+            self.log(f"build_backend.spec が見つかりません: {spec_file}", "ERROR")
+            return False
+
+        if not self.run_command(
+            ["python", "-m", "PyInstaller", str(spec_file)],
+            "PyInstaller バックエンドビルド"
+        ):
+            return False
+
+        # sidecar を Tauri のバイナリディレクトリにコピー（onefile モード: 単一 exe）
+        import shutil
+        src_exe = self.dist_dir / "kotoba_backend.exe"
+        tauri_binaries = self.project_root / "src-tauri" / "binaries"
+        tauri_binaries.mkdir(parents=True, exist_ok=True)
+
+        if src_exe.exists():
+            # Tauri sidecar 命名規則: {name}-{target_triple}.exe
+            dst = tauri_binaries / "kotoba_backend-x86_64-pc-windows-msvc.exe"
+            shutil.copy2(src_exe, dst)
+            self.log(f"バックエンドをコピー: {dst}", "SUCCESS")
+        else:
+            self.log(f"バックエンドが見つかりません: {src_exe}", "ERROR")
+            return False
+
+        self.log("バックエンドビルド完了", "SUCCESS")
+        return True
+
+    def build_tauri(self):
+        """Tauriアプリをビルド"""
+        self.log("Tauriアプリをビルド中...", "INFO")
+
+        frontend_dir = self.project_root / "frontend"
+        if not frontend_dir.exists():
+            self.log(f"frontend/ が見つかりません: {frontend_dir}", "ERROR")
+            return False
+
+        # npm install (frontend ディレクトリで実行)
+        if not self.run_command(
+            ["npm", "install"],
+            "npm install (frontend)",
+            cwd=frontend_dir,
+        ):
+            self.log("npm install failed", "WARNING")
+
+        # npm run tauri build (frontend ディレクトリで実行)
+        if not self.run_command(
+            ["npm", "run", "tauri", "build"],
+            "Tauri ビルド",
+            cwd=frontend_dir,
+        ):
+            return False
+
+        self.log("Tauriビルド完了", "SUCCESS")
         return True
 
     def build_nsis_installer(self):
@@ -320,19 +390,27 @@ Download `KotobaTranscriber-installer.exe` and run it.
     def build(self):
         """ビルド実行"""
         self.log("=" * 50)
-        self.log(f"KotobaTranscriber Release Builder v{self.version}")
+        self.log(f"KotobaTranscriber Release Builder v{self.version} ({self.mode} mode)")
         self.log("=" * 50, "INFO")
         self.log("")
 
-        steps = [
-            ("クリーンアップ", self.cleanup),
-            ("PyInstallerビルド", self.build_pyinstaller),
-            ("リソースコピー", self.copy_resources),
-            ("NSISインストーラー作成", self.build_nsis_installer),
-            ("リリースパッケージ作成", self.create_release_package),
-            ("チェンジログ作成", self.create_changelog),
-            ("レポート生成", self.generate_report),
-        ]
+        if self.mode == "tauri":
+            steps = [
+                ("クリーンアップ", self.cleanup),
+                ("バックエンドビルド (PyInstaller)", self.build_backend_pyinstaller),
+                ("Tauriビルド", self.build_tauri),
+                ("チェンジログ作成", self.create_changelog),
+            ]
+        else:
+            steps = [
+                ("クリーンアップ", self.cleanup),
+                ("PyInstallerビルド", self.build_pyinstaller),
+                ("リソースコピー", self.copy_resources),
+                ("NSISインストーラー作成", self.build_nsis_installer),
+                ("リリースパッケージ作成", self.create_release_package),
+                ("チェンジログ作成", self.create_changelog),
+                ("レポート生成", self.generate_report),
+            ]
 
         for step_name, step_func in steps:
             self.log(f"\n{step_name}...", "INFO")
@@ -349,9 +427,14 @@ Download `KotobaTranscriber-installer.exe` and run it.
 
 
 def main():
-    version = sys.argv[1] if len(sys.argv) > 1 else "2.1.0"
+    import argparse
+    parser = argparse.ArgumentParser(description="KotobaTranscriber Release Builder")
+    parser.add_argument("--version", default="2.2.0", help="リリースバージョン")
+    parser.add_argument("--mode", default="tauri", choices=["tauri", "legacy"],
+                        help="ビルドモード: tauri (新) or legacy (PySide6)")
+    args = parser.parse_args()
 
-    builder = ReleaseBuilder(version=version)
+    builder = ReleaseBuilder(version=args.version, mode=args.mode)
 
     if builder.build():
         sys.exit(0)

@@ -181,9 +181,12 @@ class AudioTooShortError(FileProcessingError):
         minimum (float): 必要な最小の長さ（秒）- Required minimum duration in seconds
 
     Example:
-        raise AudioTooShortError(f"Audio is {duration}s but minimum is {minimum}s")
+        raise AudioTooShortError("Audio too short", duration=1.5, minimum=3.0)
     """
-    pass
+    def __init__(self, message: str = "", duration: float = 0.0, minimum: float = 0.0, **kwargs):
+        super().__init__(message, **kwargs)
+        self.duration = duration
+        self.minimum = minimum
 
 
 class AudioTooLongError(FileProcessingError):
@@ -202,9 +205,12 @@ class AudioTooLongError(FileProcessingError):
         maximum (float): 許可される最大の長さ（秒）- Maximum allowed duration in seconds
 
     Example:
-        raise AudioTooLongError(f"Audio is {duration}s but maximum is {maximum}s")
+        raise AudioTooLongError("Audio too long", duration=7200, maximum=3600)
     """
-    pass
+    def __init__(self, message: str = "", duration: float = 0.0, maximum: float = 0.0, **kwargs):
+        super().__init__(message, **kwargs)
+        self.duration = duration
+        self.maximum = maximum
 
 
 # ============================================================================
