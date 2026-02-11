@@ -143,6 +143,17 @@ async def batch_transcribe(req: BatchTranscribeRequest):
         raise HTTPException(status_code=409, detail="別のバッチ処理が実行中です")
     worker.start()
 
+    # 終了後のクリーンアップを登録
+    def cleanup():
+        try:
+            worker.join(timeout=1)
+        except Exception:
+            pass
+        finally:
+            state.clear_batch_worker()
+
+    threading.Thread(target=cleanup, daemon=True).start()
+
     return BatchTranscribeResponse(
         message="バッチ処理を開始しました",
         total_files=len(req.file_paths),

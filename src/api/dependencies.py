@@ -109,10 +109,16 @@ class WorkerState:
     def try_set_batch_worker(self, worker) -> bool:
         """アトミックにcheck-and-set。既存ワーカーが動作中ならFalse。"""
         with self._lock:
-            if self.batch_worker and self.batch_worker.is_alive():
+            if self.batch_worker is not None and self.batch_worker.is_alive():
                 return False
             self.batch_worker = worker
             return True
+
+    def clear_batch_worker(self):
+        """バッチワーカーをクリア（終了後に呼び出す）"""
+        with self._lock:
+            self.batch_worker = None
+            logger.debug("Batch worker cleared")
 
     def set_realtime_worker(self, worker):
         with self._lock:
