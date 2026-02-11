@@ -181,6 +181,7 @@ class BatchTranscriptionWorker(threading.Thread):
         self.lock = threading.Lock()
         self._cancel_event = threading.Event()
         self._executor = None
+        self._executor_lock = threading.RLock()  # TOCTOU 競合防止用ロック
         self._shared_engine = None
         self._engine_lock = threading.Lock()
         self._bus = event_bus or get_event_bus()
@@ -189,9 +190,13 @@ class BatchTranscriptionWorker(threading.Thread):
         """バッチ処理をキャンセル"""
         logger.info("Batch processing cancellation requested")
         self._cancel_event.set()
-        executor = self._executor  # 単一読み取りで競合回避
-        if executor:
-            executor.shutdown(wait=False)
+
+        # _executor_lock でアトミックに executor を取得・シャットダウン
+        with self._executor_lock:
+            executor = self._executor
+            if executor:
+                executor.shutdown(wait=False)
+                logger.debug("Executor shutdown requested")
 
     def process_single_file(self, audio_path: str):
         """単一ファイルを処理"""
@@ -281,10 +286,13 @@ class BatchTranscriptionWorker(threading.Thread):
         try:
             total = len(self.audio_paths)
 
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                self._executor = executor
+            # Executor 作成（ロックで保護）
+            with self._executor_lock:
+                self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
+
+            try:
                 future_to_path = {
-                    executor.submit(self.process_single_file, path): path
+                    self._executor.submit(self.process_single_file, path): path
                     for path in self.audio_paths
                 }
 
@@ -333,7 +341,12 @@ class BatchTranscriptionWorker(threading.Thread):
                             "success": False,
                         })
 
-                self._executor = None
+            finally:
+                # Executor シャットダウン（ロックで保護）
+                with self._executor_lock:
+                    if self._executor:
+                        self._executor.shutdown(wait=True)
+                        self._executor = None
 
             self._bus.emit("all_finished", {
                 "success_count": self.success_count,
@@ -344,7 +357,11 @@ class BatchTranscriptionWorker(threading.Thread):
             logger.error(f"Batch processing error: {e}", exc_info=True)
             self._bus.emit("error", {"message": "バッチ処理中にエラーが発生しました"})
         finally:
-            self._executor = None
+            # 二重 finally で確実にクリーンアップ
+            with self._executor_lock:
+                if self._executor:
+                    self._executor.shutdown(wait=True)
+                    self._executor = None
             try:
                 if self._shared_engine is not None:
                     self._shared_engine.unload_model()
