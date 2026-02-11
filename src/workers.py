@@ -24,6 +24,7 @@ from exceptions import (
 )
 # SharedConstants / normalize_segments は constants.py から再エクスポート（後方互換性）
 from constants import SharedConstants, normalize_segments
+from transcription_worker_base import TranscriptionLogic
 
 logger = logging.getLogger(__name__)
 
@@ -359,7 +360,6 @@ class TranscriptionWorker(QThread):
     def __init__(self, audio_path: str, enable_diarization: bool = False):
         super().__init__()
         self.audio_path = audio_path
-        self.engine = TranscriptionEngine()
         self.enable_diarization = enable_diarization
         self.diarizer = None
         self._cancel_event = threading.Event()
@@ -379,83 +379,34 @@ class TranscriptionWorker(QThread):
     def run(self):
         """文字起こし実行"""
         try:
-            self.progress.emit(SharedConstants.PROGRESS_MODEL_LOAD)
             logger.info(f"Starting transcription for: {self.audio_path}")
 
-            # モデルロード
-            try:
-                self.engine.load_model()
-                self.progress.emit(SharedConstants.PROGRESS_BEFORE_TRANSCRIBE)
-            except ModelLoadError as e:
-                error_msg = f"モデルのロードに失敗しました: {e}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-            except (IOError, OSError) as e:
-                error_msg = f"モデルファイルの読み込みエラー: {e}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-            except Exception as e:
-                error_msg = f"予期しないモデルロードエラー: {type(e).__name__} - {e}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-
-            # キャンセルチェック（モデルロード後）
+            # キャンセルチェック（開始前）
             if self._cancel_event.is_set():
-                logger.info("Transcription cancelled after model load")
+                logger.info("Transcription cancelled before start")
                 self.error.emit("文字起こしがキャンセルされました")
                 return
 
-            # 文字起こし実行
-            try:
-                result = self.engine.transcribe(self.audio_path, return_timestamps=True)
-                self.progress.emit(SharedConstants.PROGRESS_AFTER_TRANSCRIBE)
-            except ValidationError as e:
-                error_msg = f"ファイルパスが不正です: {self.audio_path} - {e}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-            except TranscriptionFailedError as e:
-                error_msg = f"文字起こしに失敗しました: {e}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-            except FileNotFoundError as e:
-                error_msg = f"ファイルが見つかりません: {self.audio_path}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-            except PermissionError as e:
-                error_msg = f"ファイルへのアクセス権限がありません: {self.audio_path}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-            except (IOError, OSError) as e:
-                error_msg = f"ファイル読み込みエラー: {self.audio_path} - {e}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-            except MemoryError as e:
-                error_msg = f"メモリ不足です。ファイルサイズが大きすぎる可能性があります: {self.audio_path}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-            except ValueError as e:
-                error_msg = f"音声フォーマットエラー: {self.audio_path} - {e}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
-                return
-            except Exception as e:
-                error_msg = f"予期しない文字起こしエラー: {type(e).__name__} - {e}"
-                logger.error(error_msg, exc_info=True)
-                self.error.emit(error_msg)
+            # TranscriptionLogic を使用して共通処理を実行
+            logic = TranscriptionLogic(
+                audio_path=self.audio_path,
+                enable_diarization=False,  # 話者分離は後で個別処理
+                progress_callback=self._on_progress,
+                error_callback=self._on_error,
+            )
+
+            # 文字起こし実行（エンジン準備含む）
+            transcription_result = logic.process()
+
+            if transcription_result is None:
+                # エラーコールバック経由でエラーが通知済み
                 return
 
-            # 結果取得
-            text = result.get("text", "")
-            if not text:
+            # 結果を展開
+            result_text = transcription_result["text"]
+            engine_result = transcription_result["result"]
+
+            if not result_text:
                 logger.warning(f"Transcription returned empty text for: {self.audio_path}")
 
             # キャンセルチェック（文字起こし後、話者分離前）
@@ -466,51 +417,11 @@ class TranscriptionWorker(QThread):
 
             # 話者分離が有効な場合（非クリティカル処理）
             if self.enable_diarization and self.diarizer:
-                try:
-                    logger.info("Running speaker diarization...")
-                    self.progress.emit(SharedConstants.PROGRESS_DIARIZATION_START)
+                result_text = self._apply_diarization(result_text, engine_result)
 
-                    # 話者分離実行
-                    diar_segments = self.diarizer.diarize(self.audio_path)
-                    self.progress.emit(SharedConstants.PROGRESS_DIARIZATION_END)
-
-                    # タイムスタンプ付き文字起こしセグメント（エンジン出力を正規化）
-                    trans_segments = _normalize_segments(result)
-
-                    # 話者情報を追加
-                    text = self.diarizer.format_with_speakers(
-                        trans_segments,
-                        diar_segments
-                    )
-
-                    # 統計情報をログに出力
-                    stats = self.diarizer.get_speaker_statistics(diar_segments)
-                    logger.info(f"Speaker statistics: {stats}")
-
-                except ImportError as e:
-                    logger.warning(
-                        f"Speaker diarization library not available: {e}",
-                        exc_info=False
-                    )
-                except (IOError, OSError) as e:
-                    logger.warning(
-                        f"I/O error during speaker diarization: {e}",
-                        exc_info=True
-                    )
-                except MemoryError as e:
-                    logger.warning(
-                        f"Memory error during speaker diarization: {e}",
-                        exc_info=True
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Speaker diarization failed: {type(e).__name__} - {e}",
-                        exc_info=True
-                    )
-                    # 話者分離に失敗しても文字起こし結果は返す
-
+            # 完了通知
             self.progress.emit(SharedConstants.PROGRESS_COMPLETE)
-            self.finished.emit(text)
+            self.finished.emit(result_text)
             logger.info(f"Transcription completed successfully for: {self.audio_path}")
 
         except Exception as e:
@@ -518,11 +429,69 @@ class TranscriptionWorker(QThread):
             error_msg = f"予期しないエラーが発生しました: {type(e).__name__} - {str(e)}"
             logger.error(error_msg, exc_info=True)
             self.error.emit(error_msg)
-        finally:
-            # モデルリソースの解放
-            try:
-                if hasattr(self, 'engine') and self.engine is not None:
-                    self.engine.unload_model()
-            except Exception as e:
-                logger.debug(f"Engine unload failed: {e}")
-            self.diarizer = None
+
+    def _on_progress(self, percentage: int):
+        """進捗コールバック（TranscriptionLogicから呼ばれる）"""
+        self.progress.emit(percentage)
+
+    def _on_error(self, message: str):
+        """エラーコールバック（TranscriptionLogicから呼ばれる）"""
+        self.error.emit(message)
+
+    def _apply_diarization(self, text: str, engine_result: dict) -> str:
+        """
+        話者分離を適用（非クリティカル処理）
+
+        Args:
+            text: 文字起こし結果テキスト
+            engine_result: エンジンの完全な結果（segments等を含む）
+
+        Returns:
+            話者情報が追加されたテキスト（失敗時は元のテキスト）
+        """
+        try:
+            logger.info("Running speaker diarization...")
+            self.progress.emit(SharedConstants.PROGRESS_DIARIZATION_START)
+
+            # 話者分離実行
+            diar_segments = self.diarizer.diarize(self.audio_path)
+            self.progress.emit(SharedConstants.PROGRESS_DIARIZATION_END)
+
+            # TranscriptionLogicから渡されたエンジン結果を正規化
+            trans_segments = _normalize_segments(engine_result)
+
+            # 話者情報を追加
+            text = self.diarizer.format_with_speakers(
+                trans_segments,
+                diar_segments
+            )
+
+            # 統計情報をログに出力
+            stats = self.diarizer.get_speaker_statistics(diar_segments)
+            logger.info(f"Speaker statistics: {stats}")
+
+            return text
+
+        except ImportError as e:
+            logger.warning(
+                f"Speaker diarization library not available: {e}",
+                exc_info=False
+            )
+        except (IOError, OSError) as e:
+            logger.warning(
+                f"I/O error during speaker diarization: {e}",
+                exc_info=True
+            )
+        except MemoryError as e:
+            logger.warning(
+                f"Memory error during speaker diarization: {e}",
+                exc_info=True
+            )
+        except Exception as e:
+            logger.warning(
+                f"Speaker diarization failed: {type(e).__name__} - {e}",
+                exc_info=True
+            )
+
+        # 話者分離に失敗しても文字起こし結果は返す
+        return text
