@@ -130,12 +130,13 @@ class MemoryMonitor:
 class OptimizedPipeline:
     """最適化された処理パイプライン"""
     
-    def __init__(self, 
-                 max_workers: int = 3,
+    def __init__(self,
+                 max_workers: int = 1,  # FIXED: TranscriptionEngine is not thread-safe
                  memory_limit_mb: int = 4096,
                  enable_caching: bool = True,
                  cache_dir: Optional[str] = None):
-        self.max_workers = max_workers
+        # CRITICAL: TranscriptionEngineはスレッドセーフではないため、max_workersを強制的に1に設定
+        self.max_workers = 1
         self.memory_limit_mb = memory_limit_mb
         self.enable_caching = enable_caching
         self.cache_dir = cache_dir or os.path.join(os.path.expanduser("~"), ".kotoba_cache")

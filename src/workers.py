@@ -22,80 +22,13 @@ from exceptions import (
     TranscriptionFailedError,
     InsufficientMemoryError
 )
+# SharedConstants / normalize_segments は constants.py から再エクスポート（後方互換性）
+from constants import SharedConstants, normalize_segments
 
 logger = logging.getLogger(__name__)
 
-
-def _normalize_segments(result: dict) -> list:
-    """エンジン出力のセグメントを正規化（chunks/segments/timestampタプル対応）"""
-    segments = result.get("chunks", result.get("segments", []))
-    normalized = []
-    for seg in segments:
-        if "timestamp" in seg and isinstance(seg["timestamp"], (list, tuple)):
-            ts = seg["timestamp"]
-            normalized.append({
-                "text": seg.get("text", ""),
-                "start": ts[0] if len(ts) > 0 else 0,
-                "end": ts[1] if len(ts) > 1 else 0,
-            })
-        elif "start" in seg:
-            normalized.append(seg)
-        else:
-            normalized.append({"text": seg.get("text", ""), "start": 0, "end": 0})
-    return normalized
-
-
-class SharedConstants:
-    """main.py / monitor_app.py で共有する定数"""
-    # 進捗値
-    PROGRESS_MODEL_LOAD = 20
-    PROGRESS_BEFORE_TRANSCRIBE = 40
-    PROGRESS_AFTER_TRANSCRIBE = 70
-    PROGRESS_DIARIZATION_START = 75
-    PROGRESS_DIARIZATION_END = 85
-    PROGRESS_COMPLETE = 100
-
-    # 並列処理数
-    BATCH_WORKERS_DEFAULT = 3
-    MONITOR_BATCH_WORKERS = 2
-
-    # タイムアウト設定（ミリ秒）
-    THREAD_WAIT_TIMEOUT = 10000  # 10秒
-    MONITOR_WAIT_TIMEOUT = 5000   # 5秒
-    BATCH_WAIT_TIMEOUT = 30000    # 30秒
-
-    # 処理中ファイルTTL（秒）
-    PROCESSING_FILES_TTL = 3600  # 1時間
-
-    # ボタンスタイル
-    BUTTON_STYLE_NORMAL = "font-size: 12px; padding: 5px; background-color: #4CAF50; color: white; font-weight: bold;"
-    BUTTON_STYLE_MONITOR = "font-size: 12px; padding: 5px; background-color: #FF9800; color: white; font-weight: bold;"
-    BUTTON_STYLE_STOP = "font-size: 12px; padding: 5px; background-color: #F44336; color: white; font-weight: bold;"
-
-    # ウィンドウサイズ制限（共通）
-    WINDOW_MAX_WIDTH = 3840
-    WINDOW_MAX_HEIGHT = 2160
-
-    # ステータスメッセージ表示時間（ミリ秒）
-    STATUS_MESSAGE_TIMEOUT = 3000  # 3秒
-    TRAY_NOTIFICATION_TIMEOUT = 2000  # 2秒（トレイ通知用）
-    ERROR_NOTIFICATION_TIMEOUT = 5000  # 5秒（エラー通知用）
-
-    # サポートする音声/動画ファイル拡張子
-    SUPPORTED_EXTENSIONS = (
-        '.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac', '.wma', '.opus', '.amr',
-        '.mp4', '.avi', '.mov', '.mkv', '.3gp', '.webm',
-    )
-
-    # 拡張子セット（folder_monitor / enhanced_folder_monitor 共通）
-    AUDIO_EXTENSIONS = set(SUPPORTED_EXTENSIONS)
-
-    # QFileDialog 用フィルタ文字列
-    AUDIO_FILE_FILTER = (
-        "Audio Files ("
-        + " ".join(f"*{ext}" for ext in SUPPORTED_EXTENSIONS)
-        + ");;All Files (*)"
-    )
+# 後方互換: 旧名でもアクセス可能
+_normalize_segments = normalize_segments
 
 
 def stop_worker(worker, name: str, timeout: int = 10000,
@@ -144,12 +77,24 @@ class BatchTranscriptionWorker(QThread):
     error = Signal(str)
 
     def __init__(self, audio_paths: list, enable_diarization: bool = False,
-                 max_workers: int = 3, formatter=None,
-                 use_llm_correction: bool = False):
+                 formatter=None, use_llm_correction: bool = False):
+        """
+        初期化
+
+        Args:
+            audio_paths: 処理する音声ファイルパスのリスト
+            enable_diarization: 話者分離を有効化
+            formatter: テキストフォーマッター
+            use_llm_correction: LLM補正を使用
+
+        Note:
+            TranscriptionEngineはスレッドセーフではないため、常に直列実行（max_workers=1）
+        """
         super().__init__()
         self.audio_paths = audio_paths
         self.enable_diarization = enable_diarization
-        self.max_workers = max_workers
+        # CRITICAL: TranscriptionEngineはスレッドセーフではないため、max_workersは常に1
+        self.max_workers = 1
         self.formatter = formatter
         self.use_llm_correction = use_llm_correction
         self.completed = 0

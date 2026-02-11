@@ -11,16 +11,18 @@ import ctypes.wintypes
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QFileDialog, QLabel, QProgressBar, QMessageBox,
-    QCheckBox, QGroupBox, QListWidget, QDialog
+    QCheckBox, QGroupBox, QListWidget, QDialog, QSizePolicy
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QSize, Slot
+from PySide6.QtGui import QIcon, QFont
 import logging
+import threading
 
 from text_formatter import TextFormatter
 from llm_corrector_standalone import StandaloneLLMCorrector
 from app_settings import AppSettings
 from config_manager import get_config
+from dark_theme import set_theme
 from validators import Validator, ValidationError
 from workers import (
     TranscriptionWorker,
@@ -88,128 +90,163 @@ class MainWindow(QMainWindow):
         # チェックボックスイベントを接続（UI初期化後）
         self.connect_config_sync()
 
+    def _get_device_label(self) -> str:
+        """
+        推論デバイスのラベルを取得
+
+        Note:
+            この関数は__init__時にメインスレッドから呼ばれます。
+            PyTorchのCUDA初期化は複数スレッドから同時に呼ばれるとクラッシュする可能性があるため、
+            ここで確実にメインスレッドで初期化します。
+        """
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return f"GPU: {torch.cuda.get_device_name(0)}"
+            return "CPU"
+        except Exception:
+            return "CPU"
+
     def init_ui(self):
-        """UI初期化"""
-        self.setWindowTitle("KotobaTranscriber - 日本語音声文字起こし")
+        """UI初期化 — モダンデザイン"""
+        device_label = self._get_device_label()
+        self.setWindowTitle(f"KotobaTranscriber [{device_label}]")
 
         # アイコン設定
         icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'icon.ico')
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-        self.setGeometry(100, 100, 280, 400)
+        self.setMinimumSize(UIConstants.WINDOW_MIN_WIDTH, UIConstants.WINDOW_MIN_HEIGHT)
 
-        # 中央ウィジェット
+        # --- 中央ウィジェット ---
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(3)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setSpacing(12)
 
-        # ファイル選択ボタン
+        # === ファイル選択セクション ===
+        file_section = QGroupBox("ファイル選択")
+        file_layout = QVBoxLayout()
+        file_layout.setContentsMargins(12, 16, 12, 12)
+        file_layout.setSpacing(8)
+
         file_button_layout = QHBoxLayout()
+        file_button_layout.setSpacing(8)
 
-        self.file_button = QPushButton("単一")
-        self.file_button.setStyleSheet("font-size: 12px; padding: 5px; font-weight: bold;")
+        self.file_button = QPushButton("  単一ファイル")
+        self.file_button.setMinimumHeight(36)
+        self.file_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.file_button.setToolTip("単一の音声/動画ファイルを選択して文字起こしします")
         self.file_button.clicked.connect(self.select_file)
         file_button_layout.addWidget(self.file_button)
 
-        self.batch_file_button = QPushButton("複数")
-        self.batch_file_button.setStyleSheet("font-size: 12px; padding: 5px; background-color: #2196F3; color: white; font-weight: bold;")
+        self.batch_file_button = QPushButton("  バッチ処理")
+        self.batch_file_button.setObjectName("secondary")
+        self.batch_file_button.setMinimumHeight(36)
+        self.batch_file_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.batch_file_button.setToolTip("複数のファイルを一度に選択してバッチ処理します")
         self.batch_file_button.clicked.connect(self.select_batch_files)
         file_button_layout.addWidget(self.batch_file_button)
 
-        main_layout.addLayout(file_button_layout)
+        file_layout.addLayout(file_button_layout)
 
         # 選択ファイル表示
-        self.file_label = QLabel("ファイル: 未選択")
-        self.file_label.setStyleSheet("margin: 2px; font-size: 10px;")
-        main_layout.addWidget(self.file_label)
+        self.file_label = QLabel("ファイルが選択されていません")
+        self.file_label.setObjectName("subtitle")
+        self.file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        file_layout.addWidget(self.file_label)
 
         # バッチファイルリスト
         self.batch_file_list = QListWidget()
-        self.batch_file_list.setMaximumHeight(80)
+        self.batch_file_list.setMaximumHeight(100)
         self.batch_file_list.setVisible(False)
-        main_layout.addWidget(self.batch_file_list)
+        file_layout.addWidget(self.batch_file_list)
 
         # バッチリストクリアボタン
         self.clear_batch_button = QPushButton("リストをクリア")
-        self.clear_batch_button.setStyleSheet("font-size: 10px; padding: 3px;")
+        self.clear_batch_button.setObjectName("danger")
+        self.clear_batch_button.setMinimumHeight(28)
+        self.clear_batch_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clear_batch_button.clicked.connect(self.clear_batch_list)
         self.clear_batch_button.setVisible(False)
-        main_layout.addWidget(self.clear_batch_button)
+        file_layout.addWidget(self.clear_batch_button)
 
-        # テキスト整形オプション (2カラムグリッドレイアウト)
-        format_group = QGroupBox("テキスト整形オプション")
-        format_group.setStyleSheet("QGroupBox { font-size: 11px; font-weight: bold; }")
+        file_section.setLayout(file_layout)
+        main_layout.addWidget(file_section)
+
+        # === テキスト整形オプション ===
+        format_group = QGroupBox("処理オプション")
         format_layout = QGridLayout()
-        format_layout.setSpacing(2)
-        format_layout.setContentsMargins(5, 5, 5, 5)
+        format_layout.setSpacing(6)
+        format_layout.setContentsMargins(12, 16, 12, 12)
 
-        checkbox_style = "font-size: 12px;"
-
-        # 左カラム
+        # 左カラム — 基本機能
         self.remove_fillers_check = QCheckBox("フィラー語削除")
-        self.remove_fillers_check.setStyleSheet(checkbox_style)
         self.remove_fillers_check.setChecked(True)
-        self.remove_fillers_check.setToolTip("あー、えー、その、などを削除")
+        self.remove_fillers_check.setToolTip("「あー」「えー」「その」などの不要語を自動削除")
         format_layout.addWidget(self.remove_fillers_check, 0, 0)
 
         self.enable_diarization_check = QCheckBox("話者分離")
-        self.enable_diarization_check.setStyleSheet(checkbox_style)
         self.enable_diarization_check.setChecked(False)
-        self.enable_diarization_check.setToolTip("複数の話者を識別します。speechbrainまたはresemblyzerを使用。完全無料、トークン不要。")
+        self.enable_diarization_check.setToolTip("複数の話者を自動識別（SpeechBrain使用・無料）")
         format_layout.addWidget(self.enable_diarization_check, 1, 0)
 
-        # 右カラム - 精度向上機能
+        # 右カラム — 精度向上
         self.enable_preprocessing_check = QCheckBox("音声前処理")
-        self.enable_preprocessing_check.setStyleSheet(checkbox_style)
         self.enable_preprocessing_check.setChecked(False)
-        self.enable_preprocessing_check.setToolTip("雑音の多い環境や小さい声の録音に有効。librosa/noisereduceが必要です。ノイズ除去・音量正規化。")
+        self.enable_preprocessing_check.setToolTip("ノイズ除去・音量正規化（雑音が多い録音に有効）")
         format_layout.addWidget(self.enable_preprocessing_check, 0, 1)
 
         self.enable_vocabulary_check = QCheckBox("カスタム語彙")
-        self.enable_vocabulary_check.setStyleSheet(checkbox_style)
         self.enable_vocabulary_check.setChecked(False)
-        self.enable_vocabulary_check.setToolTip("専門用語をWhisperに提示して認識精度を向上させます。")
+        self.enable_vocabulary_check.setToolTip("専門用語をWhisperに提示して認識精度を向上")
         format_layout.addWidget(self.enable_vocabulary_check, 1, 1)
 
-        # 高度AI補正チェックボックス
-        self.enable_llm_correction_check = QCheckBox("高度AI補正")
-        self.enable_llm_correction_check.setStyleSheet(checkbox_style)
+        # AI補正（フルスパン）
+        self.enable_llm_correction_check = QCheckBox("高度AI補正（句読点・段落・誤字を自動補正）")
         self.enable_llm_correction_check.setChecked(True)
-        self.enable_llm_correction_check.setToolTip("transformersベースの高度な補正。初回のみrinna/japanese-gpt2-mediumをダウンロードします (310MB)。句読点・段落・誤字・自然な表現をすべて補正します。")
-        format_layout.addWidget(self.enable_llm_correction_check, 2, 1)
+        self.enable_llm_correction_check.setToolTip("rinna/japanese-gpt2-mediumによる高度な文章補正（初回のみ310MBダウンロード）")
+        format_layout.addWidget(self.enable_llm_correction_check, 2, 0, 1, 2)
 
         # 語彙管理ボタン
         self.manage_vocabulary_button = QPushButton("語彙管理")
-        self.manage_vocabulary_button.setStyleSheet("font-size: 10px; padding: 4px;")
+        self.manage_vocabulary_button.setObjectName("flat")
+        self.manage_vocabulary_button.setMinimumHeight(28)
+        self.manage_vocabulary_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.manage_vocabulary_button.setToolTip("ホットワードと置換ルールを管理")
         self.manage_vocabulary_button.clicked.connect(self.open_vocabulary_dialog)
         if not VOCABULARY_DIALOG_AVAILABLE:
             self.manage_vocabulary_button.setEnabled(False)
-        format_layout.addWidget(self.manage_vocabulary_button, 4, 0, 1, 2)
+        format_layout.addWidget(self.manage_vocabulary_button, 3, 0, 1, 2)
 
         format_group.setLayout(format_layout)
         main_layout.addWidget(format_group)
 
-        # 文字起こしボタン
-        self.transcribe_button = QPushButton("開始")
-        self.transcribe_button.setStyleSheet("font-size: 14px; padding: 8px; background-color: #4CAF50; color: white; font-weight: bold;")
-        self.transcribe_button.setToolTip("選択したファイルの文字起こしを開始します（MP3, WAV, MP4などに対応）")
+        # スペーサー
+        main_layout.addStretch(1)
+
+        # === プログレスバー ===
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimumHeight(8)
+        self.progress_bar.setMaximumHeight(8)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setVisible(False)
+        main_layout.addWidget(self.progress_bar)
+
+        # === 文字起こし開始ボタン ===
+        self.transcribe_button = QPushButton("文字起こしを開始")
+        self.transcribe_button.setObjectName("primary")
+        self.transcribe_button.setMinimumHeight(44)
+        self.transcribe_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.transcribe_button.setToolTip("選択したファイルの文字起こしを開始（MP3, WAV, MP4などに対応）")
         self.transcribe_button.setEnabled(False)
         self.transcribe_button.clicked.connect(self.start_transcription)
         main_layout.addWidget(self.transcribe_button)
 
-        # プログレスバー
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        main_layout.addWidget(self.progress_bar)
-
-        # ステータスバー
-        self.statusBar().showMessage("準備完了")
+        # === ステータスバー ===
+        self.statusBar().showMessage(f"準備完了 | {device_label}")
 
         logger.info("UI initialized")
 
@@ -293,47 +330,64 @@ class MainWindow(QMainWindow):
             logger.warning(f"Text formatting failed, using raw text: {e}")
             formatted_text = text
 
-        # AI補正を適用（チェックボックスで制御）
+        # AI補正を適用（チェックボックスで制御）— バックグラウンドスレッドで実行
         if self.enable_llm_correction_check.isChecked():
+            self.statusBar().showMessage("AIで文章を補正中...")
+            self._run_llm_correction(formatted_text)
+            return
+
+        self._finalize_transcription(formatted_text)
+
+    def _run_llm_correction(self, text):
+        """LLM補正をバックグラウンドスレッドで実行"""
+        self._llm_fallback_text = text
+
+        def _correct():
             try:
-                logger.info("Applying advanced LLM correction...")
-
-                # 高度な補正器を初期化（初回のみ）
                 if self.advanced_corrector is None:
-                    self.statusBar().showMessage("AIモデルをダウンロード中... (初回のみ310MB、数分かかります)")
-                    QApplication.processEvents()
+                    logger.info("Loading advanced LLM corrector in background thread...")
+                    corrector = StandaloneLLMCorrector()
+                    corrector.load_model()
+                    self.advanced_corrector = corrector
 
-                    try:
-                        self.advanced_corrector = StandaloneLLMCorrector()
-                        self.advanced_corrector.load_model()
-                    except Exception as e:
-                        logger.error(f"Failed to load advanced corrector: {e}")
-                        QMessageBox.warning(
-                            self,
-                            "警告",
-                            f"AI補正のロードに失敗しました: {str(e)}\n補正なしで続行します。"
-                        )
-                        self._set_processing_ui(False)
-                        self.auto_save_text(formatted_text)
-                        self.statusBar().showMessage("文字起こし完了!")
-                        QMessageBox.information(self, "完了", "文字起こしが完了しました")
-                        logger.info("Transcription finished successfully")
-                        self.worker = None
-                        return
-
-                self.statusBar().showMessage("AIで文章を補正中...")
-                QApplication.processEvents()
-                formatted_text = self.advanced_corrector.correct_text(formatted_text)
+                corrected = self.advanced_corrector.correct_text(text)
                 logger.info("Advanced LLM correction completed")
-
+                # メインスレッドでUI更新
+                from PySide6.QtCore import QMetaObject, Q_ARG
+                QMetaObject.invokeMethod(
+                    self, "_on_correction_done",
+                    Qt.ConnectionType.QueuedConnection,
+                    Q_ARG(str, corrected)
+                )
             except Exception as e:
                 logger.error(f"LLM correction failed: {e}")
-                QMessageBox.warning(
-                    self,
-                    "警告",
-                    f"AI補正に失敗しました: {str(e)}\n元のテキストを使用します。"
+                from PySide6.QtCore import QMetaObject, Q_ARG
+                QMetaObject.invokeMethod(
+                    self, "_on_correction_failed",
+                    Qt.ConnectionType.QueuedConnection,
+                    Q_ARG(str, str(e))
                 )
 
+        threading.Thread(target=_correct, daemon=True).start()
+
+    @Slot(str)
+    def _on_correction_done(self, corrected_text):
+        """LLM補正完了 — メインスレッドでUI更新"""
+        self._finalize_transcription(corrected_text)
+
+    @Slot(str)
+    def _on_correction_failed(self, error_msg):
+        """LLM補正失敗 — フォールバックテキストで完了"""
+        QMessageBox.warning(
+            self,
+            "警告",
+            f"AI補正に失敗しました: {error_msg}\n元のテキストを使用します。"
+        )
+        fallback = getattr(self, '_llm_fallback_text', '')
+        self._finalize_transcription(fallback)
+
+    def _finalize_transcription(self, formatted_text):
+        """文字起こし結果のUI反映・保存・完了通知"""
         self._set_processing_ui(False)
 
         # 自動保存
@@ -437,7 +491,6 @@ class MainWindow(QMainWindow):
         self.batch_worker = BatchTranscriptionWorker(
             self.batch_files,
             enable_diarization=enable_diarization,
-            max_workers=UIConstants.BATCH_WORKERS_DEFAULT,
             formatter=self.formatter,
             use_llm_correction=False
         )
@@ -547,8 +600,8 @@ class MainWindow(QMainWindow):
         """UI設定を復元（検証付き）"""
         try:
             # ウィンドウジオメトリを検証して復元
-            width = self.settings.get('window.width', 280)
-            height = self.settings.get('window.height', 400)
+            width = self.settings.get('window.width', 480)
+            height = self.settings.get('window.height', 520)
             x = self.settings.get('window.x', 100)
             y = self.settings.get('window.y', 100)
 
@@ -593,7 +646,7 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             logger.error(f"Failed to load UI settings: {e}", exc_info=True)
-            self.setGeometry(100, 100, 280, 400)
+            self.setGeometry(100, 100, 480, 520)
 
     def save_ui_settings(self):
         """UI設定を保存"""
@@ -643,6 +696,12 @@ def main():
 
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
+
+    # ダークモード設定を読み込み適用
+    _settings = AppSettings()
+    _settings.load()
+    dark_mode = bool(_settings.get('dark_mode', False))
+    set_theme(app, dark_mode=dark_mode)
 
     window = MainWindow()
     window.show()

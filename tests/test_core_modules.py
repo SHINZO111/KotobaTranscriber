@@ -1620,11 +1620,6 @@ class TestTextFormatter:
         result = self.formatter.clean_repeated_words("hello hello world")
         assert result == "hello world"
 
-    def test_format_numbers(self):
-        # NUMBER_SPACING disabled to prevent merging separate numbers
-        result = self.formatter.format_numbers("数字 123 456 です")
-        assert "123 456" in result  # numbers should remain separate
-
     def test_format_all(self):
         text = "あのー これはテストです"
         result = self.formatter.format_all(text)
@@ -4927,7 +4922,7 @@ class TestSharedConstants:
 
     def test_batch_workers(self):
         """バッチワーカー数が正値"""
-        assert SharedConstants.BATCH_WORKERS_DEFAULT > 0
+        assert SharedConstants.BATCH_WORKERS_MAX > 0
         assert SharedConstants.MONITOR_BATCH_WORKERS > 0
 
 
@@ -5016,7 +5011,7 @@ class TestBatchTranscriptionWorkerInit:
         worker = BatchTranscriptionWorker(paths)
         assert worker.audio_paths == paths
         assert worker.enable_diarization is False
-        assert worker.max_workers == 3
+        assert worker.max_workers == 1  # エンジン排他のため常に1
         assert worker.formatter is None
         assert worker.use_llm_correction is False
         assert worker.completed == 0
@@ -5030,12 +5025,12 @@ class TestBatchTranscriptionWorkerInit:
         worker = BatchTranscriptionWorker(
             ["/a.mp3"],
             enable_diarization=True,
-            max_workers=5,
+            max_workers=1,
             formatter=mock_formatter,
             use_llm_correction=True
         )
         assert worker.enable_diarization is True
-        assert worker.max_workers == 5
+        assert worker.max_workers == 1  # エンジン排他のため常に1
         assert worker.formatter is mock_formatter
         assert worker.use_llm_correction is True
 

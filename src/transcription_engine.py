@@ -5,6 +5,9 @@ kotoba-whisper v2.2を使用した日本語音声文字起こし
 
 import os
 import atexit
+import subprocess
+import tempfile
+import threading
 import torch
 from transformers import pipeline
 from typing import Optional, Dict, Any, List
@@ -33,6 +36,9 @@ config = get_config()
 
 # ロガーを早期に初期化（ffmpeg検証で使用するため）
 logger = logging.getLogger(__name__)
+
+# 動画コンテナ拡張子（ffmpegで事前に音声抽出が必要）
+VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.3gp'}
 
 
 def _validate_ffmpeg_path(path: str) -> bool:
@@ -192,6 +198,11 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         # 基底クラスの初期化
         super().__init__(model_name, device, language)
 
+        # スレッドセーフティ対策
+        # CRITICAL: モデルの並行アクセスを防ぐためのロック
+        self._model_lock = threading.RLock()
+        self._temp_files_lock = threading.Lock()
+
         # 一時ファイル追跡（リソースリーク対策）
         self._temp_files: List[str] = []
         atexit.register(self._cleanup_temp_files)
@@ -244,47 +255,142 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         logger.info(f"Model loaded successfully on {device}")
 
     def load_model(self) -> bool:
-        """モデルをロード（自動フォールバック機能付き）"""
-        try:
-            logger.info(f"Loading model: {self.model_name}")
+        """
+        モデルをロード（自動フォールバック機能付き）
+
+        スレッドセーフ: 複数スレッドから同時に呼ばれても安全
+        """
+        with self._model_lock:
+            # ダブルチェックロッキング（既にロード済みなら何もしない）
+            if self.model is not None and self.is_loaded:
+                logger.debug("Model already loaded, skipping reload")
+                return True
 
             try:
-                # 設定されたデバイスでロード試行
-                self._load_model_with_device(self.device)
-            except Exception as cuda_error:
-                # CUDAで失敗した場合はCPUにフォールバック
-                if self.device == "cuda":
-                    logger.warning(f"CUDA model load failed: {cuda_error}")
-                    logger.info("Falling back to CPU mode...")
-                    self.device = "cpu"
+                logger.info(f"Loading model: {self.model_name}")
+
+                try:
+                    # 設定されたデバイスでロード試行
                     self._load_model_with_device(self.device)
-                    logger.info("Model loaded successfully on CPU (fallback)")
-                else:
-                    raise
+                except Exception as cuda_error:
+                    # CUDAで失敗した場合はCPUにフォールバック
+                    if self.device == "cuda":
+                        logger.warning(f"CUDA model load failed: {cuda_error}")
+                        logger.info("Falling back to CPU mode...")
+                        self.device = "cpu"
+                        self._load_model_with_device(self.device)
+                        logger.info("Model loaded successfully on CPU (fallback)")
+                    else:
+                        raise
 
-            self.is_loaded = True
-            return True
+                self.is_loaded = True
+                return True
 
-        except ModelLoadError:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
-            raise ModelLoadError(f"Failed to load model '{self.model_name}': {e}") from e
+            except ModelLoadError:
+                raise
+            except Exception as e:
+                logger.error(f"Failed to load model: {e}")
+                raise ModelLoadError(f"Failed to load model '{self.model_name}': {e}") from e
 
     def _cleanup_temp_files(self) -> None:
         """
         一時ファイルをクリーンアップ（リソースリーク対策）
         登録された一時ファイルのみを削除（他アプリのファイルは触らない）
+
+        スレッドセーフ: 複数スレッドから同時に呼ばれても安全
         """
         # 登録された一時ファイルのクリーンアップ
-        for temp_file in list(self._temp_files):
-            try:
-                if os.path.exists(temp_file):
-                    os.unlink(temp_file)
-                    logger.debug(f"Cleaned up temp file: {temp_file}")
-            except Exception as e:
-                logger.warning(f"Failed to cleanup {temp_file}: {e}")
-        self._temp_files.clear()
+        with self._temp_files_lock:
+            for temp_file in list(self._temp_files):
+                try:
+                    if os.path.exists(temp_file):
+                        os.unlink(temp_file)
+                        logger.debug(f"Cleaned up temp file: {temp_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup {temp_file}: {e}")
+            self._temp_files.clear()
+
+    def _get_short_path(self, path: str) -> str:
+        """
+        Windows 8.3短縮パスを取得。非ASCII文字を含むパスで有効。
+
+        8.3短縮パスが取得できればファイルコピーなしで非ASCIIパスを回避できる。
+        Windows以外、または短縮パスが取得できない場合は元のパスをそのまま返す。
+
+        Args:
+            path: 変換対象のファイルパス
+
+        Returns:
+            str: ASCII専用の短縮パス、またはフォールバックとして元のパス
+        """
+        if os.name != 'nt':
+            return path
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(512)
+            result = ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 512)
+            if result > 0:
+                short = buf.value
+                # 短縮パスがASCIIのみか確認
+                try:
+                    short.encode('ascii')
+                    return short
+                except UnicodeEncodeError:
+                    pass  # 8.3パスも非ASCIIの場合はフォールバック
+        except (OSError, AttributeError, ValueError) as e:
+            # OSError: システムコールエラー
+            # AttributeError: ctypes.windllが存在しない（非Windows環境）
+            # ValueError: 不正なパス
+            logger.debug(f"ShortPath conversion failed: {e}")
+        return path  # フォールバック: 元のパスを返す
+
+    def _extract_audio_ffmpeg(self, video_path: str) -> str:
+        """
+        動画ファイルからffmpegで音声をWAV抽出
+
+        Args:
+            video_path: 動画ファイルのパス
+
+        Returns:
+            一時WAVファイルのパス（ASCII safe）
+
+        Raises:
+            FileNotFoundError: ffmpegが見つからない場合
+            subprocess.TimeoutExpired: ffmpegがタイムアウトした場合
+            subprocess.CalledProcessError: ffmpegが非ゼロ終了した場合
+        """
+        temp_fd, temp_wav_path = tempfile.mkstemp(suffix='.wav', prefix='transcribe_')
+        os.close(temp_fd)
+
+        with self._temp_files_lock:
+            self._temp_files.append(temp_wav_path)
+
+        cmd = [
+            'ffmpeg', '-i', video_path,
+            '-vn',             # 映像除去
+            '-acodec', 'pcm_s16le',  # 16bit PCM WAV
+            '-ar', '16000',    # 16kHz（Whisper要求）
+            '-ac', '1',        # モノラル
+            '-y',              # 上書き許可
+            temp_wav_path
+        ]
+
+        logger.info(f"Extracting audio from video: {video_path}")
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=300,
+            shell=False,
+        )
+        if result.returncode != 0:
+            stderr_msg = result.stderr.decode('utf-8', errors='replace')[:500] if result.stderr else 'unknown error'
+            logger.error(f"ffmpeg failed (exit {result.returncode}): {stderr_msg}")
+            raise subprocess.CalledProcessError(
+                result.returncode, cmd, output=result.stdout, stderr=result.stderr
+            )
+
+        logger.info(f"Audio extracted to: {temp_wav_path}")
+        return temp_wav_path
 
     def transcribe(
         self,
@@ -334,49 +440,66 @@ class TranscriptionEngine(BaseTranscriptionEngine):
             logger.error(f"Chunk length validation failed: {e}")
             raise
 
-        if self.model is None:
-            self.load_model()
+        # CRITICAL: スレッドセーフなモデルロードチェック（TOCTOU脆弱性を回避）
+        with self._model_lock:
+            if self.model is None:
+                self.load_model()
 
-        # 日本語パス対策: ASCII専用の一時パスにコピー
+        # 動画ファイルの場合: ffmpegで音声抽出（ASCII safe WAVに変換）
+        # 音声ファイルで非ASCIIパスの場合: 一時ファイルにコピー
         temp_ascii_path = None
-        try:
-            # パスに非ASCII文字が含まれているかチェック
-            path_str = str(validated_path)
-            if not path_str.isascii():
-                logger.info("Non-ASCII characters detected in path, creating temporary copy...")
-                import tempfile
+        file_ext = Path(validated_path).suffix.lower()
+        if file_ext in VIDEO_EXTENSIONS:
+            try:
+                temp_wav = self._extract_audio_ffmpeg(str(validated_path))
+                temp_ascii_path = temp_wav
+                validated_path = Path(temp_wav)
+                logger.info(f"Video audio extracted to WAV: {temp_wav}")
+            except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+                logger.warning(f"ffmpeg audio extraction failed: {e}, trying original file")
+        else:
+            try:
+                # パスに非ASCII文字が含まれているかチェック
+                path_str = str(validated_path)
+                if not path_str.isascii():
+                    # まずWindows ShortPath (8.3形式) を試す（コピー不要）
+                    short_path = self._get_short_path(path_str)
+                    if short_path != path_str and short_path.isascii():
+                        logger.info(f"Using Windows ShortPath to avoid file copy: {short_path}")
+                        validated_path = Path(short_path)
+                    else:
+                        # ShortPathが使えない場合のみフルコピーフォールバック
+                        logger.info("ShortPath unavailable, creating temporary copy...")
 
-                # 拡張子を取得
-                file_ext = Path(validated_path).suffix
+                        # 一時ファイルを作成（ASCII専用パス）
+                        temp_fd, temp_ascii_path = tempfile.mkstemp(suffix=file_ext, prefix="transcribe_")
 
-                # 一時ファイルを作成（ASCII専用パス）
-                temp_fd, temp_ascii_path = tempfile.mkstemp(suffix=file_ext, prefix="transcribe_")
+                        # バイナリモードで完全コピー（メタデータも含む）
+                        with open(validated_path, 'rb') as src:
+                            with os.fdopen(temp_fd, 'wb') as dst:
+                                # 大きなファイルにも対応するためチャンク単位でコピー
+                                chunk_size = 1024 * 1024  # 1MB
+                                while True:
+                                    chunk = src.read(chunk_size)
+                                    if not chunk:
+                                        break
+                                    dst.write(chunk)
 
-                # バイナリモードで完全コピー（メタデータも含む）
-                with open(validated_path, 'rb') as src:
-                    with os.fdopen(temp_fd, 'wb') as dst:
-                        # 大きなファイルにも対応するためチャンク単位でコピー
-                        chunk_size = 1024 * 1024  # 1MB
-                        while True:
-                            chunk = src.read(chunk_size)
-                            if not chunk:
-                                break
-                            dst.write(chunk)
+                        logger.debug(f"Temporary ASCII path created: {temp_ascii_path}")
 
-                logger.debug(f"Temporary ASCII path created: {temp_ascii_path}")
+                        # 一時ファイルを追跡リストに追加
+                        with self._temp_files_lock:
+                            self._temp_files.append(temp_ascii_path)
 
-                # 一時ファイルを追跡リストに追加
-                self._temp_files.append(temp_ascii_path)
-
-                # 処理対象を一時ファイルに変更
-                validated_path = Path(temp_ascii_path)
-        except Exception as e:
-            logger.warning(f"Failed to create ASCII path copy: {e}, using original path")
-            if temp_ascii_path and os.path.exists(temp_ascii_path):
-                try:
-                    os.unlink(temp_ascii_path)
-                except OSError:
-                    pass
+                        # 処理対象を一時ファイルに変更
+                        validated_path = Path(temp_ascii_path)
+            except Exception as e:
+                logger.warning(f"Failed to create ASCII path copy: {e}, using original path")
+                if temp_ascii_path and os.path.exists(temp_ascii_path):
+                    try:
+                        os.unlink(temp_ascii_path)
+                    except OSError:
+                        pass
 
         # 音声前処理を適用（有効な場合）
         processed_audio_path = validated_path
@@ -385,7 +508,8 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                 logger.info("Applying audio preprocessing...")
                 processed_audio_path = self.preprocessor.preprocess(str(validated_path))
                 # 一時ファイルを追跡リストに追加
-                self._temp_files.append(str(processed_audio_path))
+                with self._temp_files_lock:
+                    self._temp_files.append(str(processed_audio_path))
                 logger.info(f"Preprocessing completed: {processed_audio_path}")
             except Exception as e:
                 logger.warning(f"Preprocessing failed, using original audio: {e}")
@@ -410,12 +534,14 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                     generate_kwargs["initial_prompt"] = prompt
                     logger.info(f"Using hotwords prompt: {prompt[:100]}...")
 
-            result = self.model(
-                str(processed_audio_path),  # Pathオブジェクトを文字列に変換
-                chunk_length_s=chunk_length_s,
-                return_timestamps=return_timestamps,
-                generate_kwargs=generate_kwargs
-            )
+            # CRITICAL: モデル推論は排他制御が必要（PyTorchモデルの内部状態保護）
+            with self._model_lock:
+                result = self.model(
+                    str(processed_audio_path),  # Pathオブジェクトを文字列に変換
+                    chunk_length_s=chunk_length_s,
+                    return_timestamps=return_timestamps,
+                    generate_kwargs=generate_kwargs
+                )
 
             # 後処理: カスタム語彙の置換を適用
             if self.vocabulary is not None:
@@ -441,23 +567,24 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                 logger.info("CUDA cache cleared")
 
             # 一時ファイルの削除（すべての一時ファイルをクリーンアップ）
-            # 前処理で作成された一時ファイル
-            if processed_audio_path != validated_path and str(processed_audio_path) in self._temp_files:
-                try:
-                    Path(processed_audio_path).unlink(missing_ok=True)
-                    self._temp_files.remove(str(processed_audio_path))
-                    logger.debug(f"Cleaned up temporary file: {processed_audio_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to delete temporary file: {e}")
+            with self._temp_files_lock:
+                # 前処理で作成された一時ファイル
+                if processed_audio_path != validated_path and str(processed_audio_path) in self._temp_files:
+                    try:
+                        Path(processed_audio_path).unlink(missing_ok=True)
+                        self._temp_files.remove(str(processed_audio_path))
+                        logger.debug(f"Cleaned up temporary file: {processed_audio_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete temporary file: {e}")
 
-            # ASCII専用パスの一時ファイル
-            if temp_ascii_path and temp_ascii_path in self._temp_files:
-                try:
-                    Path(temp_ascii_path).unlink(missing_ok=True)
-                    self._temp_files.remove(temp_ascii_path)
-                    logger.debug(f"Cleaned up ASCII temporary file: {temp_ascii_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to delete ASCII temporary file: {e}")
+                # ASCII専用パスの一時ファイル
+                if temp_ascii_path and temp_ascii_path in self._temp_files:
+                    try:
+                        Path(temp_ascii_path).unlink(missing_ok=True)
+                        self._temp_files.remove(temp_ascii_path)
+                        logger.debug(f"Cleaned up ASCII temporary file: {temp_ascii_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete ASCII temporary file: {e}")
 
     def is_available(self) -> bool:
         """エンジンが利用可能かチェック"""

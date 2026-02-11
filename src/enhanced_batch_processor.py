@@ -215,8 +215,8 @@ class EnhancedBatchProcessor:
     BATCH_SIZE_MULTIPLIER = 2
 
     def __init__(self,
-                 max_workers: int = 4,
-                 auto_adjust_workers: bool = True,
+                 max_workers: int = 1,  # FIXED: TranscriptionEngine is not thread-safe
+                 auto_adjust_workers: bool = False,  # FIXED: Disable auto-adjustment
                  enable_checkpoint: bool = True,
                  memory_limit_mb: int = 4096,
                  checkpoint_interval: int = 10):
@@ -224,15 +224,16 @@ class EnhancedBatchProcessor:
         初期化
 
         Args:
-            max_workers: 最大ワーカー数
-            auto_adjust_workers: 自動調整を有効化
+            max_workers: 最大ワーカー数（TranscriptionEngineの排他制御により常に1）
+            auto_adjust_workers: 自動調整を有効化（エンジンの排他制御により常にFalse）
             enable_checkpoint: チェックポイントを有効化
             memory_limit_mb: メモリ制限（MB）
             checkpoint_interval: チェックポイント保存間隔（ファイル数）
         """
-        self.max_workers = max_workers
-        self.current_workers = max_workers
-        self.auto_adjust_workers = auto_adjust_workers
+        # CRITICAL: TranscriptionEngineはスレッドセーフではないため、max_workersを強制的に1に設定
+        self.max_workers = 1
+        self.current_workers = 1
+        self.auto_adjust_workers = False  # 並列化は不可能
         self.enable_checkpoint = enable_checkpoint
         self.memory_limit_mb = memory_limit_mb
         self.checkpoint_interval = checkpoint_interval
@@ -243,6 +244,7 @@ class EnhancedBatchProcessor:
         self.processed_files: List[str] = []
         self.failed_files: List[Dict] = []
         self.remaining_files: List[str] = []
+        self._remaining_set: set = set()  # O(1) membership test 用
         self.is_running = False
         self._pause_event = threading.Event()   # スレッドセーフな一時停止フラグ
         self._cancel_event = threading.Event()  # スレッドセーフなキャンセルフラグ
@@ -295,11 +297,14 @@ class EnhancedBatchProcessor:
                     self.processed_files = checkpoint.get("processed_files", [])
                     self.failed_files = checkpoint.get("failed_files", [])
                     self.remaining_files = checkpoint.get("remaining_files", [])
+                    self._remaining_set = set(self.remaining_files)
                     logger.info(f"Resuming from checkpoint: {len(self.processed_files)} files already processed")
                 else:
                     self.remaining_files = file_paths.copy()
+                    self._remaining_set = set(self.remaining_files)
             else:
                 self.remaining_files = file_paths.copy()
+                self._remaining_set = set(self.remaining_files)
                 self.processed_files = []
                 self.failed_files = []
 
@@ -389,7 +394,8 @@ class EnhancedBatchProcessor:
                     result = future.result()
                     with self._lock:
                         self.processed_files.append(file_path)
-                        if file_path in self.remaining_files:
+                        if file_path in self._remaining_set:
+                            self._remaining_set.discard(file_path)
                             self.remaining_files.remove(file_path)
                         self.stats["processed_count"] += 1
 
@@ -400,7 +406,8 @@ class EnhancedBatchProcessor:
                             "error": str(e),
                             "timestamp": datetime.now().isoformat()
                         })
-                        if file_path in self.remaining_files:
+                        if file_path in self._remaining_set:
+                            self._remaining_set.discard(file_path)
                             self.remaining_files.remove(file_path)
                         self.stats["failed_count"] += 1
 
