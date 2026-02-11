@@ -6,6 +6,7 @@ WebSocket ブリッジやワーカースレッドからの通知に使用。
 
 import asyncio
 import logging
+import queue
 import threading
 import time
 from typing import AsyncGenerator, Dict, Optional
@@ -31,6 +32,8 @@ class EventBus:
         self._shutting_down = False
         # CoW スナップショット: subscribe/unsubscribe 時にのみ再構築
         self._snapshot: Optional[list] = None
+        # フォールバック: イベントループ未設定時の threading.Queue
+        self._fallback_queues: Dict[int, queue.Queue] = {}
 
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         """メインの asyncio イベントループを設定"""
@@ -62,6 +65,10 @@ class EventBus:
         """
         イベントを発行（同期コンテキストから呼び出し可能）。
         全サブスクライバーのキューにイベントを追加。
+
+        スレッドセーフ実装:
+        - イベントループが稼働中 → call_soon_threadsafe() 経由で asyncio.Queue に追加
+        - イベントループ未設定 → threading.Queue にフォールバック
         """
         if self._shutting_down:
             return
@@ -74,37 +81,66 @@ class EventBus:
 
         subscribers = self._get_snapshot()
 
-        for sub_id, queue in subscribers:
+        for sub_id, async_queue in subscribers:
             try:
                 if self._loop and self._loop.is_running():
+                    # asyncio.Queue への追加（スレッドセーフ）
                     try:
                         self._loop.call_soon_threadsafe(
-                            self._put_nowait, queue, event, sub_id
+                            self._put_nowait, async_queue, event, sub_id
                         )
                     except RuntimeError:
-                        # ループが停止中 — asyncio.Queue はスレッドセーフではないため
-                        # 非イベントループスレッドからの直接操作をスキップ
-                        logger.debug(f"Event loop closing, event dropped for subscriber {sub_id}")
+                        # イベントループが停止中 — フォールバックに移行
+                        logger.debug("Event loop closing, falling back to threading.Queue")
+                        self._put_to_fallback(sub_id, event)
                 else:
-                    # ループ未設定時は直接追加（テスト環境等）
-                    self._put_nowait(queue, event, sub_id)
-            except Exception as e:
-                logger.debug(f"Failed to emit to subscriber {sub_id}: {e}")
+                    # イベントループ未設定 — フォールバックキューを使用
+                    self._put_to_fallback(sub_id, event)
+            except Exception:
+                # 汎用的なエラーログ（情報漏洩防止）
+                logger.debug(f"Failed to emit event to subscriber {sub_id}")
 
-    def _put_nowait(self, queue: asyncio.Queue, event: dict, sub_id: int):
-        """キューにイベントを追加（満杯時は古いイベントを破棄）"""
+    def _put_nowait(self, async_queue: asyncio.Queue, event: dict, sub_id: int):
+        """
+        asyncio.Queue にイベントを追加（満杯時は古いイベントを破棄）
+        注: この関数はイベントループスレッド内で実行される（call_soon_threadsafe 経由）
+        """
         try:
-            queue.put_nowait(event)
+            async_queue.put_nowait(event)
         except asyncio.QueueFull:
             # 古いイベントを1つ破棄して再試行
             try:
-                queue.get_nowait()
+                async_queue.get_nowait()
             except asyncio.QueueEmpty:
                 pass
             try:
-                queue.put_nowait(event)
+                async_queue.put_nowait(event)
             except asyncio.QueueFull:
                 logger.warning(f"Event dropped for subscriber {sub_id}")
+
+    def _put_to_fallback(self, sub_id: int, event: dict):
+        """
+        フォールバック用の threading.Queue にイベントを追加
+        注: イベントループ未設定時や停止中に使用
+        """
+        with self._lock:
+            fallback_q = self._fallback_queues.get(sub_id)
+            if fallback_q is None:
+                fallback_q = queue.Queue(maxsize=self._maxsize)
+                self._fallback_queues[sub_id] = fallback_q
+
+        try:
+            fallback_q.put_nowait(event)
+        except queue.Full:
+            # 古いイベントを破棄して再試行
+            try:
+                fallback_q.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                fallback_q.put_nowait(event)
+            except queue.Full:
+                logger.warning(f"Fallback event dropped for subscriber {sub_id}")
 
     async def subscribe(self) -> AsyncGenerator[dict, None]:
         """
@@ -112,24 +148,30 @@ class EventBus:
         async for で使用:
             async for event in bus.subscribe():
                 print(event)
+
+        注: 購読開始時にフォールバックキューからイベントを移行しない。
+        フォールバックキューは購読解除時にクリーンアップされる。
         """
-        queue: asyncio.Queue = asyncio.Queue(maxsize=self._maxsize)
+        async_queue: asyncio.Queue = asyncio.Queue(maxsize=self._maxsize)
         with self._lock:
             self._counter += 1
             sub_id = self._counter
-            self._subscribers[sub_id] = queue
+            self._subscribers[sub_id] = async_queue
             self._invalidate_snapshot()
 
         logger.debug(f"Subscriber {sub_id} registered")
         try:
             while True:
-                event = await queue.get()
+                event = await async_queue.get()
                 if event.get("type") == "__shutdown__":
                     break
                 yield event
         finally:
             with self._lock:
                 self._subscribers.pop(sub_id, None)
+                # フォールバックキューもクリーンアップ
+                if sub_id in self._fallback_queues:
+                    del self._fallback_queues[sub_id]
                 self._invalidate_snapshot()
             logger.debug(f"Subscriber {sub_id} unregistered")
 
