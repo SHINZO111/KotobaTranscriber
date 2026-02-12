@@ -16,7 +16,7 @@ from pathlib import Path
 from base_engine import BaseTranscriptionEngine
 from validators import Validator, ValidationError
 from config_manager import get_config
-from exceptions import ModelLoadError, TranscriptionFailedError
+from exceptions import ModelLoadError, TranscriptionFailedError, AudioFormatError
 
 # オプション: 音声前処理とカスタム語彙
 try:
@@ -391,18 +391,20 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         ]
 
         logger.info(f"Extracting audio from video: {video_path}")
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            timeout=300,
-            shell=False,
-        )
-        if result.returncode != 0:
-            stderr_msg = result.stderr.decode('utf-8', errors='replace')[:500] if result.stderr else 'unknown error'
-            logger.error(f"ffmpeg failed (exit {result.returncode}): {stderr_msg}")
-            raise subprocess.CalledProcessError(
-                result.returncode, cmd, output=result.stdout, stderr=result.stderr
+        try:
+            subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                shell=False,
+                check=True,
             )
+        except subprocess.CalledProcessError as e:
+            # Log full stderr for debugging (truncated to avoid excessive log size)
+            stderr_msg = e.stderr[:500] if e.stderr else 'no error output'
+            logger.error(f"ffmpeg failed (exit {e.returncode}): {stderr_msg}")
+            raise AudioFormatError(f"Video audio extraction failed") from e
 
         logger.info(f"Audio extracted to: {temp_wav_path}")
         return temp_wav_path
@@ -465,7 +467,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                 temp_ascii_path = temp_wav
                 validated_path = Path(temp_wav)
                 logger.info(f"Video audio extracted to WAV: {temp_wav}")
-            except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+            except (FileNotFoundError, subprocess.TimeoutExpired, AudioFormatError) as e:
                 logger.warning(f"ffmpeg audio extraction failed: {e}, trying original file")
         else:
             try:
