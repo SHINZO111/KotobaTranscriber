@@ -35,7 +35,7 @@ audio:
     normalize: false
     remove_silence: false
   ffmpeg:
-    path: "C:\\ffmpeg\\ffmpeg-8.0-essentials_build\\bin"
+    path: ""
     auto_configure: true
 
 # カスタム語彙設定
