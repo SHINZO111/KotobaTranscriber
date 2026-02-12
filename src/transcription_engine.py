@@ -368,10 +368,17 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         # Windows ShortPath変換（日本語パス対応）
         logger.debug(f"Converting video path to ShortPath: {video_path}")
         short_video_path = self._get_short_path(video_path)
-        if short_video_path != video_path:
-            logger.debug(f"ShortPath result: {short_video_path}")
+        if short_video_path != video_path and short_video_path.isascii():
+            logger.info(f"Using Windows ShortPath for video: {short_video_path}")
+        elif short_video_path != video_path:
+            logger.warning(f"ShortPath conversion produced non-ASCII result: {short_video_path}")
+            short_video_path = video_path  # Fall back to original
         else:
             logger.debug("ShortPath conversion not needed or unavailable")
+
+        # Validate the path still exists after conversion
+        if not os.path.exists(short_video_path):
+            raise FileNotFoundError(f"Video file not found after path conversion: {video_path}")
 
         cmd = [
             'ffmpeg', '-i', short_video_path,
