@@ -357,7 +357,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         Raises:
             FileNotFoundError: ffmpegが見つからない場合
             subprocess.TimeoutExpired: ffmpegがタイムアウトした場合
-            subprocess.CalledProcessError: ffmpegが非ゼロ終了した場合
+            AudioFormatError: ffmpegが非ゼロ終了した場合
         """
         temp_fd, temp_wav_path = tempfile.mkstemp(suffix='.wav', prefix='transcribe_')
         os.close(temp_fd)
@@ -403,7 +403,10 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         except subprocess.CalledProcessError as e:
             # Log full stderr for debugging (truncated to avoid excessive log size)
             stderr_msg = e.stderr[:500] if e.stderr else 'no error output'
-            logger.error(f"ffmpeg failed (exit {e.returncode}): {stderr_msg}")
+            # Log detailed stderr at DEBUG level (not retained in production)
+            logger.debug(f"ffmpeg stderr (exit {e.returncode}): {stderr_msg}")
+            # Log generic error at ERROR level (retained in production)
+            logger.error(f"ffmpeg failed (exit {e.returncode}): Video audio extraction failed")
             raise AudioFormatError(f"Video audio extraction failed") from e
 
         logger.info(f"Audio extracted to: {temp_wav_path}")
