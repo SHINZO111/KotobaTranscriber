@@ -365,8 +365,16 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         with self._temp_files_lock:
             self._temp_files.append(temp_wav_path)
 
+        # Windows ShortPath変換（日本語パス対応）
+        logger.debug(f"Converting video path to ShortPath: {video_path}")
+        short_video_path = self._get_short_path(video_path)
+        if short_video_path != video_path:
+            logger.debug(f"ShortPath result: {short_video_path}")
+        else:
+            logger.debug("ShortPath conversion not needed or unavailable")
+
         cmd = [
-            'ffmpeg', '-i', video_path,
+            'ffmpeg', '-i', short_video_path,
             '-vn',             # 映像除去
             '-acodec', 'pcm_s16le',  # 16bit PCM WAV
             '-ar', '16000',    # 16kHz（Whisper要求）
