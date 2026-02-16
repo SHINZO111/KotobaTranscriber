@@ -506,7 +506,6 @@ class MonitorWindow(QMainWindow):
         self.batch_worker = BatchTranscriptionWorker(
             new_files,
             enable_diarization=enable_diarization,
-            max_workers=SharedConstants.MONITOR_BATCH_WORKERS,
             formatter=self.formatter,
             use_llm_correction=False
         )

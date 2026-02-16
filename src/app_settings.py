@@ -57,7 +57,8 @@ class AppSettings:
             "width": 280,
             "height": 450,
             "x": 100,
-            "y": 100
+            "y": 100,
+            "tab_index": 0
         }
     }
 
@@ -77,6 +78,7 @@ class AppSettings:
         'window.height': int,
         'window.x': int,
         'window.y': int,
+        'window.tab_index': int,
     }
 
     def __init__(self, settings_file: Optional[str] = None):

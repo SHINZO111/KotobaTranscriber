@@ -1,0 +1,18 @@
+{
+  "monitored_folder": "C:/Users/sawas/OneDrive - AGEC株式会社/レコーディング",
+  "monitor_interval": 60,
+  "completed_folder": "C:/Users/sawas/OneDrive - AGEC株式会社/レコーディング/文字起こし済",
+  "auto_move_completed": true,
+  "remove_fillers": true,
+  "enable_diarization": true,
+  "enable_llm_correction": true,
+  "enable_preprocessing": false,
+  "enable_vocabulary": false,
+  "dark_mode": false,
+  "window": {
+    "width": 300,
+    "height": 450,
+    "x": 100,
+    "y": -31
+  }
+}

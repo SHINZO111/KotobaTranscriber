@@ -112,8 +112,13 @@ class FolderMonitor(QThread):
         with self._processed_lock:
             return os.path.exists(transcription_file) or abs_path in self.processed_files
 
-    def get_unprocessed_files(self) -> List[str]:
-        """未処理ファイルを取得"""
+    def get_unprocessed_files(self, skip_readiness_check: bool = False) -> List[str]:
+        """
+        未処理ファイルを取得
+
+        Args:
+            skip_readiness_check: Trueの場合、is_file_ready()チェックをスキップ（初回スキャン高速化用）
+        """
         unprocessed = []
 
         try:
@@ -137,9 +142,15 @@ class FolderMonitor(QThread):
                 if self.is_processed(file_path):
                     continue
 
-                # ファイルが完全にコピー/移動されているかチェック（書き込み中でない）
-                if self.is_file_ready(file_path):
-                    unprocessed.append(file_path)
+                # ファイル準備チェック（初回スキャン時はスキップ可能）
+                if skip_readiness_check:
+                    # 初回スキャン: 基本的な存在チェックのみ
+                    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                        unprocessed.append(file_path)
+                else:
+                    # 定期チェック: 完全な準備チェック（ロック確認含む）
+                    if self.is_file_ready(file_path):
+                        unprocessed.append(file_path)
 
         except (IOError, OSError) as e:
             logger.error(f"I/O error getting unprocessed files: {e}")
@@ -234,10 +245,10 @@ class FolderMonitor(QThread):
         logger.info(f"Folder monitoring started: {self.folder_path}")
         self.status_update.emit(f"フォルダ監視開始: {self.folder_path}")
 
-        # 起動時に即座に全ファイルスキャン
+        # 起動時に即座に全ファイルスキャン（高速モード: ロックチェックスキップ）
         try:
-            logger.info("Initial scan: checking all files in folder")
-            unprocessed_files = self.get_unprocessed_files()
+            logger.info("Initial scan: checking all files in folder (fast mode)")
+            unprocessed_files = self.get_unprocessed_files(skip_readiness_check=True)
 
             if unprocessed_files:
                 logger.info(f"Initial scan: found {len(unprocessed_files)} unprocessed files")

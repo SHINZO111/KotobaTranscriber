@@ -5,16 +5,16 @@
 YAMLファイルからの設定読み込みとドット記法でのアクセスをサポート。
 """
 
-import os
 import copy
 import logging
+import os
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['get_config', 'ConfigManager', 'Config']
+__all__ = ["get_config", "ConfigManager", "Config"]
 
 
 class Config:
@@ -48,7 +48,7 @@ class Config:
             設定値、またはデフォルト値
         """
         with self._data_lock:
-            keys = key.split('.')
+            keys = key.split(".")
             value = self._data
 
             for k in keys:
@@ -69,7 +69,7 @@ class Config:
             value: 設定する値
         """
         with self._data_lock:
-            keys = key.split('.')
+            keys = key.split(".")
             data = self._data
 
             for k in keys[:-1]:
@@ -101,11 +101,12 @@ class ConfigManager:
     設定ファイルの読み込みと管理を行うシングルトンクラス
     """
 
-    _instance: Optional['ConfigManager'] = None
+    _instance: Optional["ConfigManager"] = None
     _config: Optional[Config] = None
+    _config_file: Optional[Path] = None
     _init_lock = threading.Lock()
 
-    def __new__(cls) -> 'ConfigManager':
+    def __new__(cls) -> "ConfigManager":
         if cls._instance is None:
             with cls._init_lock:
                 if cls._instance is None:
@@ -142,7 +143,12 @@ class ConfigManager:
         if config_path is None:
             logger.warning("Config file not found, using defaults")
             self._config = Config(self._get_default_config())
+            # デフォルトの保存先を設定
+            self._config_file = Path(__file__).parent.parent / "config" / "config.yaml"
             return
+
+        # 設定ファイルのパスを保存
+        self._config_file = config_path
 
         # セキュリティ: ファイルサイズ制限 (10MB)
         MAX_CONFIG_SIZE = 10 * 1024 * 1024
@@ -161,7 +167,7 @@ class ConfigManager:
                 self._config = Config(self._get_default_config())
                 return
 
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
             if data is None:
@@ -180,11 +186,7 @@ class ConfigManager:
     def _get_default_config(self) -> Dict[str, Any]:
         """デフォルト設定を返す"""
         return {
-            "app": {
-                "name": "KotobaTranscriber",
-                "version": "2.2.0",
-                "language": "ja"
-            },
+            "app": {"name": "KotobaTranscriber", "version": "2.2.0", "language": "ja"},
             "model": {
                 "whisper": {
                     "name": "kotoba-tech/kotoba-whisper-v2.2",
@@ -192,68 +194,32 @@ class ConfigManager:
                     "chunk_length_s": 15,
                     "language": "ja",
                     "task": "transcribe",
-                    "return_timestamps": True
+                    "return_timestamps": True,
                 },
-                "faster_whisper": {
-                    "model_size": "base",
-                    "compute_type": "auto",
-                    "beam_size": 5
-                }
+                "faster_whisper": {"model_size": "base", "compute_type": "auto", "beam_size": 5},
             },
             "audio": {
-                "preprocessing": {
-                    "enabled": False,
-                    "noise_reduction": False,
-                    "normalize": False,
-                    "remove_silence": False
-                },
-                "ffmpeg": {
-                    "path": r"C:\ffmpeg\ffmpeg-8.0-essentials_build\bin",
-                    "auto_configure": True
-                }
+                "preprocessing": {"enabled": False, "noise_reduction": False, "normalize": False, "remove_silence": False},
+                "ffmpeg": {"path": r"C:\ffmpeg\ffmpeg-8.0-essentials_build\bin", "auto_configure": True},
             },
-            "vocabulary": {
-                "enabled": False,
-                "file": "custom_vocabulary.json"
-            },
-            "realtime": {
-                "sample_rate": 16000,
-                "buffer_duration": 3.0,
-                "vad": {
-                    "enabled": True,
-                    "threshold": 0.01
-                }
-            },
+            "vocabulary": {"enabled": False, "file": "custom_vocabulary.json"},
+            "realtime": {"sample_rate": 16000, "buffer_duration": 3.0, "vad": {"enabled": True, "threshold": 0.01}},
             "formatting": {
                 "remove_fillers": True,
                 "add_punctuation": True,
                 "format_paragraphs": True,
-                "sentences_per_paragraph": 3
+                "sentences_per_paragraph": 3,
             },
-            "error_handling": {
-                "max_retries": 3,
-                "retry_delay": 1.0,
-                "max_consecutive_errors": 5
-            },
-            "logging": {
-                "level": "INFO",
-                "format": "text",
-                "file": "logs/app.log"
-            },
-            "performance": {
-                "thread_pool_size": 4,
-                "memory_limit_mb": 4096
-            },
-            "output": {
-                "default_format": "txt",
-                "save_directory": "results"
-            },
+            "error_handling": {"max_retries": 3, "retry_delay": 1.0, "max_consecutive_errors": 5},
+            "logging": {"level": "INFO", "format": "text", "file": "logs/app.log"},
+            "performance": {"thread_pool_size": 4, "memory_limit_mb": 4096},
+            "output": {"default_format": "txt", "save_directory": "results"},
             "export": {
                 "default_formats": ["txt", "srt"],
                 "merge_short_segments": True,
                 "min_segment_duration": 1.0,
                 "max_chars_per_segment": 40,
-                "split_long_segments": True
+                "split_long_segments": True,
             },
             "api": {
                 "anthropic": {
@@ -261,15 +227,9 @@ class ConfigManager:
                     "api_key": "",
                     "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.3,
-                    "max_tokens": 4096
+                    "max_tokens": 4096,
                 },
-                "openai": {
-                    "enabled": False,
-                    "api_key": "",
-                    "model": "gpt-4",
-                    "temperature": 0.3,
-                    "max_tokens": 4096
-                }
+                "openai": {"enabled": False, "api_key": "", "model": "gpt-4", "temperature": 0.3, "max_tokens": 4096},
             },
             "batch": {
                 "enhanced_mode": True,
@@ -277,14 +237,9 @@ class ConfigManager:
                 "checkpoint_interval": 10,
                 "auto_adjust_workers": True,
                 "max_workers": 4,
-                "memory_limit_mb": 4096
+                "memory_limit_mb": 4096,
             },
-            "ui": {
-                "dark_mode": False,
-                "compact_mode": True,
-                "show_realtime_tab": True,
-                "show_export_options": True
-            }
+            "ui": {"dark_mode": False, "compact_mode": True, "show_realtime_tab": True, "show_export_options": True},
         }
 
     def _merge_configs(self, default: Dict, override: Dict) -> Dict:
@@ -311,6 +266,55 @@ class ConfigManager:
         with self._init_lock:
             self._config = None
             self._load_config()
+
+    def save(self) -> bool:
+        """
+        設定をYAMLファイルに保存
+
+        Returns:
+            保存成功ならTrue
+        """
+        if self._config is None:
+            logger.error("No config to save")
+            return False
+
+        if self._config_file is None:
+            logger.error("No config file path set")
+            return False
+
+        try:
+            # YAMLのインポート
+            try:
+                import yaml
+            except ImportError:
+                logger.error("PyYAML not installed, cannot save config")
+                return False
+
+            # ディレクトリが存在しない場合は作成
+            self._config_file.parent.mkdir(parents=True, exist_ok=True)
+
+            # 一時ファイルに書き込み（アトミック書き込み）
+            temp_file = self._config_file.with_suffix(".tmp")
+
+            with self._init_lock:
+                with open(temp_file, "w", encoding="utf-8") as f:
+                    yaml.dump(self._config.data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+                # アトミックにリネーム
+                os.replace(temp_file, self._config_file)
+
+            logger.info(f"Configuration saved to {self._config_file}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to save configuration: {e}", exc_info=True)
+            # エラー時は一時ファイルを削除
+            if temp_file and temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except Exception:
+                    pass
+            return False
 
 
 # グローバルな設定マネージャーインスタンス

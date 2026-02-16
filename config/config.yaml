@@ -1,131 +1,88 @@
-# KotobaTranscriber 設定ファイル
-
 app:
-  name: "KotobaTranscriber"
-  version: "1.0.0"
-  language: "ja"
-
+  name: KotobaTranscriber
+  version: 1.0.0
+  language: ja
 model:
   whisper:
-    name: "kotoba-tech/kotoba-whisper-v2.2"
-    device: "auto"
+    name: kotoba-tech/kotoba-whisper-v2.2-small
+    device: cpu
     chunk_length_s: 15
-    language: "ja"
-    task: "transcribe"
+    language: ja
+    task: transcribe
     return_timestamps: true
   faster_whisper:
-    model_size: "base"
-    compute_type: "auto"
+    model_size: base
+    compute_type: auto
     beam_size: 5
   whisper_v3:
-    # Whisper v3 Turbo対応（v2.2.0+）
     enabled: false
-    name: "openai/whisper-large-v3"
-    turbo: false  # trueでTurboモデルを使用（高速）
+    name: openai/whisper-large-v3
+    turbo: false
   distilled_whisper:
-    # Distilled Whisper（軽量・高速）
     enabled: false
-    name: "distil-whisper/distil-large-v3"
-
-# 音声前処理設定（無効化推奨: meta tensorエラー回避）
+    name: distil-whisper/distil-large-v3
 audio:
   preprocessing:
-    enabled: false  # 無効化
+    enabled: false
     noise_reduction: false
     normalize: false
     remove_silence: false
   ffmpeg:
-    path: ""
+    path: ''
     auto_configure: true
-
-# カスタム語彙設定
 vocabulary:
   enabled: false
-  file: "custom_vocabulary.json"
-
-# 建設業用語辞書設定（AGEC対応）
-construction_vocabulary:
-  enabled: true
-  file: "data/construction_dictionary.json"
-  categories:
-    - standard_labor      # 標準労務費関連
-    - construction_law    # 建設業法関連
-    - cost_management     # コスト管理関連
-    - agec_specific       # AGEC社内用語
-
-# 会議モード設定
-meeting_mode:
-  enabled: true
-  auto_split_duration: 1800  # 30分ごとに自動分割（秒）
-  speaker_detection:
-    enabled: true
-    min_speakers: 2
-    max_speakers: 10
-  auto_save:
-    enabled: true
-    interval: 300  # 5分ごとに自動保存（秒）
-
+  file: custom_vocabulary.json
 realtime:
   sample_rate: 16000
   buffer_duration: 3.0
   vad:
     enabled: true
     threshold: 0.01
-
 formatting:
   remove_fillers: true
   add_punctuation: true
   format_paragraphs: true
   sentences_per_paragraph: 3
-
 error_handling:
   max_retries: 3
   retry_delay: 1.0
   max_consecutive_errors: 5
-
 logging:
-  level: "INFO"
-  format: "text"
-  file: "logs/app.log"
-
+  level: INFO
+  format: text
+  file: logs/app.log
 performance:
   thread_pool_size: 4
   memory_limit_mb: 4096
-
 output:
-  default_format: "txt"
-  save_directory: "results"
-
-# === v2.2.0 新機能設定 ===
-
-# 字幕エクスポート設定（v2.2.0+）
+  default_format: txt
+  save_directory: results
 export:
-  default_formats: ["txt", "srt"]
+  default_formats:
+  - txt
+  - srt
   merge_short_segments: true
   min_segment_duration: 1.0
   max_chars_per_segment: 40
   split_long_segments: true
-
-# API補正設定（v2.2.0+）
 api:
   anthropic:
     enabled: false
-    api_key: ""  # 環境変数 ANTHROPIC_API_KEY で上書き可能
-    model: "claude-3-5-sonnet-20241022"
+    api_key: ''
+    model: claude-3-5-sonnet-20241022
     temperature: 0.3
     max_tokens: 4096
   openai:
     enabled: false
-    api_key: ""  # 環境変数 OPENAI_API_KEY で上書き可能
-    model: "gpt-4"
+    api_key: ''
+    model: gpt-4
     temperature: 0.3
     max_tokens: 4096
   hybrid:
     enabled: true
     use_api_for_long_text: true
     long_text_threshold: 500
-
-# 強化バッチ処理設定（v2.2.0+）
 batch:
   enhanced_mode: true
   enable_checkpoint: true
@@ -133,10 +90,26 @@ batch:
   auto_adjust_workers: true
   max_workers: 4
   memory_limit_mb: 4096
-
-# UI設定（v2.2.0+）
 ui:
   dark_mode: false
   compact_mode: true
   show_realtime_tab: true
   show_export_options: true
+construction_vocabulary:
+  enabled: true
+  file: data/construction_dictionary.json
+  categories:
+  - standard_labor
+  - construction_law
+  - cost_management
+  - agec_specific
+meeting_mode:
+  enabled: true
+  auto_split_duration: 1800
+  speaker_detection:
+    enabled: true
+    min_speakers: 2
+    max_speakers: 10
+  auto_save:
+    enabled: true
+    interval: 300

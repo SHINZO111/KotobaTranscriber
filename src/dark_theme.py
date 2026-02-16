@@ -18,31 +18,31 @@ class DarkTheme:
         "surface": "#252526",
         "elevated": "#2d2d30",
 
-        # 前景色
-        "text_primary": "#d4d4d4",
-        "text_secondary": "#9cdcfe",
-        "text_disabled": "#6e6e6e",
+        # 前景色（高コントラスト）
+        "text_primary": "#ffffff",
+        "text_secondary": "#00d7ff",
+        "text_disabled": "#a0a0a0",
 
-        # アクセント色
-        "accent": "#007acc",
-        "accent_hover": "#1177bb",
-        "accent_pressed": "#005a9e",
+        # アクセント色（より鮮やか）
+        "accent": "#0098ff",
+        "accent_hover": "#33aaff",
+        "accent_pressed": "#0077cc",
 
-        # 状態色
-        "success": "#4ec9b0",
-        "warning": "#ce9178",
-        "error": "#f44747",
-        "info": "#569cd6",
+        # 状態色（より明るく）
+        "success": "#5fff5f",
+        "warning": "#ffaa00",
+        "error": "#ff5555",
+        "info": "#66bbff",
 
-        # ボーダー
-        "border": "#3e3e42",
-        "border_focus": "#007acc",
+        # ボーダー（より明るく）
+        "border": "#555555",
+        "border_focus": "#00aaff",
 
-        # ボタン
-        "button_bg": "#0e639c",
-        "button_hover": "#1177bb",
-        "button_pressed": "#005a9e",
-        "button_disabled": "#3e3e42",
+        # ボタン（より明るく）
+        "button_bg": "#0088dd",
+        "button_hover": "#00aaff",
+        "button_pressed": "#0066bb",
+        "button_disabled": "#555555",
     }
 
     @classmethod

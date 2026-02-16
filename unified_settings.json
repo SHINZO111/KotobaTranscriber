@@ -10,11 +10,17 @@
   "enable_vocabulary": false,
   "dark_mode": false,
   "window": {
-    "width": 280,
-    "height": 450,
-    "x": 100,
-    "y": 100,
+    "width": 1108,
+    "height": 871,
+    "x": 200,
+    "y": 88,
     "tab_index": 0
   },
-  "theme": "dark"
+  "file_tab": {
+    "remove_fillers": true,
+    "enable_diarization": false,
+    "enable_llm_correction": true,
+    "enable_preprocessing": false,
+    "enable_vocabulary": false
+  }
 }
