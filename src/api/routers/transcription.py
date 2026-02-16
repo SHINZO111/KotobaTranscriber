@@ -8,18 +8,22 @@ import time
 
 from fastapi import APIRouter, HTTPException
 
-from api.schemas import (
-    TranscribeRequest, TranscribeResponse,
-    BatchTranscribeRequest, BatchTranscribeResponse,
-    MessageResponse,
-)
 from api.dependencies import (
-    get_transcription_engine, get_text_formatter, get_worker_state,
+    get_text_formatter,
+    get_transcription_engine,
+    get_worker_state,
 )
 from api.event_bus import get_event_bus
+from api.schemas import (
+    BatchTranscribeRequest,
+    BatchTranscribeResponse,
+    MessageResponse,
+    TranscribeRequest,
+    TranscribeResponse,
+)
 from api.workers import BatchTranscriptionWorker
 from constants import normalize_segments as _normalize_segments
-from validators import Validator, ValidationError
+from validators import ValidationError, Validator
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -30,6 +34,7 @@ _engine_lock = threading.Lock()
 
 class _EngineBusyError(Exception):
     """エンジンがビジー状態（ロック取得失敗）"""
+
     pass
 
 
@@ -38,11 +43,8 @@ def _validate_file_path(file_path: str):
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="指定されたファイルが見つかりません")
     try:
-        Validator.validate_file_path(
-            file_path, must_exist=True,
-            allowed_extensions=Validator.ALLOWED_AUDIO_EXTENSIONS
-        )
-    except ValidationError as e:
+        Validator.validate_file_path(file_path, must_exist=True, allowed_extensions=Validator.ALLOWED_AUDIO_EXTENSIONS)
+    except ValidationError:
         raise HTTPException(status_code=400, detail="ファイルパスが不正です")
 
 
@@ -67,6 +69,7 @@ def _do_transcribe(engine, file_path: str, bus, req):
     if req.enable_diarization:
         try:
             from speaker_diarization_free import FreeSpeakerDiarizer
+
             diarizer = FreeSpeakerDiarizer()
             bus.emit("progress", {"value": 75})
             diar_segments = diarizer.diarize(file_path)
@@ -103,9 +106,7 @@ async def transcribe_file(req: TranscribeRequest):
     start_time = time.time()
 
     try:
-        text, segments = await asyncio.to_thread(
-            _do_transcribe, engine, req.file_path, bus, req
-        )
+        text, segments = await asyncio.to_thread(_do_transcribe, engine, req.file_path, bus, req)
         duration = time.time() - start_time
         bus.emit("finished", {"text": text})
 
@@ -148,7 +149,7 @@ async def batch_transcribe(req: BatchTranscribeRequest):
         try:
             worker.join(timeout=1)
         except Exception:
-            pass
+            pass  # nosec B110 - cleanup thread join, safe to ignore
         finally:
             state.clear_batch_worker()
 

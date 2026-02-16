@@ -2,14 +2,14 @@
 建設業用語辞書のテスト
 """
 
-import unittest
 import json
-import shutil
-import tempfile
 import os
+import shutil
+import sys
+import tempfile
+import unittest
 from pathlib import Path
 
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from construction_vocabulary import ConstructionVocabulary, get_construction_vocabulary
@@ -92,12 +92,9 @@ class TestCustomDictionary(unittest.TestCase):
             "construction_vocabulary": {
                 "enabled": True,
                 "file": "data/construction_dictionary.json",
-                "categories": ["standard_labor", "agec_specific"]
+                "categories": ["standard_labor", "agec_specific"],
             },
-            "vocabulary": {
-                "enabled": False,
-                "file": "custom_vocabulary.json"
-            }
+            "vocabulary": {"enabled": False, "file": "custom_vocabulary.json"},
         }
 
         dictionary = CustomDictionary(config)
@@ -121,7 +118,7 @@ class TestDictionaryFile(unittest.TestCase):
         dict_path = Path(__file__).parent.parent / "data" / "construction_dictionary.json"
         self.assertTrue(dict_path.exists(), "辞書ファイルが存在しません")
 
-        with open(dict_path, 'r', encoding='utf-8') as f:
+        with open(dict_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         self.assertIn("version", data)

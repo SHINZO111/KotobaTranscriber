@@ -13,7 +13,7 @@ import shutil
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 from exceptions import PathTraversalError
 
@@ -39,44 +39,35 @@ class AppSettings:
         "monitor_interval": 10,
         "completed_folder": None,
         "auto_move_completed": False,
-
         # テキスト整形オプション（句読点・段落はLLMに任せる）
         "remove_fillers": True,
         "enable_diarization": False,
         "enable_llm_correction": True,  # 高度AI補正（デフォルトON）
-
         # 音声前処理とカスタム語彙
         "enable_preprocessing": False,
         "enable_vocabulary": False,
-
         # UI設定
         "dark_mode": False,
-
         # ウィンドウ設定（コンパクトUI）
-        "window": {
-            "width": 280,
-            "height": 450,
-            "x": 100,
-            "y": 100
-        }
+        "window": {"width": 280, "height": 450, "x": 100, "y": 100},
     }
 
     # 設定値の型定義
-    SETTING_TYPES = {
-        'monitored_folder': (str, type(None)),
-        'monitor_interval': int,
-        'completed_folder': (str, type(None)),
-        'auto_move_completed': bool,
-        'remove_fillers': bool,
-        'enable_diarization': bool,
-        'enable_llm_correction': bool,
-        'enable_preprocessing': bool,
-        'dark_mode': bool,
-        'enable_vocabulary': bool,
-        'window.width': int,
-        'window.height': int,
-        'window.x': int,
-        'window.y': int,
+    SETTING_TYPES: Dict[str, Union[Type, Tuple[Type, ...]]] = {
+        "monitored_folder": (str, type(None)),
+        "monitor_interval": int,
+        "completed_folder": (str, type(None)),
+        "auto_move_completed": bool,
+        "remove_fillers": bool,
+        "enable_diarization": bool,
+        "enable_llm_correction": bool,
+        "enable_preprocessing": bool,
+        "dark_mode": bool,
+        "enable_vocabulary": bool,
+        "window.width": int,
+        "window.height": int,
+        "window.x": int,
+        "window.y": int,
     }
 
     def __init__(self, settings_file: Optional[str] = None):
@@ -145,7 +136,7 @@ class AppSettings:
             self.cancel_pending_save()
         except Exception:
             # デストラクタではロガーが利用不可の場合がある
-            pass
+            pass  # nosec B110 - destructor cleanup, logger may be unavailable
 
     def _validate_key(self, key: str) -> None:
         """
@@ -161,7 +152,7 @@ class AppSettings:
             raise ValueError(f"Invalid key: {key}")
 
         # キーは英小文字、数字、アンダースコア、ドットのみ許可
-        if not re.match(r'^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$', key):
+        if not re.match(r"^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$", key):
             raise ValueError(f"Key contains invalid characters: {key}")
 
     def _validate_value_type(self, key: str, value: Any) -> None:
@@ -176,14 +167,12 @@ class AppSettings:
             TypeError: 値の型が期待される型と異なる場合
         """
         expected_types = self.SETTING_TYPES.get(key)
-        if expected_types and not isinstance(value, expected_types):
-            type_names = (
-                expected_types.__name__ if hasattr(expected_types, '__name__')
-                else ', '.join(t.__name__ for t in expected_types)
-            )
-            raise TypeError(
-                f"Setting '{key}' expects {type_names}, got {type(value).__name__}"
-            )
+        if expected_types is not None and not isinstance(value, expected_types):
+            if isinstance(expected_types, tuple):
+                type_names = ", ".join(t.__name__ for t in expected_types)
+            else:
+                type_names = expected_types.__name__
+            raise TypeError(f"Setting '{key}' expects {type_names}, got {type(value).__name__}")
 
     def _validate_value_range(self, key: str, value: Any) -> None:
         """
@@ -196,24 +185,24 @@ class AppSettings:
         Raises:
             ValueError: 値が許容範囲外の場合
         """
-        if key == 'monitor_interval' and isinstance(value, int):
+        if key == "monitor_interval" and isinstance(value, int):
             if not (5 <= value <= 60):
                 raise ValueError(f"monitor_interval must be between 5 and 60, got {value}")
 
-        elif key == 'realtime.vad_threshold' and isinstance(value, int):
+        elif key == "realtime.vad_threshold" and isinstance(value, int):
             if not (5 <= value <= 50):
                 raise ValueError(f"vad_threshold must be between 5 and 50, got {value}")
 
-        elif key == 'realtime.model_size' and isinstance(value, str):
-            valid_models = ['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3']
+        elif key == "realtime.model_size" and isinstance(value, str):
+            valid_models = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
             if value not in valid_models:
                 raise ValueError(f"Invalid model size: {value}. Must be one of {valid_models}")
 
-        elif key in ['window.width', 'window.height'] and isinstance(value, int):
+        elif key in ["window.width", "window.height"] and isinstance(value, int):
             if value < 100 or value > 10000:
                 raise ValueError(f"{key} must be between 100 and 10000, got {value}")
 
-        elif key in ['window.x', 'window.y'] and isinstance(value, int):
+        elif key in ["window.x", "window.y"] and isinstance(value, int):
             if value < -5000 or value > 10000:
                 raise ValueError(f"{key} must be between -5000 and 10000, got {value}")
 
@@ -237,7 +226,7 @@ class AppSettings:
 
         with self._lock:
             try:
-                with open(self.settings_file, 'r', encoding='utf-8') as f:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
                     loaded_settings = json.load(f)
 
                 # デフォルト設定とマージ（新しい設定項目が追加された場合に対応）
@@ -306,11 +295,11 @@ class AppSettings:
             backup_files = sorted(
                 backup_dir.glob(f"{self.settings_file.stem}_*{self.settings_file.suffix}"),
                 key=lambda p: p.stat().st_mtime,
-                reverse=True  # 新しい順
+                reverse=True,  # 新しい順
             )
 
             # 古いバックアップを削除
-            for old_backup in backup_files[self.MAX_BACKUPS:]:
+            for old_backup in backup_files[self.MAX_BACKUPS :]:
                 try:
                     old_backup.unlink()
                     logger.debug(f"Deleted old backup: {old_backup}")
@@ -375,7 +364,7 @@ class AppSettings:
             backup_files = sorted(
                 backup_dir.glob(f"{self.settings_file.stem}_*{self.settings_file.suffix}"),
                 key=lambda p: p.stat().st_mtime,
-                reverse=True
+                reverse=True,
             )
 
             return [bf.name for bf in backup_files]
@@ -401,8 +390,8 @@ class AppSettings:
                 self.settings_file.parent.mkdir(parents=True, exist_ok=True)
 
                 # 一時ファイルに書き込み
-                temp_file = self.settings_file.with_suffix('.tmp')
-                with open(temp_file, 'w', encoding='utf-8') as f:
+                temp_file = self.settings_file.with_suffix(".tmp")
+                with open(temp_file, "w", encoding="utf-8") as f:
                     json.dump(self.settings, f, ensure_ascii=False, indent=2)
 
                 # アトミックにリネーム（既存ファイルを上書き）
@@ -418,7 +407,7 @@ class AppSettings:
                     try:
                         temp_file.unlink()
                     except Exception:
-                        pass
+                        pass  # nosec B110 - best-effort temp file cleanup
                 return False
 
             except Exception as e:
@@ -428,7 +417,7 @@ class AppSettings:
                     try:
                         temp_file.unlink()
                     except Exception:
-                        pass
+                        pass  # nosec B110 - best-effort temp file cleanup
                 return False
 
     def save_debounced(self) -> None:
@@ -444,10 +433,7 @@ class AppSettings:
                 self._save_timer.cancel()
 
             # 新しいタイマーをスケジュール
-            self._save_timer = threading.Timer(
-                self._save_debounce_delay,
-                self._execute_debounced_save
-            )
+            self._save_timer = threading.Timer(self._save_debounce_delay, self._execute_debounced_save)
             self._save_timer.daemon = True
             self._save_timer.start()
             logger.debug("Debounced save scheduled")
@@ -516,7 +502,7 @@ class AppSettings:
         self._validate_key(key)
 
         with self._lock:
-            keys = key.split('.')
+            keys = key.split(".")
             value = self.settings
 
             for k in keys:
@@ -546,7 +532,7 @@ class AppSettings:
         self._validate_value_range(key, value)
 
         with self._lock:
-            keys = key.split('.')
+            keys = key.split(".")
             target = self.settings
 
             # 親階層をたどる（辞書を確保）
@@ -554,9 +540,7 @@ class AppSettings:
                 if k not in target:
                     target[k] = {}
                 elif not isinstance(target[k], dict):
-                    raise ValueError(
-                        f"Cannot set '{key}': intermediate key '{k}' is not a dict"
-                    )
+                    raise ValueError(f"Cannot set '{key}': intermediate key '{k}' is not a dict")
                 target = target[k]
 
             # 値を設定
@@ -579,7 +563,7 @@ class AppSettings:
             logger.info("Settings reset to defaults")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # noqa: C901
     # テスト用コード
     logging.basicConfig(level=logging.INFO)
 
@@ -595,8 +579,8 @@ if __name__ == "__main__":
 
     # 設定変更
     print("\n2. Changing settings:")
-    settings.set('monitored_folder', 'C:/test/folder')
-    settings.set('realtime.model_size', 'medium')
+    settings.set("monitored_folder", "C:/test/folder")
+    settings.set("realtime.model_size", "medium")
     print(f"  monitored_folder: {settings.get('monitored_folder')}")
     print(f"  realtime.model_size: {settings.get('realtime.model_size')}")
 
@@ -618,63 +602,63 @@ if __name__ == "__main__":
 
     # 正常な値
     try:
-        settings.set('monitor_interval', 15)
+        settings.set("monitor_interval", 15)
         print("  [OK] Valid monitor_interval accepted")
     except Exception as e:
         print(f"  [FAIL] Unexpected error: {e}")
 
     # 範囲外の値
     try:
-        settings.set('monitor_interval', 100)
+        settings.set("monitor_interval", 100)
         print("  [FAIL] Invalid monitor_interval accepted (should fail)")
     except ValueError as e:
         print(f"  [OK] Range validation working: {e}")
 
     # 型エラー
     try:
-        settings.set('monitor_interval', "invalid")
+        settings.set("monitor_interval", "invalid")
         print("  [FAIL] Invalid type accepted (should fail)")
     except TypeError as e:
         print(f"  [OK] Type validation working: {e}")
 
     # 無効なキー
     try:
-        settings.set('INVALID-KEY', 'value')
+        settings.set("INVALID-KEY", "value")
         print("  [FAIL] Invalid key accepted (should fail)")
     except ValueError as e:
         print(f"  [OK] Key validation working: {e}")
 
     # 無効なモデルサイズ
     try:
-        settings.set('realtime.model_size', 'invalid_model')
+        settings.set("realtime.model_size", "invalid_model")
         print("  [FAIL] Invalid model size accepted (should fail)")
     except ValueError as e:
         print(f"  [OK] Model size validation working: {e}")
 
     # 正常なウィンドウサイズ
     try:
-        settings.set('window.width', 1200)
-        settings.set('window.height', 800)
+        settings.set("window.width", 1200)
+        settings.set("window.height", 800)
         print("  [OK] Valid window dimensions accepted")
     except Exception as e:
         print(f"  [FAIL] Unexpected error: {e}")
 
     # 無効なウィンドウサイズ
     try:
-        settings.set('window.width', 50)
+        settings.set("window.width", 50)
         print("  [FAIL] Invalid window width accepted (should fail)")
     except ValueError as e:
         print(f"  [OK] Window size validation working: {e}")
 
     # VAD閾値テスト
     try:
-        settings.set('realtime.vad_threshold', 15)
+        settings.set("realtime.vad_threshold", 15)
         print("  [OK] Valid vad_threshold accepted")
     except Exception as e:
         print(f"  [FAIL] Unexpected error: {e}")
 
     try:
-        settings.set('realtime.vad_threshold', 100)
+        settings.set("realtime.vad_threshold", 100)
         print("  [FAIL] Invalid vad_threshold accepted (should fail)")
     except ValueError as e:
         print(f"  [OK] VAD threshold validation working: {e}")

@@ -1,7 +1,8 @@
 """API認証ミドルウェアのテスト"""
 
-import sys
 import os
+import sys
+
 import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
@@ -9,14 +10,16 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 try:
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
 
 try:
-    from api.main import app
     from api.auth import get_token_manager
+    from api.main import app
+
     APP_AVAILABLE = True
 except ImportError:
     APP_AVAILABLE = False
@@ -83,6 +86,7 @@ class TestAuthMiddleware:
     async def test_docs_path_disabled_in_production(self):
         """/docs はプロダクションモードで無効（KOTOBA_DEV未設定時）"""
         import os
+
         if os.environ.get("KOTOBA_DEV") == "1":
             pytest.skip("KOTOBA_DEV=1 で実行中のためスキップ")
         transport = ASGITransport(app=app)
@@ -94,6 +98,7 @@ class TestAuthMiddleware:
     async def test_openapi_path_disabled_in_production(self):
         """/openapi.json はプロダクションモードで無効"""
         import os
+
         if os.environ.get("KOTOBA_DEV") == "1":
             pytest.skip("KOTOBA_DEV=1 で実行中のためスキップ")
         transport = ASGITransport(app=app)

@@ -5,16 +5,16 @@
 YAMLファイルからの設定読み込みとドット記法でのアクセスをサポート。
 """
 
-import os
 import copy
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['get_config', 'ConfigManager', 'Config']
+__all__ = ["get_config", "ConfigManager", "Config"]
 
 
 class Config:
@@ -48,7 +48,7 @@ class Config:
             設定値、またはデフォルト値
         """
         with self._data_lock:
-            keys = key.split('.')
+            keys = key.split(".")
             value = self._data
 
             for k in keys:
@@ -69,7 +69,7 @@ class Config:
             value: 設定する値
         """
         with self._data_lock:
-            keys = key.split('.')
+            keys = key.split(".")
             data = self._data
 
             for k in keys[:-1]:
@@ -101,11 +101,11 @@ class ConfigManager:
     設定ファイルの読み込みと管理を行うシングルトンクラス
     """
 
-    _instance: Optional['ConfigManager'] = None
+    _instance: Optional["ConfigManager"] = None
     _config: Optional[Config] = None
     _init_lock = threading.Lock()
 
-    def __new__(cls) -> 'ConfigManager':
+    def __new__(cls) -> "ConfigManager":
         if cls._instance is None:
             with cls._init_lock:
                 if cls._instance is None:
@@ -155,13 +155,13 @@ class ConfigManager:
         try:
             # YAMLのインポート（オプショナル）
             try:
-                import yaml
+                import yaml  # type: ignore[import-untyped]
             except ImportError:
                 logger.warning("PyYAML not installed, using defaults")
                 self._config = Config(self._get_default_config())
                 return
 
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
             if data is None:
@@ -180,11 +180,7 @@ class ConfigManager:
     def _get_default_config(self) -> Dict[str, Any]:
         """デフォルト設定を返す"""
         return {
-            "app": {
-                "name": "KotobaTranscriber",
-                "version": "2.2.0",
-                "language": "ja"
-            },
+            "app": {"name": "KotobaTranscriber", "version": "2.2.0", "language": "ja"},
             "model": {
                 "whisper": {
                     "name": "kotoba-tech/kotoba-whisper-v2.2",
@@ -192,68 +188,32 @@ class ConfigManager:
                     "chunk_length_s": 15,
                     "language": "ja",
                     "task": "transcribe",
-                    "return_timestamps": True
+                    "return_timestamps": True,
                 },
-                "faster_whisper": {
-                    "model_size": "base",
-                    "compute_type": "auto",
-                    "beam_size": 5
-                }
+                "faster_whisper": {"model_size": "base", "compute_type": "auto", "beam_size": 5},
             },
             "audio": {
-                "preprocessing": {
-                    "enabled": False,
-                    "noise_reduction": False,
-                    "normalize": False,
-                    "remove_silence": False
-                },
-                "ffmpeg": {
-                    "path": r"C:\ffmpeg\ffmpeg-8.0-essentials_build\bin",
-                    "auto_configure": True
-                }
+                "preprocessing": {"enabled": False, "noise_reduction": False, "normalize": False, "remove_silence": False},
+                "ffmpeg": {"path": r"C:\ffmpeg\ffmpeg-8.0-essentials_build\bin", "auto_configure": True},
             },
-            "vocabulary": {
-                "enabled": False,
-                "file": "custom_vocabulary.json"
-            },
-            "realtime": {
-                "sample_rate": 16000,
-                "buffer_duration": 3.0,
-                "vad": {
-                    "enabled": True,
-                    "threshold": 0.01
-                }
-            },
+            "vocabulary": {"enabled": False, "file": "custom_vocabulary.json"},
+            "realtime": {"sample_rate": 16000, "buffer_duration": 3.0, "vad": {"enabled": True, "threshold": 0.01}},
             "formatting": {
                 "remove_fillers": True,
                 "add_punctuation": True,
                 "format_paragraphs": True,
-                "sentences_per_paragraph": 3
+                "sentences_per_paragraph": 3,
             },
-            "error_handling": {
-                "max_retries": 3,
-                "retry_delay": 1.0,
-                "max_consecutive_errors": 5
-            },
-            "logging": {
-                "level": "INFO",
-                "format": "text",
-                "file": "logs/app.log"
-            },
-            "performance": {
-                "thread_pool_size": 4,
-                "memory_limit_mb": 4096
-            },
-            "output": {
-                "default_format": "txt",
-                "save_directory": "results"
-            },
+            "error_handling": {"max_retries": 3, "retry_delay": 1.0, "max_consecutive_errors": 5},
+            "logging": {"level": "INFO", "format": "text", "file": "logs/app.log"},
+            "performance": {"thread_pool_size": 4, "memory_limit_mb": 4096},
+            "output": {"default_format": "txt", "save_directory": "results"},
             "export": {
                 "default_formats": ["txt", "srt"],
                 "merge_short_segments": True,
                 "min_segment_duration": 1.0,
                 "max_chars_per_segment": 40,
-                "split_long_segments": True
+                "split_long_segments": True,
             },
             "api": {
                 "anthropic": {
@@ -261,15 +221,9 @@ class ConfigManager:
                     "api_key": "",
                     "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.3,
-                    "max_tokens": 4096
+                    "max_tokens": 4096,
                 },
-                "openai": {
-                    "enabled": False,
-                    "api_key": "",
-                    "model": "gpt-4",
-                    "temperature": 0.3,
-                    "max_tokens": 4096
-                }
+                "openai": {"enabled": False, "api_key": "", "model": "gpt-4", "temperature": 0.3, "max_tokens": 4096},
             },
             "batch": {
                 "enhanced_mode": True,
@@ -277,14 +231,9 @@ class ConfigManager:
                 "checkpoint_interval": 10,
                 "auto_adjust_workers": True,
                 "max_workers": 4,
-                "memory_limit_mb": 4096
+                "memory_limit_mb": 4096,
             },
-            "ui": {
-                "dark_mode": False,
-                "compact_mode": True,
-                "show_realtime_tab": True,
-                "show_export_options": True
-            }
+            "ui": {"dark_mode": False, "compact_mode": True, "show_realtime_tab": True, "show_export_options": True},
         }
 
     def _merge_configs(self, default: Dict, override: Dict) -> Dict:

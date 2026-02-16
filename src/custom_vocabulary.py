@@ -3,11 +3,11 @@
 専門用語やホットワードの管理と適用
 """
 
-import logging
 import json
+import logging
 import os
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +48,12 @@ class CustomVocabulary:
                 logger.error(f"Vocabulary file too large: {file_size} bytes (max: {MAX_VOCAB_SIZE})")
                 return
 
-            with open(self.vocabulary_file, 'r', encoding='utf-8') as f:
+            with open(self.vocabulary_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            self.hotwords = data.get('hotwords', [])
-            self.replacements = data.get('replacements', {})
-            self.domain_vocabularies = data.get('domains', {})
+            self.hotwords = data.get("hotwords", [])
+            self.replacements = data.get("replacements", {})
+            self.domain_vocabularies = data.get("domains", {})
 
             logger.info(f"Loaded {len(self.hotwords)} hotwords from {self.vocabulary_file}")
 
@@ -65,20 +65,15 @@ class CustomVocabulary:
         """語彙ファイルを保存（アトミック書き込み）"""
         try:
             import tempfile
-            data = {
-                'hotwords': self.hotwords,
-                'replacements': self.replacements,
-                'domains': self.domain_vocabularies
-            }
+
+            data = {"hotwords": self.hotwords, "replacements": self.replacements, "domains": self.domain_vocabularies}
 
             # 一時ファイルに書き込み後、アトミックにリネーム
             parent_dir = self.vocabulary_file.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
-            fd, tmp_path = tempfile.mkstemp(
-                dir=str(parent_dir), suffix='.tmp', prefix='.vocab_'
-            )
+            fd, tmp_path = tempfile.mkstemp(dir=str(parent_dir), suffix=".tmp", prefix=".vocab_")
             try:
-                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
                 os.replace(tmp_path, str(self.vocabulary_file))
             except Exception:
@@ -99,17 +94,32 @@ class CustomVocabulary:
         # 一般的な専門用語の例
         self.hotwords = [
             # IT・技術用語
-            "API", "SDK", "OAuth", "REST", "GraphQL",
-            "Kubernetes", "Docker", "CI/CD", "DevOps",
-            "機械学習", "ディープラーニング", "ニューラルネットワーク",
-            "トランスフォーマー", "アテンション機構",
-
+            "API",
+            "SDK",
+            "OAuth",
+            "REST",
+            "GraphQL",
+            "Kubernetes",
+            "Docker",
+            "CI/CD",
+            "DevOps",
+            "機械学習",
+            "ディープラーニング",
+            "ニューラルネットワーク",
+            "トランスフォーマー",
+            "アテンション機構",
             # ビジネス用語
-            "KPI", "ROI", "PDCA", "OKR",
-            "ステークホルダー", "アジェンダ", "コンセンサス",
-
+            "KPI",
+            "ROI",
+            "PDCA",
+            "OKR",
+            "ステークホルダー",
+            "アジェンダ",
+            "コンセンサス",
             # 医療用語（例）
-            "エビデンス", "プロトコル", "インフォームドコンセント",
+            "エビデンス",
+            "プロトコル",
+            "インフォームドコンセント",
         ]
 
         # よくある誤認識の修正
@@ -119,7 +129,6 @@ class CustomVocabulary:
             "ケーパーアイ": "KPI",
             "機械が嫌": "機械学習",
             "深層が嫌": "ディープラーニング",
-
             # 一般的な誤認識
             "以上です": "以上です",  # 保持例
         }
@@ -127,18 +136,21 @@ class CustomVocabulary:
         # ドメイン別語彙
         self.domain_vocabularies = {
             "it": [
-                "Python", "JavaScript", "TypeScript", "React", "Vue.js",
-                "PostgreSQL", "MongoDB", "Redis", "AWS", "Azure", "GCP"
+                "Python",
+                "JavaScript",
+                "TypeScript",
+                "React",
+                "Vue.js",
+                "PostgreSQL",
+                "MongoDB",
+                "Redis",
+                "AWS",
+                "Azure",
+                "GCP",
             ],
-            "medical": [
-                "診断", "治療", "投薬", "手術", "検査", "カルテ"
-            ],
-            "legal": [
-                "契約", "訴訟", "判例", "弁護士", "裁判所"
-            ],
-            "business": [
-                "売上", "利益", "予算", "戦略", "マーケティング"
-            ]
+            "medical": ["診断", "治療", "投薬", "手術", "検査", "カルテ"],
+            "legal": ["契約", "訴訟", "判例", "弁護士", "裁判所"],
+            "business": ["売上", "利益", "予算", "戦略", "マーケティング"],
         }
 
         self.save_vocabulary()
@@ -241,7 +253,8 @@ class CustomVocabulary:
             置換後のテキスト
         """
         from construction_vocabulary import ConstructionVocabulary
-        return ConstructionVocabulary.apply_replacements_to_text(text, self.replacements)
+
+        return str(ConstructionVocabulary.apply_replacements_to_text(text, self.replacements))
 
     def get_hotwords_list(self) -> List[str]:
         """
@@ -268,7 +281,7 @@ class CustomVocabulary:
         Args:
             text: 単語リスト（改行区切り）
         """
-        words = [w.strip() for w in text.split('\n') if w.strip()]
+        words = [w.strip() for w in text.split("\n") if w.strip()]
         imported_count = 0
 
         for word in words:
@@ -287,7 +300,7 @@ class CustomVocabulary:
         Returns:
             改行区切りの単語リスト
         """
-        return '\n'.join(self.hotwords)
+        return "\n".join(self.hotwords)
 
     def clear_hotwords(self):
         """全ホットワードをクリア"""

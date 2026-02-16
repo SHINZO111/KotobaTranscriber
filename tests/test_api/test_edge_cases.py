@@ -5,8 +5,9 @@ WebSocket管理、依存性注入のエッジケースをカバー。
 """
 
 import asyncio
-import sys
 import os
+import sys
+
 import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
@@ -15,45 +16,64 @@ if src_dir not in sys.path:
 
 try:
     from pydantic import ValidationError as PydanticValidationError
+
     from api.schemas import (
-        TranscribeRequest, TranscribeResponse, BatchTranscribeRequest,
-        BatchTranscribeResponse, RealtimeControlRequest, RealtimeStatusResponse,
-        MonitorRequest, MonitorStatusResponse, ExportRequest, ExportResponse,
-        SettingsModel, HealthResponse, ModelInfoResponse,
-        FormatTextRequest, CorrectTextRequest, DiarizeRequest,
-        ConfigModel, MessageResponse,
+        BatchTranscribeRequest,
+        BatchTranscribeResponse,
+        ConfigModel,
+        CorrectTextRequest,
+        DiarizeRequest,
+        ExportRequest,
+        ExportResponse,
+        FormatTextRequest,
+        HealthResponse,
+        MessageResponse,
+        ModelInfoResponse,
+        MonitorRequest,
+        MonitorStatusResponse,
+        RealtimeControlRequest,
+        RealtimeStatusResponse,
+        SettingsModel,
+        TranscribeRequest,
+        TranscribeResponse,
     )
+
     SCHEMAS_AVAILABLE = True
 except ImportError:
     SCHEMAS_AVAILABLE = False
 
 try:
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
 
 try:
-    from api.main import app
     from api.auth import get_token_manager
+    from api.main import app
+
     APP_AVAILABLE = True
 except ImportError:
     APP_AVAILABLE = False
 
 try:
     from api.event_bus import EventBus
+
     EVENTBUS_AVAILABLE = True
 except ImportError:
     EVENTBUS_AVAILABLE = False
 
 try:
     from api.websocket import ConnectionManager
+
     WS_AVAILABLE = True
 except ImportError:
     WS_AVAILABLE = False
 
 try:
     from api.dependencies import WorkerState
+
     DEPS_AVAILABLE = True
 except ImportError:
     DEPS_AVAILABLE = False
@@ -62,6 +82,7 @@ except ImportError:
 # ===================================================================
 # Schema edge cases
 # ===================================================================
+
 
 @pytest.mark.skipif(not SCHEMAS_AVAILABLE, reason="schemas not importable")
 class TestSchemaEdgeCases:
@@ -181,6 +202,7 @@ class TestSchemaEdgeCases:
 # Router response consistency
 # ===================================================================
 
+
 def _auth_headers():
     """テスト用認証ヘッダーを返す"""
     if APP_AVAILABLE:
@@ -268,10 +290,7 @@ class TestRouterResponseConsistency:
         """POST /api/batch-transcribe で空リストは正常に処理"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/batch-transcribe",
-                json={"file_paths": []}
-            )
+            response = await client.post("/api/batch-transcribe", json={"file_paths": []})
             # 空リストは200を返す（ワーカーが即完了するため）
             # または422 (空リストのバリデーションによる)
             assert response.status_code in (200, 422)
@@ -281,16 +300,14 @@ class TestRouterResponseConsistency:
         """POST /api/export/txt でtext未指定は422"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/export/txt",
-                json={"output_path": "/tmp/test.txt"}
-            )
+            response = await client.post("/api/export/txt", json={"output_path": "/tmp/test.txt"})
             assert response.status_code == 422
 
 
 # ===================================================================
 # WebSocket ConnectionManager
 # ===================================================================
+
 
 @pytest.mark.skipif(not WS_AVAILABLE, reason="websocket module not importable")
 class TestConnectionManager:
@@ -323,6 +340,7 @@ class TestConnectionManager:
 # ===================================================================
 # EventBus additional edge cases
 # ===================================================================
+
 
 @pytest.mark.skipif(not EVENTBUS_AVAILABLE, reason="EventBus not importable")
 class TestEventBusEdgeCases:
@@ -357,10 +375,7 @@ class TestEventBusEdgeCases:
             await asyncio.sleep(0.05)
             bus.emit("stop", {})
 
-        await asyncio.wait_for(
-            asyncio.gather(consumer(), producer()),
-            timeout=3.0
-        )
+        await asyncio.wait_for(asyncio.gather(consumer(), producer()), timeout=3.0)
         assert bus.subscriber_count() == 0
 
     def test_emit_after_shutdown_is_noop(self):
@@ -375,6 +390,7 @@ class TestEventBusEdgeCases:
 # ===================================================================
 # WorkerState tests
 # ===================================================================
+
 
 @pytest.mark.skipif(not DEPS_AVAILABLE, reason="dependencies not importable")
 class TestWorkerState:

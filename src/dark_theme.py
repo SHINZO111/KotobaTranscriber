@@ -17,27 +17,22 @@ class DarkTheme:
         "background": "#1e1e1e",
         "surface": "#252526",
         "elevated": "#2d2d30",
-
         # 前景色
         "text_primary": "#d4d4d4",
         "text_secondary": "#9cdcfe",
         "text_disabled": "#6e6e6e",
-
         # アクセント色
         "accent": "#007acc",
         "accent_hover": "#1177bb",
         "accent_pressed": "#005a9e",
-
         # 状態色
         "success": "#4ec9b0",
         "warning": "#ce9178",
         "error": "#f44747",
         "info": "#569cd6",
-
         # ボーダー
         "border": "#3e3e42",
         "border_focus": "#007acc",
-
         # ボタン
         "button_bg": "#0e639c",
         "button_hover": "#1177bb",
@@ -501,24 +496,24 @@ class DarkTheme:
         palette = QPalette()
         c = cls.COLORS
 
-        palette.setColor(QPalette.Window, QColor(c['background']))
-        palette.setColor(QPalette.WindowText, QColor(c['text_primary']))
-        palette.setColor(QPalette.Base, QColor(c['elevated']))
-        palette.setColor(QPalette.AlternateBase, QColor(c['surface']))
-        palette.setColor(QPalette.ToolTipBase, QColor(c['elevated']))
-        palette.setColor(QPalette.ToolTipText, QColor(c['text_primary']))
-        palette.setColor(QPalette.Text, QColor(c['text_primary']))
-        palette.setColor(QPalette.Button, QColor(c['button_bg']))
+        palette.setColor(QPalette.Window, QColor(c["background"]))
+        palette.setColor(QPalette.WindowText, QColor(c["text_primary"]))
+        palette.setColor(QPalette.Base, QColor(c["elevated"]))
+        palette.setColor(QPalette.AlternateBase, QColor(c["surface"]))
+        palette.setColor(QPalette.ToolTipBase, QColor(c["elevated"]))
+        palette.setColor(QPalette.ToolTipText, QColor(c["text_primary"]))
+        palette.setColor(QPalette.Text, QColor(c["text_primary"]))
+        palette.setColor(QPalette.Button, QColor(c["button_bg"]))
         palette.setColor(QPalette.ButtonText, QColor("white"))
-        palette.setColor(QPalette.BrightText, QColor(c['error']))
-        palette.setColor(QPalette.Highlight, QColor(c['accent']))
+        palette.setColor(QPalette.BrightText, QColor(c["error"]))
+        palette.setColor(QPalette.Highlight, QColor(c["accent"]))
         palette.setColor(QPalette.HighlightedText, QColor("white"))
 
         # Disabled group for accessibility
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.WindowText, QColor(c['text_disabled']))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.Text, QColor(c['text_disabled']))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ButtonText, QColor(c['text_disabled']))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.Button, QColor(c['button_disabled']))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.WindowText, QColor(c["text_disabled"]))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.Text, QColor(c["text_disabled"]))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ButtonText, QColor(c["text_disabled"]))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.Button, QColor(c["button_disabled"]))
 
         app.setPalette(palette)
 
@@ -530,25 +525,20 @@ class LightTheme:
         "background": "#fafafa",
         "surface": "#ffffff",
         "elevated": "#f5f5f5",
-
         "text_primary": "#212121",
         "text_secondary": "#757575",
         "text_disabled": "#bdbdbd",
-
         "accent": "#1976d2",
         "accent_hover": "#1565c0",
         "accent_pressed": "#0d47a1",
-
         "success": "#2e7d32",
         "success_hover": "#1b5e20",
         "warning": "#f57c00",
         "error": "#d32f2f",
         "error_hover": "#b71c1c",
         "info": "#0288d1",
-
         "border": "#e0e0e0",
         "border_focus": "#1976d2",
-
         "button_bg": "#1976d2",
         "button_hover": "#1565c0",
         "button_pressed": "#0d47a1",
@@ -776,10 +766,22 @@ def set_theme(app: QApplication, dark_mode: bool = True):
 
 if __name__ == "__main__":
     import sys
+
     from PySide6.QtWidgets import (
-        QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-        QPushButton, QLabel, QLineEdit, QTextEdit, QComboBox,
-        QCheckBox, QGroupBox, QSlider, QProgressBar
+        QApplication,
+        QCheckBox,
+        QComboBox,
+        QGroupBox,
+        QHBoxLayout,
+        QLabel,
+        QLineEdit,
+        QMainWindow,
+        QProgressBar,
+        QPushButton,
+        QSlider,
+        QTextEdit,
+        QVBoxLayout,
+        QWidget,
     )
 
     app = QApplication(sys.argv)

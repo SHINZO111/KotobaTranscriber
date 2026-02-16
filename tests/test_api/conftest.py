@@ -1,7 +1,8 @@
 """API テスト共通フィクスチャ"""
 
-import sys
 import os
+import sys
+
 import pytest
 
 # src/ を sys.path に追加
@@ -11,7 +12,8 @@ if src_dir not in sys.path:
 
 # API認証トークン（テスト用）
 try:
-    from api.auth import get_token_manager, _reset_token_manager_for_test
+    from api.auth import _reset_token_manager_for_test, get_token_manager
+
     TOKEN_MANAGER_AVAILABLE = True
 except ImportError:
     TOKEN_MANAGER_AVAILABLE = False

@@ -4,27 +4,22 @@ TranscriptionWorker, BatchTranscriptionWorker, SharedConstants を提供
 main.py と monitor_app.py の両方から使用される
 """
 
-import os
 import logging
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional
 
 from PySide6.QtCore import QThread, Signal
 
-from transcription_engine import TranscriptionEngine
-from text_formatter import TextFormatter
-from speaker_diarization_free import FreeSpeakerDiarizer
-from validators import Validator, ValidationError
-from exceptions import (
-    FileProcessingError,
-    AudioFormatError,
-    ModelLoadError,
-    TranscriptionFailedError,
-    InsufficientMemoryError
-)
 # SharedConstants / normalize_segments は constants.py から再エクスポート（後方互換性）
 from constants import SharedConstants, normalize_segments
+from exceptions import AudioFormatError, FileProcessingError, InsufficientMemoryError, ModelLoadError, TranscriptionFailedError
+from speaker_diarization_free import FreeSpeakerDiarizer
+from text_formatter import TextFormatter
+from transcription_engine import TranscriptionEngine
 from transcription_worker_base import TranscriptionLogic
+from validators import ValidationError, Validator
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +27,14 @@ logger = logging.getLogger(__name__)
 _normalize_segments = normalize_segments
 
 
-def stop_worker(worker, name: str, timeout: int = 10000,
-                cancel: bool = False, stop: bool = False):
+def stop_worker(worker, name: str, timeout: int = 10000, cancel: bool = False, stop: bool = False):
     """ワーカースレッドを安全に停止する共通関数"""
     if not worker or not worker.isRunning():
         return
     logger.info(f"Stopping {name}...")
-    if cancel and hasattr(worker, 'cancel'):
+    if cancel and hasattr(worker, "cancel"):
         worker.cancel()
-    elif stop and hasattr(worker, 'stop'):
+    elif stop and hasattr(worker, "stop"):
         worker.stop()
     else:
         worker.quit()
@@ -72,13 +66,13 @@ def stop_worker(worker, name: str, timeout: int = 10000,
 
 class BatchTranscriptionWorker(QThread):
     """複数ファイルの並列文字起こし処理"""
+
     progress = Signal(int, int, str)  # (完了数, 総数, ファイル名)
     file_finished = Signal(str, str, bool)  # (ファイルパス, 結果テキスト, 成功/失敗)
     all_finished = Signal(int, int)  # (成功数, 失敗数)
     error = Signal(str)
 
-    def __init__(self, audio_paths: list, enable_diarization: bool = False,
-                 formatter=None, use_llm_correction: bool = False):
+    def __init__(self, audio_paths: list, enable_diarization: bool = False, formatter=None, use_llm_correction: bool = False):
         """
         初期化
 
@@ -106,7 +100,7 @@ class BatchTranscriptionWorker(QThread):
         self._executor = None  # ThreadPoolExecutor参照保持
 
         # 共有TranscriptionEngineインスタンス（並列処理での再利用）
-        self._shared_engine = None
+        self._shared_engine: Optional[TranscriptionEngine] = None
         self._engine_lock = threading.Lock()  # エンジン使用の排他制御
 
     def cancel(self):
@@ -117,7 +111,7 @@ class BatchTranscriptionWorker(QThread):
         if self._executor:
             self._executor.shutdown(wait=False)
 
-    def process_single_file(self, audio_path: str):
+    def process_single_file(self, audio_path: str):  # noqa: C901
         """単一ファイルを処理"""
         # キャンセルチェック
         if self._cancel_event.is_set():
@@ -128,10 +122,7 @@ class BatchTranscriptionWorker(QThread):
 
             # Validate file path first
             try:
-                validated_path = Validator.validate_file_path(
-                    audio_path,
-                    must_exist=True
-                )
+                validated_path = Validator.validate_file_path(audio_path, must_exist=True)
             except ValidationError as e:
                 error_msg = f"ファイルパスが不正です: {audio_path}"
                 logger.error(error_msg, exc_info=True)
@@ -149,6 +140,8 @@ class BatchTranscriptionWorker(QThread):
                         logger.info("Shared transcription engine loaded successfully")
 
                     # 文字起こし実行（ロック内で実行して並列実行を防ぐ）
+                    if self._shared_engine is None:
+                        raise RuntimeError("_shared_engine is not initialized")
                     result = self._shared_engine.transcribe(str(validated_path), return_timestamps=True)
                     text = result.get("text", "")
             except ModelLoadError as e:
@@ -194,20 +187,11 @@ class BatchTranscriptionWorker(QThread):
                     text = diarizer.format_with_speakers(trans_segments, diar_segments)
                     logger.info(f"Speaker diarization completed for '{audio_path}'")
                 except ImportError as e:
-                    logger.warning(
-                        f"Speaker diarization library not available for '{audio_path}': {e}",
-                        exc_info=False
-                    )
+                    logger.warning(f"Speaker diarization library not available for '{audio_path}': {e}", exc_info=False)
                 except (IOError, OSError) as e:
-                    logger.warning(
-                        f"I/O error during diarization for '{audio_path}': {e}",
-                        exc_info=True
-                    )
+                    logger.warning(f"I/O error during diarization for '{audio_path}': {e}", exc_info=True)
                 except Exception as e:
-                    logger.warning(
-                        f"Speaker diarization failed for '{audio_path}': {type(e).__name__} - {e}",
-                        exc_info=True
-                    )
+                    logger.warning(f"Speaker diarization failed for '{audio_path}': {type(e).__name__} - {e}", exc_info=True)
                     # Continue with non-diarized text
 
             # Text formatting（バッチ処理では常にルールベース句読点を使用）
@@ -218,7 +202,7 @@ class BatchTranscriptionWorker(QThread):
                         remove_fillers=True,
                         add_punctuation=True,  # バッチ処理ではルールベース句読点を使用
                         format_paragraphs=True,  # バッチ処理ではルールベース段落整形を使用
-                        clean_repeated=True
+                        clean_repeated=True,
                     )
                 else:
                     formatted_text = text
@@ -226,10 +210,7 @@ class BatchTranscriptionWorker(QThread):
                 logger.warning(f"Text formatting validation error for '{audio_path}': {e}")
                 formatted_text = text  # Use unformatted text as fallback
             except Exception as e:
-                logger.warning(
-                    f"Text formatting failed for '{audio_path}': {type(e).__name__} - {e}",
-                    exc_info=True
-                )
+                logger.warning(f"Text formatting failed for '{audio_path}': {type(e).__name__} - {e}", exc_info=True)
                 formatted_text = text  # Use unformatted text as fallback
 
             # バッチ処理ではLLM補正をスキップ（速度重視）
@@ -241,13 +222,9 @@ class BatchTranscriptionWorker(QThread):
                 output_file = f"{base_name}_文字起こし.txt"
 
                 # Validate output path (path traversal protection)
-                validated_output = Validator.validate_file_path(
-                    output_file,
-                    allowed_extensions=[".txt"],
-                    must_exist=False
-                )
+                validated_output = Validator.validate_file_path(output_file, allowed_extensions=[".txt"], must_exist=False)
 
-                with open(str(validated_output), 'w', encoding='utf-8') as f:
+                with open(str(validated_output), "w", encoding="utf-8") as f:
                     f.write(formatted_text)
 
                 logger.info(f"Successfully processed '{audio_path}' -> '{output_file}'")
@@ -265,7 +242,7 @@ class BatchTranscriptionWorker(QThread):
         except FileProcessingError as e:
             # Already logged and formatted
             return audio_path, str(e), False
-        except InsufficientMemoryError as e:
+        except InsufficientMemoryError:
             error_msg = f"メモリ不足です。ファイルサイズが大きすぎる可能性があります: {audio_path}"
             logger.error(error_msg, exc_info=True)
             return audio_path, error_msg, False
@@ -288,10 +265,7 @@ class BatchTranscriptionWorker(QThread):
                 self._executor = executor  # 参照を保持（キャンセル用）
 
                 # 全ファイルを投入
-                future_to_path = {
-                    executor.submit(self.process_single_file, path): path
-                    for path in self.audio_paths
-                }
+                future_to_path = {executor.submit(self.process_single_file, path): path for path in self.audio_paths}
 
                 # 完了したものから処理
                 for future in as_completed(future_to_path):
@@ -344,7 +318,7 @@ class BatchTranscriptionWorker(QThread):
             self._executor = None  # 確実にクリア
             # 共有エンジンのモデル解放
             try:
-                if hasattr(self, '_shared_engine') and self._shared_engine is not None:
+                if hasattr(self, "_shared_engine") and self._shared_engine is not None:
                     self._shared_engine.unload_model()
                     self._shared_engine = None
             except Exception as e:
@@ -353,6 +327,7 @@ class BatchTranscriptionWorker(QThread):
 
 class TranscriptionWorker(QThread):
     """文字起こし処理を別スレッドで実行"""
+
     progress = Signal(int)
     finished = Signal(str)
     error = Signal(str)
@@ -367,6 +342,7 @@ class TranscriptionWorker(QThread):
         if enable_diarization:
             try:
                 from speaker_diarization_free import FreeSpeakerDiarizer
+
                 self.diarizer = FreeSpeakerDiarizer()
             except Exception as e:
                 logger.warning(f"Failed to initialize speaker diarization: {e}")
@@ -461,10 +437,7 @@ class TranscriptionWorker(QThread):
             trans_segments = _normalize_segments(engine_result)
 
             # 話者情報を追加
-            text = self.diarizer.format_with_speakers(
-                trans_segments,
-                diar_segments
-            )
+            text = self.diarizer.format_with_speakers(trans_segments, diar_segments)
 
             # 統計情報をログに出力
             stats = self.diarizer.get_speaker_statistics(diar_segments)
@@ -473,25 +446,13 @@ class TranscriptionWorker(QThread):
             return text
 
         except ImportError as e:
-            logger.warning(
-                f"Speaker diarization library not available: {e}",
-                exc_info=False
-            )
+            logger.warning(f"Speaker diarization library not available: {e}", exc_info=False)
         except (IOError, OSError) as e:
-            logger.warning(
-                f"I/O error during speaker diarization: {e}",
-                exc_info=True
-            )
+            logger.warning(f"I/O error during speaker diarization: {e}", exc_info=True)
         except MemoryError as e:
-            logger.warning(
-                f"Memory error during speaker diarization: {e}",
-                exc_info=True
-            )
+            logger.warning(f"Memory error during speaker diarization: {e}", exc_info=True)
         except Exception as e:
-            logger.warning(
-                f"Speaker diarization failed: {type(e).__name__} - {e}",
-                exc_info=True
-            )
+            logger.warning(f"Speaker diarization failed: {type(e).__name__} - {e}", exc_info=True)
 
         # 話者分離に失敗しても文字起こし結果は返す
         return text

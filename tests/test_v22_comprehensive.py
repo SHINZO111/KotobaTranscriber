@@ -2,25 +2,22 @@
 KotobaTranscriber v2.2 Comprehensive Test Suite - PyQt5 Quality Verification
 """
 
+import json
+import logging
 import os
 import sys
-import time
-import json
 import tempfile
+import time
 import unittest
-import logging
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # Add test target path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Logging settings
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -28,8 +25,10 @@ logger = logging.getLogger(__name__)
 # Test Utilities
 # ============================================================================
 
+
 class TestResult:
     """Class to hold test results"""
+
     def __init__(self, name: str):
         self.name = name
         self.passed = 0
@@ -68,13 +67,14 @@ class TestResult:
             "skipped": self.skipped,
             "total": self.passed + self.failed + self.errors + self.skipped,
             "duration": f"{self.duration:.2f}s",
-            "details": self.details
+            "details": self.details,
         }
 
 
 # ============================================================================
 # 1. kotoba-whisper v2.2 Precision Tests
 # ============================================================================
+
 
 class TestKotobaWhisperPrecision(unittest.TestCase):
     """kotoba-whisper v2.2 precision tests"""
@@ -86,6 +86,7 @@ class TestKotobaWhisperPrecision(unittest.TestCase):
 
         try:
             from transcription_engine import KotobaTranscriptionEngine
+
             cls.TranscriptionEngine = KotobaTranscriptionEngine
             cls.available = True
         except ImportError as e:
@@ -132,18 +133,9 @@ class TestKotobaWhisperPrecision(unittest.TestCase):
         """Japanese text accuracy test (mock)"""
         # Test without actual audio
         test_cases = [
-            {
-                "expected": "Hello, the weather is nice today.",
-                "keywords": ["Hello", "weather"]
-            },
-            {
-                "expected": "Let's check the project progress.",
-                "keywords": ["project", "progress", "check"]
-            },
-            {
-                "expected": "Please attend the meeting next week.",
-                "keywords": ["meeting", "next week", "attend"]
-            }
+            {"expected": "Hello, the weather is nice today.", "keywords": ["Hello", "weather"]},
+            {"expected": "Let's check the project progress.", "keywords": ["project", "progress", "check"]},
+            {"expected": "Please attend the meeting next week.", "keywords": ["meeting", "next week", "attend"]},
         ]
 
         for i, case in enumerate(test_cases):
@@ -156,6 +148,7 @@ class TestKotobaWhisperPrecision(unittest.TestCase):
 # 2. pyannote.audio Speaker Diarization Tests
 # ============================================================================
 
+
 class TestSpeakerDiarization(unittest.TestCase):
     """Speaker diarization functionality tests"""
 
@@ -166,6 +159,7 @@ class TestSpeakerDiarization(unittest.TestCase):
 
         try:
             from speaker_diarization_free import FreeSpeakerDiarizer
+
             cls.FreeSpeakerDiarizer = FreeSpeakerDiarizer
             cls.available = True
         except ImportError as e:
@@ -213,6 +207,7 @@ class TestSpeakerDiarization(unittest.TestCase):
 # 3. Punctuation Addition Tests
 # ============================================================================
 
+
 class TestPunctuationAddition(unittest.TestCase):
     """Punctuation auto-addition tests"""
 
@@ -223,6 +218,7 @@ class TestPunctuationAddition(unittest.TestCase):
 
         try:
             from text_formatter import TextFormatter
+
             cls.TextFormatter = TextFormatter
             cls.available = True
         except ImportError as e:
@@ -243,18 +239,9 @@ class TestPunctuationAddition(unittest.TestCase):
 
         # Test cases
         test_cases = [
-            {
-                "input": "Hello the weather is nice today",
-                "description": "Basic case"
-            },
-            {
-                "input": "However there is a question so a response is needed",
-                "description": "With conjunctions"
-            },
-            {
-                "input": "The project is going well let's work hard tomorrow too",
-                "description": "Multiple sentences"
-            }
+            {"input": "Hello the weather is nice today", "description": "Basic case"},
+            {"input": "However there is a question so a response is needed", "description": "With conjunctions"},
+            {"input": "The project is going well let's work hard tomorrow too", "description": "Multiple sentences"},
         ]
 
         for case in test_cases:
@@ -288,7 +275,7 @@ class TestPunctuationAddition(unittest.TestCase):
         result = formatter.format_paragraphs(long_text, max_sentences_per_paragraph=3)
 
         # Check paragraphs are split (should split 10 sentences into groups of 3)
-        paragraphs = result.split('\n\n')
+        paragraphs = result.split("\n\n")
         self.assertGreater(len(paragraphs), 1, "Paragraphs not split")
 
         self.result.add_pass("Paragraph formatting successful")
@@ -297,6 +284,7 @@ class TestPunctuationAddition(unittest.TestCase):
 # ============================================================================
 # 4. Multi-Format Export Tests (TXT, DOCX, CSV, SRT, PDF)
 # ============================================================================
+
 
 class TestMultiFormatExport(unittest.TestCase):
     """Multi-format export tests"""
@@ -309,6 +297,7 @@ class TestMultiFormatExport(unittest.TestCase):
 
         try:
             from subtitle_exporter import SubtitleExporter
+
             cls.SubtitleExporter = SubtitleExporter
             cls.subtitle_available = True
         except ImportError:
@@ -319,6 +308,7 @@ class TestMultiFormatExport(unittest.TestCase):
         cls.result.duration = time.time() - cls.start_time
         # Cleanup
         import shutil
+
         shutil.rmtree(cls.temp_dir, ignore_errors=True)
 
     def test_01_txt_export(self):
@@ -327,12 +317,12 @@ class TestMultiFormatExport(unittest.TestCase):
         output_path = os.path.join(self.temp_dir, "test.txt")
 
         try:
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 f.write(test_content)
 
             self.assertTrue(os.path.exists(output_path))
 
-            with open(output_path, 'r', encoding='utf-8') as f:
+            with open(output_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             self.assertEqual(content, test_content)
@@ -348,9 +338,9 @@ class TestMultiFormatExport(unittest.TestCase):
 
             output_path = os.path.join(self.temp_dir, "test.docx")
             doc = Document()
-            doc.add_heading('Transcription Result', 0)
-            doc.add_paragraph('This is a test.')
-            doc.add_paragraph('Second line.')
+            doc.add_heading("Transcription Result", 0)
+            doc.add_paragraph("This is a test.")
+            doc.add_paragraph("Second line.")
             doc.save(output_path)
 
             self.assertTrue(os.path.exists(output_path))
@@ -369,16 +359,16 @@ class TestMultiFormatExport(unittest.TestCase):
 
             output_path = os.path.join(self.temp_dir, "test.csv")
 
-            with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
+            with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(['Time', 'Speaker', 'Text'])
-                writer.writerow(['00:00:01', 'Speaker1', 'Hello'])
-                writer.writerow(['00:00:05', 'Speaker2', 'Nice weather'])
+                writer.writerow(["Time", "Speaker", "Text"])
+                writer.writerow(["00:00:01", "Speaker1", "Hello"])
+                writer.writerow(["00:00:05", "Speaker2", "Nice weather"])
 
             self.assertTrue(os.path.exists(output_path))
 
             # Read verification
-            with open(output_path, 'r', encoding='utf-8-sig') as f:
+            with open(output_path, "r", encoding="utf-8-sig") as f:
                 reader = csv.reader(f)
                 rows = list(reader)
 
@@ -409,7 +399,7 @@ class TestMultiFormatExport(unittest.TestCase):
             self.assertTrue(os.path.exists(output_path))
 
             # Content verification
-            with open(output_path, 'r', encoding='utf-8') as f:
+            with open(output_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             self.assertIn("1", content)
@@ -436,7 +426,7 @@ class TestMultiFormatExport(unittest.TestCase):
 
             self.assertTrue(success)
 
-            with open(output_path, 'r', encoding='utf-8') as f:
+            with open(output_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             self.assertIn("WEBVTT", content)
@@ -450,6 +440,7 @@ class TestMultiFormatExport(unittest.TestCase):
 # 5. PyQt5 GUI Stability Tests
 # ============================================================================
 
+
 class TestPyQt5GUIStability(unittest.TestCase):
     """PyQt5 GUI stability tests"""
 
@@ -460,11 +451,16 @@ class TestPyQt5GUIStability(unittest.TestCase):
 
         # Check Qt imports
         try:
-            from PySide6.QtWidgets import (
-                QApplication, QMainWindow, QWidget, QVBoxLayout,
-                QPushButton, QLabel,
-            )
             from PySide6.QtCore import Signal, Slot
+            from PySide6.QtWidgets import (
+                QApplication,
+                QLabel,
+                QMainWindow,
+                QPushButton,
+                QVBoxLayout,
+                QWidget,
+            )
+
             cls.qt_available = True
         except ImportError:
             cls.qt_available = False
@@ -479,11 +475,15 @@ class TestPyQt5GUIStability(unittest.TestCase):
             self.result.add_skip("Qt not available")
             self.skipTest("Qt not available")
 
-        from PySide6.QtWidgets import (
-            QApplication, QMainWindow, QWidget, QVBoxLayout,
-            QPushButton, QLabel,
-        )
         from PySide6.QtCore import Signal, Slot
+        from PySide6.QtWidgets import (
+            QApplication,
+            QLabel,
+            QMainWindow,
+            QPushButton,
+            QVBoxLayout,
+            QWidget,
+        )
 
         self.result.add_pass("Qt binding: PySide6")
 
@@ -517,8 +517,9 @@ class TestPyQt5GUIStability(unittest.TestCase):
         if not self.qt_available:
             self.skipTest("Qt not available")
 
-        from PySide6.QtCore import QThread, Signal, Qt
         import time
+
+        from PySide6.QtCore import Qt, QThread, Signal
 
         class TestWorker(QThread):
             done = Signal(str)
@@ -545,6 +546,7 @@ class TestPyQt5GUIStability(unittest.TestCase):
 # ============================================================================
 # 6. Model Switching Tests (tiny - large-v3)
 # ============================================================================
+
 
 class TestModelSwitching(unittest.TestCase):
     """Model switching tests"""
@@ -581,7 +583,7 @@ class TestModelSwitching(unittest.TestCase):
 
         for model in valid_models:
             # Basic model name validation
-            self.assertTrue('/' in model, f"Invalid model name: {model}")
+            self.assertTrue("/" in model, f"Invalid model name: {model}")
             self.assertTrue(len(model) > 0)
 
         self.result.add_pass(f"{len(valid_models)} models validation successful")
@@ -632,6 +634,7 @@ class TestModelSwitching(unittest.TestCase):
 # Test Execution Entry Point
 # ============================================================================
 
+
 def generate_report(results: List[TestResult]) -> str:
     """Generate test report"""
 
@@ -651,7 +654,7 @@ def generate_report(results: List[TestResult]) -> str:
     total_skipped = 0
 
     for result in results:
-        total = result.passed + result.failed + result.errors + result.skipped
+        _total = result.passed + result.failed + result.errors + result.skipped  # noqa: F841
         status = "PASS" if result.failed == 0 and result.errors == 0 else "FAIL"
 
         report_lines.append(
@@ -666,13 +669,15 @@ def generate_report(results: List[TestResult]) -> str:
         total_errors += result.errors
         total_skipped += result.skipped
 
-    report_lines.extend([
-        "-" * 80,
-        f"Total: Pass: {total_passed} | Fail: {total_failed} | Error: {total_errors} | Skip: {total_skipped}",
-        "",
-        "[Details]",
-        "=" * 80,
-    ])
+    report_lines.extend(
+        [
+            "-" * 80,
+            f"Total: Pass: {total_passed} | Fail: {total_failed} | Error: {total_errors} | Skip: {total_skipped}",
+            "",
+            "[Details]",
+            "=" * 80,
+        ]
+    )
 
     for result in results:
         if result.details:
@@ -717,12 +722,9 @@ def run_all_tests():
     report = generate_report(results)
 
     # Save report to file
-    report_path = os.path.join(
-        os.path.dirname(__file__),
-        f"test_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    )
+    report_path = os.path.join(os.path.dirname(__file__), f"test_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
 
-    with open(report_path, 'w', encoding='utf-8') as f:
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(report)
 
     print(f"\nReport saved: {report_path}")

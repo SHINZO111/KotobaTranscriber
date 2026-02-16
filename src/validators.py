@@ -5,19 +5,20 @@
 セキュリティ上重要なパス検証やデータ整合性チェックを提供。
 """
 
+import logging
 import os
 import re
-import logging
 from pathlib import Path
-from typing import Optional, Union, List, Any
+from typing import Any, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['Validator', 'ValidationError']
+__all__ = ["Validator", "ValidationError"]
 
 
 class ValidationError(Exception):
     """バリデーションエラー"""
+
     pass
 
 
@@ -31,17 +32,29 @@ class Validator:
 
     # 許可されるファイル拡張子
     ALLOWED_AUDIO_EXTENSIONS = {
-        '.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac',
-        '.mp4', '.avi', '.mov', '.mkv', '.webm', '.wma',
-        '.opus', '.amr', '.3gp',
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".flac",
+        ".ogg",
+        ".aac",
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".mkv",
+        ".webm",
+        ".wma",
+        ".opus",
+        ".amr",
+        ".3gp",
     }
 
     # 許可されるモデル名パターン
     ALLOWED_MODEL_PATTERNS = [
-        r'^kotoba-tech/kotoba-whisper[\w.\-]*$',
-        r'^openai/whisper[\w.\-]*$',
-        r'^distil-whisper/[\w.\-]+$',
-        r'^(tiny|base|small|medium|large|large-v[2-9])$',
+        r"^kotoba-tech/kotoba-whisper[\w.\-]*$",
+        r"^openai/whisper[\w.\-]*$",
+        r"^distil-whisper/[\w.\-]+$",
+        r"^(tiny|base|small|medium|large|large-v[2-9])$",
     ]
 
     @staticmethod
@@ -49,7 +62,7 @@ class Validator:
         path: Union[str, Path],
         allowed_dirs: Optional[List[Path]] = None,
         must_exist: bool = True,
-        allowed_extensions: Optional[set] = None
+        allowed_extensions: Optional[set] = None,
     ) -> Path:
         """
         ファイルパスを検証
@@ -71,7 +84,7 @@ class Validator:
 
         # resolve() 前の元パスでパストラバーサルをチェック
         original_str = str(path)
-        if '..' in original_str.replace('/', os.sep).split(os.sep) or original_str.startswith('~'):
+        if ".." in original_str.replace("/", os.sep).split(os.sep) or original_str.startswith("~"):
             raise ValidationError(f"Path traversal detected in: {path}")
 
         try:
@@ -106,20 +119,12 @@ class Validator:
         if allowed_extensions:
             ext = path.suffix.lower()
             if ext not in allowed_extensions:
-                raise ValidationError(
-                    f"File extension '{ext}' not allowed. "
-                    f"Allowed: {', '.join(allowed_extensions)}"
-                )
+                raise ValidationError(f"File extension '{ext}' not allowed. " f"Allowed: {', '.join(allowed_extensions)}")
 
         return path
 
     @staticmethod
-    def validate_text_length(
-        text: str,
-        min_length: int = 0,
-        max_length: int = 1000000,
-        field_name: str = "text"
-    ) -> str:
+    def validate_text_length(text: str, min_length: int = 0, max_length: int = 1000000, field_name: str = "text") -> str:
         """
         テキストの長さを検証
 
@@ -143,13 +148,9 @@ class Validator:
 
         length = len(text)
         if length < min_length:
-            raise ValidationError(
-                f"{field_name} is too short: {length} < {min_length}"
-            )
+            raise ValidationError(f"{field_name} is too short: {length} < {min_length}")
         if length > max_length:
-            raise ValidationError(
-                f"{field_name} is too long: {length} > {max_length}"
-            )
+            raise ValidationError(f"{field_name} is too long: {length} > {max_length}")
 
         return text
 
@@ -162,7 +163,7 @@ class Validator:
         max_value: Optional[int] = None,
         # Alternative parameter names for compatibility
         min_val: Optional[int] = None,
-        max_val: Optional[int] = None
+        max_val: Optional[int] = None,
     ) -> int:
         """
         正の整数を検証
@@ -205,10 +206,7 @@ class Validator:
         return int_value
 
     @staticmethod
-    def validate_model_name(
-        model_name: str,
-        model_type: Optional[str] = None
-    ) -> str:
+    def validate_model_name(model_name: str, model_type: Optional[str] = None) -> str:
         """
         モデル名を検証
 
@@ -235,17 +233,11 @@ class Validator:
         # セキュリティ: パターンにマッチしないモデル名は拒否
         logger.error(f"Model name '{model_name}' does not match any allowed patterns")
         raise ValidationError(
-            f"Model name '{model_name}' is not in the allowed list. "
-            f"Allowed patterns: {Validator.ALLOWED_MODEL_PATTERNS}"
+            f"Model name '{model_name}' is not in the allowed list. " f"Allowed patterns: {Validator.ALLOWED_MODEL_PATTERNS}"
         )
 
     @staticmethod
-    def validate_chunk_length(
-        chunk_length_s: Any,
-        default: int = 15,
-        min_value: int = 1,
-        max_value: int = 60
-    ) -> int:
+    def validate_chunk_length(chunk_length_s: Any, default: int = 15, min_value: int = 1, max_value: int = 60) -> int:
         """
         チャンク長（秒）を検証
 
@@ -262,11 +254,7 @@ class Validator:
             ValidationError: 値が無効な場合
         """
         return Validator.validate_positive_integer(
-            chunk_length_s,
-            name="chunk_length_s",
-            default=default,
-            min_value=min_value,
-            max_value=max_value
+            chunk_length_s, name="chunk_length_s", default=default, min_value=min_value, max_value=max_value
         )
 
     @staticmethod
@@ -283,11 +271,7 @@ class Validator:
         Raises:
             ValidationError: パスが無効な場合
         """
-        return Validator.validate_file_path(
-            path,
-            must_exist=True,
-            allowed_extensions=Validator.ALLOWED_AUDIO_EXTENSIONS
-        )
+        return Validator.validate_file_path(path, must_exist=True, allowed_extensions=Validator.ALLOWED_AUDIO_EXTENSIONS)
 
     @staticmethod
     def sanitize_filename(filename: str) -> str:
@@ -304,10 +288,10 @@ class Validator:
             return "untitled"
 
         # 危険な文字を削除（制御文字 + ファイルシステム予約文字）
-        sanitized = re.sub(r'[\x00-\x1f<>:"/\\|?*]', '_', filename)
+        sanitized = re.sub(r'[\x00-\x1f<>:"/\\|?*]', "_", filename)
 
         # 先頭・末尾の空白とドットを削除
-        sanitized = sanitized.strip(' .')
+        sanitized = sanitized.strip(" .")
 
         # 空になった場合
         if not sanitized:
@@ -315,20 +299,39 @@ class Validator:
 
         # 予約名のチェック（Windows）
         reserved_names = {
-            'CON', 'PRN', 'AUX', 'NUL',
-            'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-            'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+            "CON",
+            "PRN",
+            "AUX",
+            "NUL",
+            "COM1",
+            "COM2",
+            "COM3",
+            "COM4",
+            "COM5",
+            "COM6",
+            "COM7",
+            "COM8",
+            "COM9",
+            "LPT1",
+            "LPT2",
+            "LPT3",
+            "LPT4",
+            "LPT5",
+            "LPT6",
+            "LPT7",
+            "LPT8",
+            "LPT9",
         }
-        name_without_ext = sanitized.split('.')[0].upper()
+        name_without_ext = sanitized.split(".")[0].upper()
         if name_without_ext in reserved_names:
             sanitized = f"_{sanitized}"
 
         # ファイル名長制限 (Windows MAX_PATH対策)
         MAX_FILENAME_LENGTH = 200
         if len(sanitized) > MAX_FILENAME_LENGTH:
-            name_part, _, ext_part = sanitized.rpartition('.')
+            name_part, _, ext_part = sanitized.rpartition(".")
             if ext_part and len(ext_part) < 10:
-                sanitized = name_part[:MAX_FILENAME_LENGTH - len(ext_part) - 1] + '.' + ext_part
+                sanitized = name_part[: MAX_FILENAME_LENGTH - len(ext_part) - 1] + "." + ext_part
             else:
                 sanitized = sanitized[:MAX_FILENAME_LENGTH]
 
@@ -348,20 +351,20 @@ if __name__ == "__main__":
 
     # validate_text_length
     try:
-        result = Validator.validate_text_length("Hello, World!", min_length=0, max_length=100)
-        print(f"validate_text_length: {result}")
+        text_result = Validator.validate_text_length("Hello, World!", min_length=0, max_length=100)
+        print(f"validate_text_length: {text_result}")
     except ValidationError as e:
         print(f"Error: {e}")
 
     # validate_model_name
     try:
-        result = Validator.validate_model_name("kotoba-tech/kotoba-whisper-v2.2", model_type="whisper")
-        print(f"validate_model_name: {result}")
+        model_result = Validator.validate_model_name("kotoba-tech/kotoba-whisper-v2.2", model_type="whisper")
+        print(f"validate_model_name: {model_result}")
     except ValidationError as e:
         print(f"Error: {e}")
 
     # sanitize_filename
-    result = Validator.sanitize_filename("test<file>:name?.txt")
-    print(f"sanitize_filename: {result}")
+    sanitized_result = Validator.sanitize_filename("test<file>:name?.txt")
+    print(f"sanitize_filename: {sanitized_result}")
 
     print("\nAll tests completed!")

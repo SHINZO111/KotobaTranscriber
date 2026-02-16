@@ -5,26 +5,30 @@ TranscriptionLogic ユニットテスト
 TranscriptionLogic の正常系・異常系をカバー。
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+
+pytest.importorskip("torch")
+
+from exceptions import (
+    AudioFormatError,
+    FileProcessingError,
+    InsufficientMemoryError,
+    ModelLoadError,
+    TranscriptionFailedError,
+)
 
 # モジュールインポート
 from transcription_worker_base import TranscriptionLogic
 from validators import ValidationError
-from exceptions import (
-    ModelLoadError,
-    TranscriptionFailedError,
-    AudioFormatError,
-    FileProcessingError,
-    InsufficientMemoryError,
-)
 
 
 @pytest.fixture
 def mock_engine():
     """モックTranscriptionEngineを提供"""
-    with patch('transcription_worker_base.TranscriptionEngine') as mock_cls:
+    with patch("transcription_worker_base.TranscriptionEngine") as mock_cls:
         engine_instance = MagicMock()
         engine_instance.is_loaded = False
         engine_instance.load_model.return_value = None
@@ -34,7 +38,7 @@ def mock_engine():
                 {"text": "これは", "start": 0.0, "end": 1.0},
                 {"text": "テストの", "start": 1.0, "end": 2.0},
                 {"text": "文字起こし結果です。", "start": 2.0, "end": 4.0},
-            ]
+            ],
         }
         mock_cls.return_value = engine_instance
         yield engine_instance
@@ -43,7 +47,7 @@ def mock_engine():
 @pytest.fixture
 def mock_validator():
     """モックValidatorを提供"""
-    with patch('transcription_worker_base.Validator') as mock_cls:
+    with patch("transcription_worker_base.Validator") as mock_cls:
         mock_cls.validate_file_path.side_effect = lambda path, must_exist=True: Path(path)
         yield mock_cls
 
@@ -97,10 +101,7 @@ class TestTranscriptionLogic:
         assert "segments" in result["result"]
 
         # Validatorが呼ばれたことを確認
-        mock_validator.validate_file_path.assert_called_once_with(
-            "test.wav",
-            must_exist=True
-        )
+        mock_validator.validate_file_path.assert_called_once_with("test.wav", must_exist=True)
 
         # エンジンメソッドが呼ばれたことを確認
         mock_engine.load_model.assert_called_once()
@@ -313,12 +314,12 @@ class TestTranscriptionLogic:
 
         # 進捗が順序通りに呼ばれることを確認
         calls = [call[0][0] for call in progress_callback.call_args_list]
-        assert 5 in calls   # バリデーション後
+        assert 5 in calls  # バリデーション後
         assert 10 in calls  # エンジン初期化後
         assert 20 in calls  # モデルロード後
         assert 40 in calls  # 文字起こし前
         assert 70 in calls  # 文字起こし後
-        assert 100 in calls # 完了
+        assert 100 in calls  # 完了
 
     def test_empty_transcription_result(self, mock_engine, mock_validator):
         """文字起こし結果が空の場合でもエラーにならないこと"""

@@ -3,16 +3,16 @@
 KotobaTranscriber v2.1.0+ の新機能をテスト
 """
 
+import logging
 import os
 import sys
-import logging
 import unittest
 from pathlib import Path
 
 # テスト対象のパスを追加
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -23,6 +23,7 @@ class TestSubtitleExporter(unittest.TestCase):
     def setUpClass(cls):
         try:
             from subtitle_exporter import SubtitleExporter
+
             cls.SubtitleExporter = SubtitleExporter
             cls.available = True
         except ImportError as e:
@@ -91,6 +92,7 @@ class TestAPICorrector(unittest.TestCase):
     def setUpClass(cls):
         try:
             from api_corrector import HybridCorrector, create_corrector
+
             cls.HybridCorrector = HybridCorrector
             cls.create_corrector = create_corrector
             cls.available = True
@@ -105,6 +107,7 @@ class TestAPICorrector(unittest.TestCase):
 
         try:
             from llm_corrector_standalone import SimpleLLMCorrector
+
             local = SimpleLLMCorrector()
 
             test_text = "えーとですね今日は会議です"
@@ -128,7 +131,8 @@ class TestEnhancedBatchProcessor(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         try:
-            from enhanced_batch_processor import EnhancedBatchProcessor, CheckpointManager
+            from enhanced_batch_processor import CheckpointManager, EnhancedBatchProcessor
+
             cls.EnhancedBatchProcessor = EnhancedBatchProcessor
             cls.CheckpointManager = CheckpointManager
             cls.available = True
@@ -149,7 +153,7 @@ class TestEnhancedBatchProcessor(unittest.TestCase):
             "processed_files": ["file1.wav", "file2.wav"],
             "failed_files": [],
             "remaining_files": ["file3.wav"],
-            "stats": {"total_files": 3}
+            "stats": {"total_files": 3},
         }
 
         saved = manager.save(**checkpoint_data)
@@ -170,14 +174,13 @@ class TestEnhancedBatchProcessor(unittest.TestCase):
         if not self.available:
             self.skipTest("EnhancedBatchProcessor not available")
 
-        processor = self.EnhancedBatchProcessor(
-            max_workers=4,
-            memory_limit_mb=4096
-        )
+        processor = self.EnhancedBatchProcessor(max_workers=4, memory_limit_mb=4096)
 
-        # 初期値確認
-        self.assertEqual(processor.max_workers, 4)
-        self.assertEqual(processor.current_workers, 4)
+        # EnhancedBatchProcessor forces max_workers=1 because TranscriptionEngine
+        # is not thread-safe (see enhanced_batch_processor.py __init__).
+        # Verify the safety constraint: workers are capped at 1 regardless of request.
+        self.assertEqual(processor.max_workers, 1)
+        self.assertEqual(processor.current_workers, 1)
 
         logger.info("✓ Worker adjustment test passed")
 
@@ -189,6 +192,7 @@ class TestDarkTheme(unittest.TestCase):
     def setUpClass(cls):
         try:
             from dark_theme import DarkTheme, LightTheme
+
             cls.DarkTheme = DarkTheme
             cls.LightTheme = LightTheme
             cls.available = True
@@ -219,7 +223,7 @@ class TestDarkTheme(unittest.TestCase):
         colors = self.DarkTheme.COLORS
 
         # 必須カラーの存在確認
-        required_colors = ['background', 'text_primary', 'accent', 'button_bg']
+        required_colors = ["background", "text_primary", "accent", "button_bg"]
         for color in required_colors:
             self.assertIn(color, colors, f"Missing color: {color}")
 
@@ -233,6 +237,7 @@ class TestRealtimeTab(unittest.TestCase):
     def setUpClass(cls):
         try:
             from realtime_tab import RealtimeTab, RealtimeTranscriptionWorker
+
             cls.RealtimeTab = RealtimeTab
             cls.RealtimeTranscriptionWorker = RealtimeTranscriptionWorker
             cls.available = True
@@ -246,10 +251,7 @@ class TestRealtimeTab(unittest.TestCase):
             self.skipTest("RealtimeTab not available")
 
         # ワーカー作成（実際の録音は開始しない）
-        worker = self.RealtimeTranscriptionWorker(
-            model_size="base",
-            device="cpu"
-        )
+        worker = self.RealtimeTranscriptionWorker(model_size="base", device="cpu")
 
         self.assertEqual(worker.model_size, "base")
         self.assertEqual(worker.device, "cpu")

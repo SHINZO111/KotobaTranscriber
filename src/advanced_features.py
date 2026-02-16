@@ -3,12 +3,14 @@
 自動起動、Webhook通知、ホットキーなど
 """
 
+import logging
 import os
 import sys
-import logging
+from pathlib import Path
 
 try:
     import winreg
+
     WINREG_AVAILABLE = True
 except ImportError:
     WINREG_AVAILABLE = False
@@ -20,13 +22,13 @@ class StartupManager:
     """Windows スタートアップ管理クラス"""
 
     @staticmethod
-    def get_app_path(entry_script: str = 'main.py') -> str:
+    def get_app_path(entry_script: str = "main.py") -> str:
         """アプリケーションの実行パスを取得
 
         Args:
             entry_script: 起動スクリプト名 ('main.py' or 'monitor_app.py')
         """
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             # PyInstallerでビルドされた実行ファイルの場合
             return sys.executable
         else:
@@ -37,7 +39,7 @@ class StartupManager:
             return f'"{python_exe}" "{target_path}"'
 
     @staticmethod
-    def is_startup_enabled(app_name: str = 'KotobaTranscriber') -> bool:
+    def is_startup_enabled(app_name: str = "KotobaTranscriber") -> bool:
         """スタートアップ登録されているかチェック
 
         Args:
@@ -46,14 +48,11 @@ class StartupManager:
         if not WINREG_AVAILABLE:
             return False
         try:
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Run",
-                0,
-                winreg.KEY_READ
+            with winreg.OpenKey(  # type: ignore[attr-defined]
+                winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ  # type: ignore[attr-defined]
             ) as key:
                 try:
-                    winreg.QueryValueEx(key, app_name)
+                    winreg.QueryValueEx(key, app_name)  # type: ignore[attr-defined]
                     return True
                 except FileNotFoundError:
                     return False
@@ -62,8 +61,7 @@ class StartupManager:
             return False
 
     @staticmethod
-    def enable_startup(app_name: str = 'KotobaTranscriber',
-                       entry_script: str = 'main.py') -> bool:
+    def enable_startup(app_name: str = "KotobaTranscriber", entry_script: str = "main.py") -> bool:
         """スタートアップに登録
 
         Args:
@@ -75,13 +73,10 @@ class StartupManager:
             return False
         try:
             app_path = StartupManager.get_app_path(entry_script=entry_script)
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Run",
-                0,
-                winreg.KEY_WRITE
+            with winreg.OpenKey(  # type: ignore[attr-defined]
+                winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_WRITE  # type: ignore[attr-defined]
             ) as key:
-                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, app_path)
+                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, app_path)  # type: ignore[attr-defined]
             logger.info(f"Startup enabled: {app_name} -> {app_path}")
             return True
         except Exception as e:
@@ -89,7 +84,7 @@ class StartupManager:
             return False
 
     @staticmethod
-    def disable_startup(app_name: str = 'KotobaTranscriber') -> bool:
+    def disable_startup(app_name: str = "KotobaTranscriber") -> bool:
         """スタートアップから削除
 
         Args:
@@ -98,14 +93,11 @@ class StartupManager:
         if not WINREG_AVAILABLE:
             return False
         try:
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Run",
-                0,
-                winreg.KEY_WRITE
+            with winreg.OpenKey(  # type: ignore[attr-defined]
+                winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_WRITE  # type: ignore[attr-defined]
             ) as key:
                 try:
-                    winreg.DeleteValue(key, app_name)
+                    winreg.DeleteValue(key, app_name)  # type: ignore[attr-defined]
                     logger.info(f"Startup disabled: {app_name}")
                     return True
                 except FileNotFoundError:
@@ -140,7 +132,7 @@ class FileOrganizer:
                 return False
 
             # パストラバーサル検出
-            if '..' in Path(dest_folder).parts:
+            if ".." in Path(dest_folder).parts:
                 logger.error(f"Path traversal detected in dest_folder: {dest_folder}")
                 return False
 
@@ -163,6 +155,7 @@ class FileOrganizer:
 
             # ファイルを移動
             import shutil
+
             shutil.move(source_path, dest_path)
             logger.info(f"File moved: {source_path} -> {dest_path}")
 

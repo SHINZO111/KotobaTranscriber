@@ -14,10 +14,11 @@ import tempfile
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
-import numpy as np
+
+np = pytest.importorskip("numpy")
 
 # src ディレクトリをパスに追加
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -27,11 +28,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 # 3a. validators.py テスト
 # ============================================================================
 
+
 class TestValidator:
     """Validator クラスのテスト"""
 
     def setup_method(self):
-        from validators import Validator, ValidationError
+        from validators import ValidationError, Validator
+
         self.Validator = Validator
         self.ValidationError = ValidationError
 
@@ -68,16 +71,12 @@ class TestValidator:
         f = tmp_path / "test.xyz"
         f.write_text("dummy")
         with pytest.raises(self.ValidationError, match="not allowed"):
-            self.Validator.validate_file_path(
-                str(f), must_exist=True, allowed_extensions={".wav", ".mp3"}
-            )
+            self.Validator.validate_file_path(str(f), must_exist=True, allowed_extensions={".wav", ".mp3"})
 
     def test_validate_file_path_extension_ok(self, tmp_path):
         f = tmp_path / "test.wav"
         f.write_text("dummy")
-        result = self.Validator.validate_file_path(
-            str(f), must_exist=True, allowed_extensions={".wav", ".mp3"}
-        )
+        result = self.Validator.validate_file_path(str(f), must_exist=True, allowed_extensions={".wav", ".mp3"})
         assert result.suffix == ".wav"
 
     def test_validate_file_path_allowed_dirs(self, tmp_path):
@@ -215,8 +214,8 @@ class TestValidator:
 
     def test_sanitize_filename_dangerous_chars(self):
         result = self.Validator.sanitize_filename('test<>:"/\\|?*.txt')
-        assert '<' not in result
-        assert '>' not in result
+        assert "<" not in result
+        assert ">" not in result
         assert '"' not in result
 
     def test_sanitize_filename_reserved_name(self):
@@ -237,57 +236,81 @@ class TestValidator:
 # 3b. exceptions.py テスト
 # ============================================================================
 
+
 class TestExceptions:
     """例外クラスのテスト"""
 
     def setup_method(self):
         from exceptions import (
+            APIAuthenticationError,
+            APIConnectionError,
+            APIError,
+            APIRateLimitError,
+            AudioCaptureError,
+            AudioDeviceError,
+            AudioFormatError,
+            AudioStreamError,
+            AudioTooLongError,
+            AudioTooShortError,
+            BatchCancelledError,
+            BatchProcessingError,
+            ConfigurationError,
+            ExportError,
+            FileProcessingError,
+            InsufficientDiskSpaceError,
+            InsufficientMemoryError,
+            InvalidConfigValueError,
+            InvalidVADThresholdError,
             KotobaTranscriberError,
-            FileProcessingError, AudioFormatError, AudioTooShortError, AudioTooLongError,
-            TranscriptionError, TranscriptionFailedError, ModelLoadError, ModelNotLoadedError,
-            ConfigurationError, InvalidConfigValueError,
-            BatchProcessingError, BatchCancelledError,
-            ResourceError, InsufficientMemoryError, InsufficientDiskSpaceError,
-            RealtimeProcessingError, AudioDeviceError, AudioCaptureError, AudioStreamError,
-            PyAudioInitializationError, VADError, InvalidVADThresholdError,
-            APIError, APIConnectionError, APIAuthenticationError, APIRateLimitError,
-            ExportError, SubtitleExportError,
-            SecurityError, PathTraversalError, UnsafePathError,
-            is_kotoba_error, get_error_category,
+            ModelLoadError,
+            ModelNotLoadedError,
+            PathTraversalError,
+            PyAudioInitializationError,
+            RealtimeProcessingError,
+            ResourceError,
+            SecurityError,
+            SubtitleExportError,
+            TranscriptionError,
+            TranscriptionFailedError,
+            UnsafePathError,
+            VADError,
+            get_error_category,
+            is_kotoba_error,
         )
+
         self.exceptions = {
-            'KotobaTranscriberError': KotobaTranscriberError,
-            'FileProcessingError': FileProcessingError,
-            'AudioFormatError': AudioFormatError,
-            'AudioTooShortError': AudioTooShortError,
-            'AudioTooLongError': AudioTooLongError,
-            'TranscriptionError': TranscriptionError,
-            'TranscriptionFailedError': TranscriptionFailedError,
-            'ModelLoadError': ModelLoadError,
-            'ModelNotLoadedError': ModelNotLoadedError,
-            'ConfigurationError': ConfigurationError,
-            'InvalidConfigValueError': InvalidConfigValueError,
-            'BatchProcessingError': BatchProcessingError,
-            'BatchCancelledError': BatchCancelledError,
-            'ResourceError': ResourceError,
-            'InsufficientMemoryError': InsufficientMemoryError,
-            'InsufficientDiskSpaceError': InsufficientDiskSpaceError,
-            'RealtimeProcessingError': RealtimeProcessingError,
-            'AudioDeviceError': AudioDeviceError,
-            'AudioCaptureError': AudioCaptureError,
-            'AudioStreamError': AudioStreamError,
-            'PyAudioInitializationError': PyAudioInitializationError,
-            'VADError': VADError,
-            'InvalidVADThresholdError': InvalidVADThresholdError,
-            'APIError': APIError,
-            'APIConnectionError': APIConnectionError,
-            'APIAuthenticationError': APIAuthenticationError,
-            'APIRateLimitError': APIRateLimitError,
-            'ExportError': ExportError,
-            'SubtitleExportError': SubtitleExportError,
-            'SecurityError': SecurityError,
-            'PathTraversalError': PathTraversalError,
-            'UnsafePathError': UnsafePathError,
+            "KotobaTranscriberError": KotobaTranscriberError,
+            "FileProcessingError": FileProcessingError,
+            "AudioFormatError": AudioFormatError,
+            "AudioTooShortError": AudioTooShortError,
+            "AudioTooLongError": AudioTooLongError,
+            "TranscriptionError": TranscriptionError,
+            "TranscriptionFailedError": TranscriptionFailedError,
+            "ModelLoadError": ModelLoadError,
+            "ModelNotLoadedError": ModelNotLoadedError,
+            "ConfigurationError": ConfigurationError,
+            "InvalidConfigValueError": InvalidConfigValueError,
+            "BatchProcessingError": BatchProcessingError,
+            "BatchCancelledError": BatchCancelledError,
+            "ResourceError": ResourceError,
+            "InsufficientMemoryError": InsufficientMemoryError,
+            "InsufficientDiskSpaceError": InsufficientDiskSpaceError,
+            "RealtimeProcessingError": RealtimeProcessingError,
+            "AudioDeviceError": AudioDeviceError,
+            "AudioCaptureError": AudioCaptureError,
+            "AudioStreamError": AudioStreamError,
+            "PyAudioInitializationError": PyAudioInitializationError,
+            "VADError": VADError,
+            "InvalidVADThresholdError": InvalidVADThresholdError,
+            "APIError": APIError,
+            "APIConnectionError": APIConnectionError,
+            "APIAuthenticationError": APIAuthenticationError,
+            "APIRateLimitError": APIRateLimitError,
+            "ExportError": ExportError,
+            "SubtitleExportError": SubtitleExportError,
+            "SecurityError": SecurityError,
+            "PathTraversalError": PathTraversalError,
+            "UnsafePathError": UnsafePathError,
         }
         self.is_kotoba_error = is_kotoba_error
         self.get_error_category = get_error_category
@@ -296,8 +319,11 @@ class TestExceptions:
     def test_all_exceptions_instantiable(self):
         """全例外クラスが基本文字列引数でインスタンス化可能"""
         skip_special = {
-            'InsufficientMemoryError', 'AudioDeviceError', 'AudioStreamError',
-            'PyAudioInitializationError', 'InvalidVADThresholdError',
+            "InsufficientMemoryError",
+            "AudioDeviceError",
+            "AudioStreamError",
+            "PyAudioInitializationError",
+            "InvalidVADThresholdError",
         }
         for name, cls in self.exceptions.items():
             if name in skip_special:
@@ -312,35 +338,45 @@ class TestExceptions:
             assert issubclass(cls, self.KotobaTranscriberError), f"{name} is not a KotobaTranscriberError"
 
     def test_hierarchy_file_processing(self):
-        from exceptions import FileProcessingError, AudioFormatError, AudioTooShortError, AudioTooLongError
+        from exceptions import AudioFormatError, AudioTooLongError, AudioTooShortError, FileProcessingError
+
         assert issubclass(AudioFormatError, FileProcessingError)
         assert issubclass(AudioTooShortError, FileProcessingError)
         assert issubclass(AudioTooLongError, FileProcessingError)
 
     def test_hierarchy_transcription(self):
-        from exceptions import TranscriptionError, TranscriptionFailedError, ModelLoadError, ModelNotLoadedError
+        from exceptions import ModelLoadError, ModelNotLoadedError, TranscriptionError, TranscriptionFailedError
+
         assert issubclass(TranscriptionFailedError, TranscriptionError)
         assert issubclass(ModelLoadError, TranscriptionError)
         assert issubclass(ModelNotLoadedError, TranscriptionError)
 
     def test_hierarchy_configuration(self):
         from exceptions import ConfigurationError, InvalidConfigValueError
+
         assert issubclass(InvalidConfigValueError, ConfigurationError)
 
     def test_hierarchy_batch(self):
-        from exceptions import BatchProcessingError, BatchCancelledError
+        from exceptions import BatchCancelledError, BatchProcessingError
+
         assert issubclass(BatchCancelledError, BatchProcessingError)
 
     def test_hierarchy_resource(self):
-        from exceptions import ResourceError, InsufficientMemoryError, InsufficientDiskSpaceError
+        from exceptions import InsufficientDiskSpaceError, InsufficientMemoryError, ResourceError
+
         assert issubclass(InsufficientMemoryError, ResourceError)
         assert issubclass(InsufficientDiskSpaceError, ResourceError)
 
     def test_hierarchy_realtime(self):
         from exceptions import (
-            RealtimeProcessingError, AudioDeviceError, AudioCaptureError,
-            AudioStreamError, VADError, InvalidVADThresholdError,
+            AudioCaptureError,
+            AudioDeviceError,
+            AudioStreamError,
+            InvalidVADThresholdError,
+            RealtimeProcessingError,
+            VADError,
         )
+
         assert issubclass(AudioDeviceError, RealtimeProcessingError)
         assert issubclass(AudioCaptureError, RealtimeProcessingError)
         assert issubclass(AudioStreamError, RealtimeProcessingError)
@@ -348,17 +384,20 @@ class TestExceptions:
         assert issubclass(InvalidVADThresholdError, VADError)
 
     def test_hierarchy_api(self):
-        from exceptions import APIError, APIConnectionError, APIAuthenticationError, APIRateLimitError
+        from exceptions import APIAuthenticationError, APIConnectionError, APIError, APIRateLimitError
+
         assert issubclass(APIConnectionError, APIError)
         assert issubclass(APIAuthenticationError, APIError)
         assert issubclass(APIRateLimitError, APIError)
 
     def test_hierarchy_export(self):
         from exceptions import ExportError, SubtitleExportError
+
         assert issubclass(SubtitleExportError, ExportError)
 
     def test_hierarchy_security(self):
-        from exceptions import SecurityError, PathTraversalError, UnsafePathError
+        from exceptions import PathTraversalError, SecurityError, UnsafePathError
+
         assert issubclass(PathTraversalError, SecurityError)
         assert issubclass(UnsafePathError, SecurityError)
 
@@ -366,6 +405,7 @@ class TestExceptions:
 
     def test_insufficient_memory_error(self):
         from exceptions import InsufficientMemoryError
+
         e = InsufficientMemoryError(required_mb=4096, available_mb=2048)
         assert e.required_mb == 4096
         assert e.available_mb == 2048
@@ -374,23 +414,27 @@ class TestExceptions:
 
     def test_insufficient_memory_error_with_message(self):
         from exceptions import InsufficientMemoryError
+
         e = InsufficientMemoryError(message="custom message")
         assert str(e) == "custom message"
 
     def test_audio_device_error(self):
         from exceptions import AudioDeviceError
+
         e = AudioDeviceError("Device not found", device_index=3)
         assert e.device_index == 3
         assert "device index: 3" in str(e)
 
     def test_audio_device_error_no_index(self):
         from exceptions import AudioDeviceError
+
         e = AudioDeviceError("Device not found")
         assert e.device_index is None
         assert "Device not found" == str(e)
 
     def test_audio_stream_error(self):
         from exceptions import AudioStreamError
+
         e = AudioStreamError("Stream overflow", device_index=0)
         assert e.detail == "Stream overflow"
         assert e.device_index == 0
@@ -398,11 +442,13 @@ class TestExceptions:
 
     def test_audio_stream_error_no_index(self):
         from exceptions import AudioStreamError
+
         e = AudioStreamError("Stream overflow")
         assert e.device_index is None
 
     def test_pyaudio_initialization_error(self):
         from exceptions import PyAudioInitializationError
+
         original = OSError("PortAudio library not found")
         e = PyAudioInitializationError(original)
         assert e.original_error is original
@@ -410,6 +456,7 @@ class TestExceptions:
 
     def test_invalid_vad_threshold_error(self):
         from exceptions import InvalidVADThresholdError
+
         e = InvalidVADThresholdError(0.1, (0.005, 0.050))
         assert e.threshold == 0.1
         assert e.valid_range == (0.005, 0.050)
@@ -419,6 +466,7 @@ class TestExceptions:
 
     def test_is_kotoba_error_true(self):
         from exceptions import AudioFormatError
+
         assert self.is_kotoba_error(AudioFormatError("test"))
 
     def test_is_kotoba_error_false(self):
@@ -426,42 +474,52 @@ class TestExceptions:
 
     def test_get_error_category_file_processing(self):
         from exceptions import AudioFormatError
+
         assert self.get_error_category(AudioFormatError("test")) == "FileProcessing"
 
     def test_get_error_category_transcription(self):
         from exceptions import ModelLoadError
+
         assert self.get_error_category(ModelLoadError("test")) == "Transcription"
 
     def test_get_error_category_configuration(self):
         from exceptions import InvalidConfigValueError
+
         assert self.get_error_category(InvalidConfigValueError("test")) == "Configuration"
 
     def test_get_error_category_batch(self):
         from exceptions import BatchCancelledError
+
         assert self.get_error_category(BatchCancelledError("test")) == "BatchProcessing"
 
     def test_get_error_category_resource(self):
         from exceptions import InsufficientMemoryError
+
         assert self.get_error_category(InsufficientMemoryError(message="test")) == "Resource"
 
     def test_get_error_category_realtime(self):
         from exceptions import AudioDeviceError
+
         assert self.get_error_category(AudioDeviceError("test")) == "RealtimeProcessing"
 
     def test_get_error_category_api(self):
         from exceptions import APIConnectionError
+
         assert self.get_error_category(APIConnectionError("test")) == "API"
 
     def test_get_error_category_export(self):
         from exceptions import SubtitleExportError
+
         assert self.get_error_category(SubtitleExportError("test")) == "Export"
 
     def test_get_error_category_security(self):
         from exceptions import PathTraversalError
+
         assert self.get_error_category(PathTraversalError("test")) == "Security"
 
     def test_get_error_category_general(self):
         from exceptions import KotobaTranscriberError
+
         assert self.get_error_category(KotobaTranscriberError("test")) == "General"
 
     def test_get_error_category_unknown(self):
@@ -472,11 +530,13 @@ class TestExceptions:
 # 3c. config_manager.py テスト
 # ============================================================================
 
+
 class TestConfig:
     """Config クラスのテスト"""
 
     def setup_method(self):
         from config_manager import Config
+
         self.Config = Config
 
     def test_get_dot_notation(self):
@@ -536,6 +596,7 @@ class TestConfigManager:
     def setup_method(self):
         # ConfigManager のシングルトンをリセット
         from config_manager import ConfigManager
+
         ConfigManager._instance = None
         ConfigManager._config = None
         self.ConfigManager = ConfigManager
@@ -582,6 +643,7 @@ class TestConfigManager:
 
     def teardown_method(self):
         from config_manager import ConfigManager
+
         ConfigManager._instance = None
         ConfigManager._config = None
 
@@ -591,17 +653,20 @@ class TestGetConfig:
 
     def setup_method(self):
         import config_manager
+
         config_manager._manager = None
         config_manager.ConfigManager._instance = None
         config_manager.ConfigManager._config = None
 
     def test_get_config_returns_config(self):
         from config_manager import get_config
+
         config = get_config()
         assert config.get("app.name") == "KotobaTranscriber"
 
     def test_get_config_thread_safe(self):
         from config_manager import get_config
+
         results = []
 
         def worker():
@@ -618,6 +683,7 @@ class TestGetConfig:
 
     def teardown_method(self):
         import config_manager
+
         config_manager._manager = None
         config_manager.ConfigManager._instance = None
         config_manager.ConfigManager._config = None
@@ -626,6 +692,7 @@ class TestGetConfig:
 # ============================================================================
 # 3d. base_engine.py テスト
 # ============================================================================
+
 
 class TestBaseTranscriptionEngine:
     """BaseTranscriptionEngine のテスト"""
@@ -729,11 +796,13 @@ class TestBaseTranscriptionEngine:
 # 3e. construction_vocabulary.py テスト
 # ============================================================================
 
+
 class TestConstructionVocabulary:
     """ConstructionVocabulary のテスト"""
 
     def test_class_constants_not_empty(self):
         from construction_vocabulary import ConstructionVocabulary
+
         assert len(ConstructionVocabulary.STANDARD_LABOR_TERMS) > 0
         assert len(ConstructionVocabulary.CONSTRUCTION_LAW_TERMS) > 0
         assert len(ConstructionVocabulary.COST_MANAGEMENT_TERMS) > 0
@@ -741,6 +810,7 @@ class TestConstructionVocabulary:
 
     def test_init_creates_default_when_no_file(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "nonexistent" / "vocab.json"))
         assert len(vocab.hotwords) > 0
         assert len(vocab.replacements) > 0
@@ -748,6 +818,7 @@ class TestConstructionVocabulary:
 
     def test_categories_created(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         categories = vocab.get_all_categories()
         assert "standard_labor" in categories
@@ -757,6 +828,7 @@ class TestConstructionVocabulary:
 
     def test_save_and_load(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab_file = str(tmp_path / "vocab.json")
         vocab1 = ConstructionVocabulary(vocab_file)
         original_count = len(vocab1.hotwords)
@@ -767,6 +839,7 @@ class TestConstructionVocabulary:
 
     def test_get_whisper_prompt(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         prompt = vocab.get_whisper_prompt()
         assert "建設業" in prompt
@@ -774,12 +847,14 @@ class TestConstructionVocabulary:
 
     def test_get_whisper_prompt_by_category(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         prompt = vocab.get_whisper_prompt(category="standard_labor")
         assert len(prompt) > 0
 
     def test_apply_replacements(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         # "ほおがけ" -> "歩掛"
         result = vocab.apply_replacements("ほおがけの計算")
@@ -787,6 +862,7 @@ class TestConstructionVocabulary:
 
     def test_add_term(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         vocab.add_term("テスト用語", "custom")
         assert "テスト用語" in vocab.hotwords
@@ -794,6 +870,7 @@ class TestConstructionVocabulary:
 
     def test_add_term_duplicate_ignored(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         original_count = len(vocab.hotwords)
         term = vocab.hotwords[0]  # Pick existing term
@@ -802,12 +879,14 @@ class TestConstructionVocabulary:
 
     def test_add_replacement(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         vocab.add_replacement("てすと", "テスト")
         assert vocab.replacements["てすと"] == "テスト"
 
     def test_get_terms_by_category(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         terms = vocab.get_terms_by_category("standard_labor")
         assert len(terms) > 0
@@ -815,12 +894,14 @@ class TestConstructionVocabulary:
 
     def test_get_terms_by_category_missing(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         terms = vocab.get_terms_by_category("nonexistent")
         assert terms == []
 
     def test_search_terms(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         results = vocab.search_terms("管理")
         assert len(results) > 0
@@ -829,6 +910,7 @@ class TestConstructionVocabulary:
 
     def test_load_from_file_with_categories(self, tmp_path):
         from construction_vocabulary import ConstructionVocabulary
+
         # Create a vocab file with nested format
         vocab_file = tmp_path / "vocab.json"
         data = {
@@ -837,7 +919,7 @@ class TestConstructionVocabulary:
             "categories": {
                 "cat1": {"name": "Category 1", "terms": ["用語X", "用語Y"]},
                 "cat2": ["用語Z"],
-            }
+            },
         }
         vocab_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         vocab = ConstructionVocabulary(str(vocab_file))
@@ -850,11 +932,13 @@ class TestConstructionVocabulary:
 # 3f. subtitle_exporter.py テスト
 # ============================================================================
 
+
 class TestSubtitleExporter:
     """SubtitleExporter のテスト"""
 
     def setup_method(self):
         from subtitle_exporter import SubtitleExporter
+
         self.exporter = SubtitleExporter()
 
     # --- Time formatting ---
@@ -977,11 +1061,9 @@ class TestSubtitleExporter:
         assert len(result) == 1
 
     def test_split_long_segments_splits_by_sentence(self):
-        segments = [{
-            "start": 0.0,
-            "end": 10.0,
-            "text": "これは長いテキストです。分割が必要です。さらに続きます。最後の文です。"
-        }]
+        segments = [
+            {"start": 0.0, "end": 10.0, "text": "これは長いテキストです。分割が必要です。さらに続きます。最後の文です。"}
+        ]
         result = self.exporter.split_long_segments(segments, max_chars=20)
         assert len(result) > 1
 
@@ -1020,6 +1102,7 @@ class TestTranscriptionResult:
 
     def test_add_segment(self):
         from subtitle_exporter import TranscriptionResult
+
         result = TranscriptionResult()
         result.add_segment(0.0, 1.0, "Hello", "Speaker A")
         assert len(result.segments) == 1
@@ -1028,6 +1111,7 @@ class TestTranscriptionResult:
 
     def test_set_speaker_segments(self):
         from subtitle_exporter import TranscriptionResult
+
         result = TranscriptionResult()
         speakers = [{"start": 0.0, "end": 5.0, "speaker": "A"}]
         result.set_speaker_segments(speakers)
@@ -1038,11 +1122,13 @@ class TestTranscriptionResult:
 # 3g. app_settings.py テスト
 # ============================================================================
 
+
 class TestAppSettings:
     """AppSettings のテスト"""
 
     def setup_method(self):
         from app_settings import AppSettings
+
         self.AppSettings = AppSettings
 
     def test_init_default(self):
@@ -1184,11 +1270,13 @@ class TestAppSettings:
 # 3h. custom_dictionary.py テスト
 # ============================================================================
 
+
 class TestCustomDictionaryModule:
     """CustomDictionary (custom_dictionary.py) のテスト"""
 
     def test_init_empty_config(self):
         from custom_dictionary import CustomDictionary
+
         # Construction vocab will be loaded by default since enabled defaults to True
         d = CustomDictionary({})
         assert isinstance(d.hotwords, list)
@@ -1196,6 +1284,7 @@ class TestCustomDictionaryModule:
 
     def test_add_term(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.add_term("テスト用語A", "test_cat")
         assert "テスト用語A" in d.hotwords
@@ -1203,6 +1292,7 @@ class TestCustomDictionaryModule:
 
     def test_add_term_duplicate(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.add_term("用語X", "cat")
         count = len(d.hotwords)
@@ -1211,12 +1301,14 @@ class TestCustomDictionaryModule:
 
     def test_add_replacement(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.add_replacement("わるい", "悪い")
         assert d.replacements["わるい"] == "悪い"
 
     def test_apply_replacements(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.replacements = {"ほおがけ": "歩掛"}
         result = d.apply_replacements("ほおがけの計算")
@@ -1224,6 +1316,7 @@ class TestCustomDictionaryModule:
 
     def test_get_whisper_prompt(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.hotwords = ["用語A", "用語B"]
         prompt = d.get_whisper_prompt()
@@ -1231,6 +1324,7 @@ class TestCustomDictionaryModule:
 
     def test_get_whisper_prompt_empty(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.hotwords = []
         prompt = d.get_whisper_prompt()
@@ -1238,6 +1332,7 @@ class TestCustomDictionaryModule:
 
     def test_get_terms_by_category(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.categories["test"] = ["A", "B"]
         assert d.get_terms_by_category("test") == ["A", "B"]
@@ -1245,12 +1340,14 @@ class TestCustomDictionaryModule:
 
     def test_get_all_categories(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.categories = {"cat1": [], "cat2": []}
         assert set(d.get_all_categories()) == {"cat1", "cat2"}
 
     def test_search_terms(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.hotwords = ["品質管理", "安全管理", "テスト"]
         results = d.search_terms("管理")
@@ -1260,6 +1357,7 @@ class TestCustomDictionaryModule:
 
     def test_reload(self):
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.hotwords = ["test"]
         d.reload()
@@ -1270,11 +1368,13 @@ class TestCustomDictionaryModule:
 # 3i. speaker_diarization_utils.py テスト
 # ============================================================================
 
+
 class TestClusteringMixin:
     """ClusteringMixin のテスト"""
 
     def setup_method(self):
         from speaker_diarization_utils import ClusteringMixin
+
         self.mixin = ClusteringMixin()
 
     def test_simple_clustering(self):
@@ -1326,6 +1426,7 @@ class TestSpeakerFormatterMixin:
 
     def setup_method(self):
         from speaker_diarization_utils import SpeakerFormatterMixin
+
         self.formatter = SpeakerFormatterMixin()
 
     def test_format_with_speakers_basic(self):
@@ -1397,17 +1498,20 @@ class TestSpeakerFormatterMixin:
 # 3j. custom_vocabulary.py テスト (CustomVocabulary クラス)
 # ============================================================================
 
+
 class TestCustomVocabulary:
     """CustomVocabulary (custom_vocabulary.py) のテスト"""
 
     def test_init_creates_default(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         assert len(vocab.hotwords) > 0
         assert len(vocab.replacements) > 0
 
     def test_save_and_load(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab_file = str(tmp_path / "vocab.json")
         vocab1 = CustomVocabulary(vocab_file)
         count = len(vocab1.hotwords)
@@ -1416,12 +1520,14 @@ class TestCustomVocabulary:
 
     def test_add_hotword(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.add_hotword("NewWord")
         assert "NewWord" in vocab.hotwords
 
     def test_add_hotword_duplicate(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         count = len(vocab.hotwords)
         existing = vocab.hotwords[0]
@@ -1430,6 +1536,7 @@ class TestCustomVocabulary:
 
     def test_remove_hotword(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         word = vocab.hotwords[0]
         vocab.remove_hotword(word)
@@ -1437,12 +1544,14 @@ class TestCustomVocabulary:
 
     def test_add_replacement(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.add_replacement("wrong", "right")
         assert vocab.replacements["wrong"] == "right"
 
     def test_remove_replacement(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.add_replacement("wrong", "right")
         vocab.remove_replacement("wrong")
@@ -1450,6 +1559,7 @@ class TestCustomVocabulary:
 
     def test_get_whisper_prompt(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         prompt = vocab.get_whisper_prompt()
         assert "専門用語" in prompt
@@ -1457,12 +1567,14 @@ class TestCustomVocabulary:
 
     def test_get_whisper_prompt_with_domain(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         prompt = vocab.get_whisper_prompt(domain="it")
         assert len(prompt) > 0
 
     def test_get_hotwords_list_returns_copy(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         lst = vocab.get_hotwords_list()
         lst.append("ModifiedItem")
@@ -1470,6 +1582,7 @@ class TestCustomVocabulary:
 
     def test_get_replacements_dict_returns_copy(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         d = vocab.get_replacements_dict()
         d["new_key"] = "new_value"
@@ -1477,6 +1590,7 @@ class TestCustomVocabulary:
 
     def test_import_words_from_text(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.import_words_from_text("WordA\nWordB\nWordC")
         assert "WordA" in vocab.hotwords
@@ -1485,6 +1599,7 @@ class TestCustomVocabulary:
 
     def test_export_words_to_text(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.hotwords = ["A", "B", "C"]
         text = vocab.export_words_to_text()
@@ -1492,12 +1607,14 @@ class TestCustomVocabulary:
 
     def test_clear_hotwords(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.clear_hotwords()
         assert len(vocab.hotwords) == 0
 
     def test_set_domain_vocabulary(self, tmp_path):
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.set_domain_vocabulary("finance", ["株式", "投資", "配当"])
         assert vocab.domain_vocabularies["finance"] == ["株式", "投資", "配当"]
@@ -1507,23 +1624,28 @@ class TestCustomVocabulary:
 # 3k. text_formatter.py テスト
 # ============================================================================
 
+
 class TestPunctuationRules:
     """PunctuationRules クラスのテスト"""
 
     def test_conjunctions_not_empty(self):
         from text_formatter import PunctuationRules
+
         assert len(PunctuationRules.CONJUNCTIONS) > 0
 
     def test_paragraph_break_words_not_empty(self):
         from text_formatter import PunctuationRules
+
         assert len(PunctuationRules.PARAGRAPH_BREAK_WORDS) > 0
 
     def test_polite_endings_not_empty(self):
         from text_formatter import PunctuationRules
+
         assert len(PunctuationRules.POLITE_ENDINGS) > 0
 
     def test_long_sentence_min_length(self):
         from text_formatter import PunctuationRules
+
         assert PunctuationRules.LONG_SENTENCE_MIN_LENGTH > 0
 
 
@@ -1532,18 +1654,22 @@ class TestRegexPatterns:
 
     def test_consecutive_commas(self):
         from text_formatter import RegexPatterns
+
         assert RegexPatterns.CONSECUTIVE_COMMAS.sub("、", "、、、") == "、"
 
     def test_consecutive_periods(self):
         from text_formatter import RegexPatterns
+
         assert RegexPatterns.CONSECUTIVE_PERIODS.sub("。", "。。。") == "。"
 
     def test_consecutive_spaces(self):
         from text_formatter import RegexPatterns
+
         assert RegexPatterns.CONSECUTIVE_SPACES.sub(" ", "a   b") == "a b"
 
     def test_get_filler_pattern(self):
         from text_formatter import RegexPatterns
+
         p = RegexPatterns.get_filler_pattern("えーと")
         assert p is not None
         # Cache hit
@@ -1552,16 +1678,19 @@ class TestRegexPatterns:
 
     def test_get_conjunction_pattern(self):
         from text_formatter import RegexPatterns
+
         p = RegexPatterns.get_conjunction_pattern("しかし")
         assert p is not None
 
     def test_get_quote_verb_pattern(self):
         from text_formatter import RegexPatterns
+
         p = RegexPatterns.get_quote_verb_pattern("思います")
         assert p is not None
 
     def test_get_polite_ending_pattern(self):
         from text_formatter import RegexPatterns
+
         p = RegexPatterns.get_polite_ending_pattern("です")
         assert p is not None
 
@@ -1571,6 +1700,7 @@ class TestTextFormatter:
 
     def setup_method(self):
         from text_formatter import TextFormatter
+
         self.formatter = TextFormatter()
 
     def test_remove_fillers_basic(self):
@@ -1629,11 +1759,7 @@ class TestTextFormatter:
     def test_format_all_options(self):
         text = "テストです"
         result = self.formatter.format_all(
-            text,
-            remove_fillers=False,
-            add_punctuation=False,
-            format_paragraphs=False,
-            clean_repeated=False
+            text, remove_fillers=False, add_punctuation=False, format_paragraphs=False, clean_repeated=False
         )
         assert result == "テストです"
 
@@ -1642,11 +1768,13 @@ class TestTextFormatter:
 # 3l. enhanced_error_handling.py テスト
 # ============================================================================
 
+
 class TestErrorSeverity:
     """ErrorSeverity enum のテスト"""
 
     def test_all_values(self):
         from enhanced_error_handling import ErrorSeverity
+
         assert ErrorSeverity.DEBUG.value == 1
         assert ErrorSeverity.INFO.value == 2
         assert ErrorSeverity.WARNING.value == 3
@@ -1659,13 +1787,9 @@ class TestEnhancedErrorRecord:
 
     def test_create_record(self):
         from enhanced_error_handling import ErrorRecord, ErrorSeverity
+
         record = ErrorRecord(
-            timestamp=1.0,
-            error_type="ValueError",
-            message="test",
-            severity=ErrorSeverity.ERROR,
-            traceback="",
-            context={}
+            timestamp=1.0, error_type="ValueError", message="test", severity=ErrorSeverity.ERROR, traceback="", context={}
         )
         assert record.error_type == "ValueError"
         assert record.recovered is False
@@ -1677,6 +1801,7 @@ class TestErrorHandler:
 
     def setup_method(self):
         from enhanced_error_handling import ErrorHandler, ErrorSeverity
+
         self.ErrorHandler = ErrorHandler
         self.ErrorSeverity = ErrorSeverity
 
@@ -1747,12 +1872,14 @@ class TestSafeExecute:
 
     def test_success(self):
         from enhanced_error_handling import safe_execute
+
         result = safe_execute(lambda: 42)
         assert result == 42
 
     def test_failure(self):
         from enhanced_error_handling import safe_execute
-        result = safe_execute(lambda: 1/0, default_return=-1)
+
+        result = safe_execute(lambda: 1 / 0, default_return=-1)
         assert result == -1
 
 
@@ -1761,11 +1888,13 @@ class TestFileOperationGuard:
 
     def test_safe_read_nonexistent(self):
         from enhanced_error_handling import FileOperationGuard
+
         result = FileOperationGuard.safe_read("/nonexistent/file.txt", default="fallback")
         assert result == "fallback"
 
     def test_safe_read_existing(self, tmp_path):
         from enhanced_error_handling import FileOperationGuard
+
         f = tmp_path / "test.txt"
         f.write_text("hello", encoding="utf-8")
         result = FileOperationGuard.safe_read(str(f))
@@ -1773,6 +1902,7 @@ class TestFileOperationGuard:
 
     def test_safe_write(self, tmp_path):
         from enhanced_error_handling import FileOperationGuard
+
         f = str(tmp_path / "output.txt")
         result = FileOperationGuard.safe_write(f, "content")
         assert result is True
@@ -1780,6 +1910,7 @@ class TestFileOperationGuard:
 
     def test_safe_delete(self, tmp_path):
         from enhanced_error_handling import FileOperationGuard
+
         f = tmp_path / "test.txt"
         f.write_text("dummy")
         result = FileOperationGuard.safe_delete(str(f))
@@ -1788,6 +1919,7 @@ class TestFileOperationGuard:
 
     def test_safe_delete_nonexistent(self):
         from enhanced_error_handling import FileOperationGuard
+
         result = FileOperationGuard.safe_delete("/nonexistent/file.txt")
         assert result is True
 
@@ -1797,6 +1929,7 @@ class TestResourceGuard:
 
     def test_context_manager(self):
         from enhanced_error_handling import ResourceGuard
+
         closed = []
 
         class MockResource:
@@ -1811,6 +1944,7 @@ class TestResourceGuard:
 
     def test_cleanup_callback(self):
         from enhanced_error_handling import ResourceGuard
+
         called = []
         guard = ResourceGuard(cleanup_callback=lambda: called.append(True))
         guard.cleanup()
@@ -1821,11 +1955,13 @@ class TestResourceGuard:
 # 3m. error_recovery.py テスト
 # ============================================================================
 
+
 class TestRecoveryAction:
     """RecoveryAction enum のテスト"""
 
     def test_values(self):
         from error_recovery import RecoveryAction
+
         assert RecoveryAction.RETRY.value == "retry"
         assert RecoveryAction.SKIP.value == "skip"
         assert RecoveryAction.ABORT.value == "abort"
@@ -1837,11 +1973,9 @@ class TestErrorRecoveryRecord:
 
     def test_create_record(self):
         from error_recovery import ErrorRecord
+
         record = ErrorRecord(
-            timestamp="2025-01-01T00:00:00",
-            file_path="test.wav",
-            error_type="ValueError",
-            error_message="test"
+            timestamp="2025-01-01T00:00:00", file_path="test.wav", error_type="ValueError", error_message="test"
         )
         assert record.recovered is False
         assert record.retry_count == 0
@@ -1852,11 +1986,13 @@ class TestErrorRecoveryManager:
 
     def test_init(self, tmp_path):
         from error_recovery import ErrorRecoveryManager
+
         m = ErrorRecoveryManager(str(tmp_path / "logs"))
         assert m.log_dir.exists()
 
     def test_register_callback(self, tmp_path):
         from error_recovery import ErrorRecoveryManager
+
         m = ErrorRecoveryManager(str(tmp_path / "logs"))
         calls = []
         m.register_callback("transient", lambda e, f: calls.append(True))
@@ -1865,21 +2001,25 @@ class TestErrorRecoveryManager:
 
     def test_classify_transient(self, tmp_path):
         from error_recovery import ErrorRecoveryManager
+
         m = ErrorRecoveryManager(str(tmp_path / "logs"))
         assert m._classify_error(ConnectionError("timeout error")) == "transient"
 
     def test_classify_resource(self, tmp_path):
         from error_recovery import ErrorRecoveryManager
+
         m = ErrorRecoveryManager(str(tmp_path / "logs"))
         assert m._classify_error(MemoryError("out of memory")) == "resource"
 
     def test_classify_permanent(self, tmp_path):
         from error_recovery import ErrorRecoveryManager
+
         m = ErrorRecoveryManager(str(tmp_path / "logs"))
         assert m._classify_error(ValueError("bad value")) == "permanent"
 
     def test_handle_error_skip(self, tmp_path):
         from error_recovery import ErrorRecoveryManager
+
         m = ErrorRecoveryManager(str(tmp_path / "logs"))
         result = m.handle_error(ValueError("test"), "test.wav")
         assert result["success"] is False
@@ -1887,22 +2027,22 @@ class TestErrorRecoveryManager:
 
     def test_handle_error_fallback(self, tmp_path):
         from error_recovery import ErrorRecoveryManager
+
         m = ErrorRecoveryManager(str(tmp_path / "logs"))
-        result = m.handle_error(
-            MemoryError("memory"), "test.wav",
-            fallback_func=lambda: "fallback_result"
-        )
+        result = m.handle_error(MemoryError("memory"), "test.wav", fallback_func=lambda: "fallback_result")
         assert result["success"] is True
         assert result["result"] == "fallback_result"
 
     def test_get_error_summary_empty(self, tmp_path):
         from error_recovery import ErrorRecoveryManager
+
         m = ErrorRecoveryManager(str(tmp_path / "logs"))
         summary = m.get_error_summary()
         assert summary["total_errors"] == 0
 
     def test_clear_logs(self, tmp_path):
         from error_recovery import ErrorRecoveryManager
+
         m = ErrorRecoveryManager(str(tmp_path / "logs"))
         m.handle_error(ValueError("test"), "test.wav")
         m.clear_logs()
@@ -1913,11 +2053,13 @@ class TestErrorRecoveryManager:
 # 3n. device_manager.py テスト
 # ============================================================================
 
+
 class TestDeviceType:
     """DeviceType enum のテスト"""
 
     def test_values(self):
         from device_manager import DeviceType
+
         assert DeviceType.CPU.value == 1
         assert DeviceType.CUDA.value == 2
         assert DeviceType.MPS.value == 3
@@ -1929,10 +2071,8 @@ class TestDeviceInfo:
 
     def test_create(self):
         from device_manager import DeviceInfo, DeviceType
-        info = DeviceInfo(
-            id=0, name="CPU", type=DeviceType.CPU,
-            total_memory_mb=16384, available_memory_mb=8192
-        )
+
+        info = DeviceInfo(id=0, name="CPU", type=DeviceType.CPU, total_memory_mb=16384, available_memory_mb=8192)
         assert info.id == 0
         assert info.name == "CPU"
         assert info.type == DeviceType.CPU
@@ -1947,11 +2087,13 @@ class TestMultiDeviceManager:
 
     def test_init(self):
         from device_manager import MultiDeviceManager
+
         m = MultiDeviceManager()
         assert len(m.devices) > 0  # At least CPU
 
     def test_cpu_always_available(self):
-        from device_manager import MultiDeviceManager, DeviceType
+        from device_manager import DeviceType, MultiDeviceManager
+
         m = MultiDeviceManager()
         cpu_devices = [d for d in m.devices if d.type == DeviceType.CPU]
         assert len(cpu_devices) >= 1
@@ -1961,11 +2103,13 @@ class TestMultiDeviceManager:
 # 3o. meeting_minutes_generator.py テスト
 # ============================================================================
 
+
 class TestStatementType:
     """StatementType enum のテスト"""
 
     def test_all_values(self):
         from meeting_minutes_generator import StatementType
+
         assert StatementType.GENERAL.value == "一般"
         assert StatementType.DECISION.value == "決定事項"
         assert StatementType.CONFIRMATION.value == "確認事項"
@@ -1981,6 +2125,7 @@ class TestStatement:
 
     def test_create_default(self):
         from meeting_minutes_generator import Statement, StatementType
+
         s = Statement(speaker="田中", text="テスト発言")
         assert s.speaker == "田中"
         assert s.text == "テスト発言"
@@ -1990,9 +2135,9 @@ class TestStatement:
 
     def test_create_with_all_fields(self):
         from meeting_minutes_generator import Statement, StatementType
+
         s = Statement(
-            speaker="佐藤", text="決定事項です",
-            timestamp=10.5, statement_type=StatementType.DECISION, confidence=0.9
+            speaker="佐藤", text="決定事項です", timestamp=10.5, statement_type=StatementType.DECISION, confidence=0.9
         )
         assert s.timestamp == 10.5
         assert s.statement_type == StatementType.DECISION
@@ -2003,6 +2148,7 @@ class TestActionItem:
 
     def test_create_default(self):
         from meeting_minutes_generator import ActionItem
+
         a = ActionItem(description="テストタスク")
         assert a.description == "テストタスク"
         assert a.assignee is None
@@ -2016,6 +2162,7 @@ class TestMeetingMinutes:
 
     def test_create_default(self):
         from meeting_minutes_generator import MeetingMinutes
+
         m = MeetingMinutes(title="テスト会議", date="2026-01-01")
         assert m.title == "テスト会議"
         assert m.date == "2026-01-01"
@@ -2026,11 +2173,8 @@ class TestMeetingMinutes:
 
     def test_to_text_basic(self):
         from meeting_minutes_generator import MeetingMinutes
-        m = MeetingMinutes(
-            title="テスト", date="2026-01-01",
-            attendees=["田中", "佐藤"],
-            location="会議室A"
-        )
+
+        m = MeetingMinutes(title="テスト", date="2026-01-01", attendees=["田中", "佐藤"], location="会議室A")
         text = m.to_text()
         assert "テスト" in text
         assert "田中" in text
@@ -2039,19 +2183,19 @@ class TestMeetingMinutes:
 
     def test_to_text_with_decisions(self):
         from meeting_minutes_generator import MeetingMinutes
-        m = MeetingMinutes(
-            title="テスト", date="2026-01-01",
-            decisions=["タイルに決定", "予算承認"]
-        )
+
+        m = MeetingMinutes(title="テスト", date="2026-01-01", decisions=["タイルに決定", "予算承認"])
         text = m.to_text()
         assert "決定事項" in text
         assert "タイルに決定" in text
 
     def test_to_text_with_action_items(self):
-        from meeting_minutes_generator import MeetingMinutes, ActionItem
+        from meeting_minutes_generator import ActionItem, MeetingMinutes
+
         m = MeetingMinutes(
-            title="テスト", date="2026-01-01",
-            action_items=[ActionItem(description="調整する", assignee="田中", due_date="2月10日")]
+            title="テスト",
+            date="2026-01-01",
+            action_items=[ActionItem(description="調整する", assignee="田中", due_date="2月10日")],
         )
         text = m.to_text()
         assert "アクションアイテム" in text
@@ -2060,20 +2204,16 @@ class TestMeetingMinutes:
 
     def test_to_text_with_agenda(self):
         from meeting_minutes_generator import MeetingMinutes
-        m = MeetingMinutes(
-            title="テスト", date="2026-01-01",
-            agenda=["新規開発について", "予算確認"]
-        )
+
+        m = MeetingMinutes(title="テスト", date="2026-01-01", agenda=["新規開発について", "予算確認"])
         text = m.to_text()
         assert "議題" in text
         assert "新規開発について" in text
 
     def test_to_markdown(self):
         from meeting_minutes_generator import MeetingMinutes
-        m = MeetingMinutes(
-            title="テスト", date="2026-01-01",
-            attendees=["田中"], decisions=["タイルに決定"]
-        )
+
+        m = MeetingMinutes(title="テスト", date="2026-01-01", attendees=["田中"], decisions=["タイルに決定"])
         md = m.to_markdown()
         assert md.startswith("# 議事録:")
         assert "田中" in md
@@ -2081,12 +2221,14 @@ class TestMeetingMinutes:
 
     def test_to_markdown_with_statements(self):
         from meeting_minutes_generator import MeetingMinutes, Statement, StatementType
+
         m = MeetingMinutes(
-            title="テスト", date="2026-01-01",
+            title="テスト",
+            date="2026-01-01",
             statements=[
                 Statement(speaker="田中", text="決定です", statement_type=StatementType.DECISION),
                 Statement(speaker="佐藤", text="確認します", statement_type=StatementType.CONFIRMATION),
-            ]
+            ],
         )
         md = m.to_markdown()
         assert "田中" in md
@@ -2094,6 +2236,7 @@ class TestMeetingMinutes:
 
     def test_to_text_with_next_meeting(self):
         from meeting_minutes_generator import MeetingMinutes
+
         m = MeetingMinutes(title="テスト", date="2026-01-01", next_meeting="来週月曜日")
         text = m.to_text()
         assert "次回会議" in text
@@ -2101,6 +2244,7 @@ class TestMeetingMinutes:
 
     def test_to_text_with_notes(self):
         from meeting_minutes_generator import MeetingMinutes
+
         m = MeetingMinutes(title="テスト", date="2026-01-01", notes="追加メモ")
         text = m.to_text()
         assert "備考" in text
@@ -2112,6 +2256,7 @@ class TestMeetingMinutesGenerator:
 
     def setup_method(self):
         from meeting_minutes_generator import MeetingMinutesGenerator
+
         self.gen = MeetingMinutesGenerator()
 
     def test_init_compiles_patterns(self):
@@ -2121,42 +2266,50 @@ class TestMeetingMinutesGenerator:
 
     def test_classify_decision(self):
         from meeting_minutes_generator import StatementType
+
         result = self.gen.classify_statement("タイルに決定しました")
         assert result == StatementType.DECISION
 
     def test_classify_confirmation(self):
         from meeting_minutes_generator import StatementType
+
         result = self.gen.classify_statement("内装費について確認させてください")
         assert result == StatementType.CONFIRMATION
 
     def test_classify_action_item(self):
         from meeting_minutes_generator import StatementType
+
         result = self.gen.classify_statement("施工業者との調整をお願いします")
         assert result == StatementType.ACTION_ITEM
 
     def test_classify_report(self):
         from meeting_minutes_generator import StatementType
+
         result = self.gen.classify_statement("進捗状況を報告します")
         assert result == StatementType.REPORT
 
     def test_classify_general(self):
         from meeting_minutes_generator import StatementType
+
         result = self.gen.classify_statement("天気がいいですね")
         assert result == StatementType.GENERAL
 
     def test_classify_unmatched_returns_general(self):
         from meeting_minutes_generator import StatementType
+
         # No patterns exist for QUESTION, ANSWER, or PROPOSAL - they should return GENERAL
         result = self.gen.classify_statement("何か質問はありますか")
         assert result == StatementType.GENERAL
 
     def test_classify_empty_text_returns_general(self):
         from meeting_minutes_generator import StatementType
+
         result = self.gen.classify_statement("")
         assert result == StatementType.GENERAL
 
     def test_classify_random_text_returns_general(self):
         from meeting_minutes_generator import StatementType
+
         result = self.gen.classify_statement("ランダムなテキストです")
         assert result == StatementType.GENERAL
 
@@ -2193,18 +2346,21 @@ class TestMeetingMinutesGenerator:
 
     def test_extract_agenda(self):
         from meeting_minutes_generator import Statement
+
         stmts = [Statement(speaker="田中", text="今日のテーマは新規開発についてです")]
         agendas = self.gen.extract_agenda(stmts)
         assert len(agendas) > 0
 
     def test_extract_agenda_no_keywords(self):
         from meeting_minutes_generator import Statement
+
         stmts = [Statement(speaker="田中", text="天気がいいですね")]
         agendas = self.gen.extract_agenda(stmts)
         assert len(agendas) == 0
 
     def test_extract_next_meeting(self):
         from meeting_minutes_generator import Statement
+
         stmts = [Statement(speaker="田中", text="次回は来週の月曜日に進捗確認を行いましょう")]
         result = self.gen.extract_next_meeting(stmts)
         assert len(result) > 0
@@ -2233,9 +2389,7 @@ class TestMeetingMinutesGenerator:
             {"speaker": "田中", "text": "会議を始めます", "start": 0},
             {"speaker": "佐藤", "text": "報告します", "start": 10},
         ]
-        minutes = self.gen.generate_minutes(
-            segments, title="テスト会議", date="2026-01-01"
-        )
+        minutes = self.gen.generate_minutes(segments, title="テスト会議", date="2026-01-01")
         assert minutes.title == "テスト会議"
         assert len(minutes.statements) == 2
 
@@ -2272,6 +2426,7 @@ class TestGetMinutesGenerator:
 
     def test_singleton(self):
         import meeting_minutes_generator as mmg
+
         # Reset singleton
         mmg._minutes_generator = None
         g1 = mmg.get_minutes_generator()
@@ -2281,30 +2436,34 @@ class TestGetMinutesGenerator:
 
     def teardown_method(self):
         import meeting_minutes_generator as mmg
-        mmg._minutes_generator = None
 
+        mmg._minutes_generator = None
 
 
 # ============================================================================
 # 3q. enhanced_subtitle_exporter.py テスト
 # ============================================================================
 
+
 class TestSRTFormatterEnhanced:
     """SRTFormatter のテスト"""
 
     def test_format_time_zero(self):
         from enhanced_subtitle_exporter import SRTFormatter
+
         f = SRTFormatter()
         assert f.format_time(0) == "00:00:00,000"
 
     def test_format_time_normal(self):
         from enhanced_subtitle_exporter import SRTFormatter
+
         f = SRTFormatter()
         result = f.format_time(3661.5)
         assert result == "01:01:01,500"
 
     def test_format_segment_basic(self):
         from enhanced_subtitle_exporter import SRTFormatter
+
         f = SRTFormatter()
         seg = {"start": 0, "end": 5, "text": "テスト"}
         result = f.format_segment(seg, 1)
@@ -2314,6 +2473,7 @@ class TestSRTFormatterEnhanced:
 
     def test_format_segment_with_speaker(self):
         from enhanced_subtitle_exporter import SRTFormatter
+
         f = SRTFormatter()
         seg = {"start": 0, "end": 5, "text": "テスト", "speaker": "田中"}
         result = f.format_segment(seg, 1)
@@ -2321,6 +2481,7 @@ class TestSRTFormatterEnhanced:
 
     def test_format_segment_empty_text(self):
         from enhanced_subtitle_exporter import SRTFormatter
+
         f = SRTFormatter()
         seg = {"start": 0, "end": 5, "text": ""}
         result = f.format_segment(seg, 1)
@@ -2328,11 +2489,13 @@ class TestSRTFormatterEnhanced:
 
     def test_generate_header(self):
         from enhanced_subtitle_exporter import SRTFormatter
+
         f = SRTFormatter()
         assert f.generate_header() == ""
 
     def test_format_segments(self):
         from enhanced_subtitle_exporter import SRTFormatter
+
         f = SRTFormatter()
         segs = [
             {"start": 0, "end": 3, "text": "最初のセグメント"},
@@ -2348,12 +2511,14 @@ class TestVTTFormatterEnhanced:
 
     def test_format_time(self):
         from enhanced_subtitle_exporter import VTTFormatter
+
         f = VTTFormatter()
         result = f.format_time(3661.5)
         assert result == "01:01:01.500"
 
     def test_format_segment_with_speaker(self):
         from enhanced_subtitle_exporter import VTTFormatter
+
         f = VTTFormatter()
         seg = {"start": 0, "end": 5, "text": "テスト", "speaker": "田中"}
         result = f.format_segment(seg, 1)
@@ -2362,6 +2527,7 @@ class TestVTTFormatterEnhanced:
 
     def test_generate_header(self):
         from enhanced_subtitle_exporter import VTTFormatter
+
         f = VTTFormatter()
         assert "WEBVTT" in f.generate_header()
 
@@ -2370,8 +2536,10 @@ class TestJSONFormatter:
     """JSONFormatter のテスト"""
 
     def test_format_basic(self):
-        from enhanced_subtitle_exporter import JSONFormatter
         import json
+
+        from enhanced_subtitle_exporter import JSONFormatter
+
         f = JSONFormatter()
         segs = [{"start": 0, "end": 5, "text": "テスト"}]
         result = f.format(segs)
@@ -2381,8 +2549,10 @@ class TestJSONFormatter:
         assert len(data["segments"]) == 1
 
     def test_format_with_metadata(self):
-        from enhanced_subtitle_exporter import JSONFormatter
         import json
+
+        from enhanced_subtitle_exporter import JSONFormatter
+
         f = JSONFormatter()
         result = f.format([], metadata={"source": "test.wav"})
         data = json.loads(result)
@@ -2394,6 +2564,7 @@ class TestTXTFormatter:
 
     def test_format_basic(self):
         from enhanced_subtitle_exporter import TXTFormatter
+
         f = TXTFormatter()
         segs = [{"start": 1.5, "text": "テスト", "speaker": "田中"}]
         result = f.format(segs)
@@ -2403,6 +2574,7 @@ class TestTXTFormatter:
 
     def test_format_no_timestamps(self):
         from enhanced_subtitle_exporter import TXTFormatter
+
         f = TXTFormatter()
         segs = [{"start": 1.5, "text": "テスト"}]
         result = f.format(segs, include_timestamps=False)
@@ -2410,6 +2582,7 @@ class TestTXTFormatter:
 
     def test_format_no_speakers(self):
         from enhanced_subtitle_exporter import TXTFormatter
+
         f = TXTFormatter()
         segs = [{"start": 1.5, "text": "テスト", "speaker": "田中"}]
         result = f.format(segs, include_speakers=False)
@@ -2421,6 +2594,7 @@ class TestEnhancedSubtitleExporter:
 
     def setup_method(self):
         from enhanced_subtitle_exporter import EnhancedSubtitleExporter
+
         self.exporter = EnhancedSubtitleExporter()
 
     def test_export_srt(self, tmp_path):
@@ -2499,11 +2673,13 @@ class TestEnhancedSubtitleExporter:
 # 3r. minutes_generator.py テスト
 # ============================================================================
 
+
 class TestMinutesGenerator:
     """MeetingMinutesGenerator convenience methods のテスト"""
 
     def test_generate_dict_basic(self):
         from meeting_minutes_generator import MeetingMinutesGenerator
+
         mg = MeetingMinutesGenerator()
         segments = [
             {"speaker": "田中", "text": "会議を始めます", "start": 0},
@@ -2517,6 +2693,7 @@ class TestMinutesGenerator:
 
     def test_generate_dict_with_action_items(self):
         from meeting_minutes_generator import MeetingMinutesGenerator
+
         mg = MeetingMinutesGenerator()
         segments = [
             {"speaker": "田中", "text": "佐藤さんに調整をお願いします", "start": 0},
@@ -2527,6 +2704,7 @@ class TestMinutesGenerator:
 
     def test_save_minutes_text(self, tmp_path):
         from meeting_minutes_generator import MeetingMinutesGenerator
+
         mg = MeetingMinutesGenerator()
         data = {"text_format": "テスト議事録", "markdown_format": "# テスト"}
         output = str(tmp_path / "minutes.txt")
@@ -2535,14 +2713,17 @@ class TestMinutesGenerator:
 
     def test_save_minutes_markdown(self, tmp_path):
         from meeting_minutes_generator import MeetingMinutesGenerator
+
         mg = MeetingMinutesGenerator()
         data = {"text_format": "テスト", "markdown_format": "# テスト"}
         output = str(tmp_path / "minutes.md")
         assert mg.save_minutes(data, output, "markdown") is True
 
     def test_save_minutes_json(self, tmp_path):
-        from meeting_minutes_generator import MeetingMinutesGenerator
         import json
+
+        from meeting_minutes_generator import MeetingMinutesGenerator
+
         mg = MeetingMinutesGenerator()
         data = {"title": "テスト", "decisions": []}
         output = str(tmp_path / "minutes.json")
@@ -2553,12 +2734,14 @@ class TestMinutesGenerator:
 
     def test_save_minutes_unknown_format(self, tmp_path):
         from meeting_minutes_generator import MeetingMinutesGenerator
+
         mg = MeetingMinutesGenerator()
         output = str(tmp_path / "minutes.xyz")
         assert mg.save_minutes({}, output, "xyz") is False
 
     def test_classify_statements_list(self):
         from meeting_minutes_generator import MeetingMinutesGenerator
+
         mg = MeetingMinutesGenerator()
         stmts = [
             "外壁材はタイルに決定しました",
@@ -2574,6 +2757,7 @@ class TestMinutesGenerator:
 
     def test_extract_action_items_from_text(self):
         from meeting_minutes_generator import MeetingMinutesGenerator
+
         mg = MeetingMinutesGenerator()
         text = "田中さんに確認をお願いします\n佐藤さんが準備する"
         items = mg.extract_action_items_from_text(text)
@@ -2585,12 +2769,14 @@ class TestQuickGenerate:
 
     def test_basic(self):
         from meeting_minutes_generator import quick_generate
+
         segments = [{"speaker": "田中", "text": "テスト", "start": 0}]
         result = quick_generate(segments, title="テスト")
         assert "title" in result
 
     def teardown_method(self):
         import meeting_minutes_generator as mmg
+
         mmg._minutes_generator = None
 
 
@@ -2600,6 +2786,7 @@ class TestQuickGenerate:
 
 try:
     import psutil
+
     _psutil_available = True
 except ImportError:
     _psutil_available = False
@@ -2611,6 +2798,7 @@ class TestProcessingStats:
 
     def test_default_values(self):
         from optimized_pipeline import ProcessingStats
+
         s = ProcessingStats()
         assert s.total_files == 0
         assert s.processed_files == 0
@@ -2619,37 +2807,42 @@ class TestProcessingStats:
 
     def test_progress_percent_zero(self):
         from optimized_pipeline import ProcessingStats
+
         s = ProcessingStats()
         assert s.progress_percent == 0.0
 
     def test_progress_percent_half(self):
         from optimized_pipeline import ProcessingStats
+
         s = ProcessingStats(total_files=10, processed_files=5)
         assert s.progress_percent == 50.0
 
     def test_elapsed_time_no_start(self):
         from optimized_pipeline import ProcessingStats
+
         s = ProcessingStats()
         assert s.elapsed_time == 0.0
 
     def test_elapsed_time_with_start(self):
         import time
+
         from optimized_pipeline import ProcessingStats
+
         s = ProcessingStats(start_time=time.time() - 5)
         assert 4.0 < s.elapsed_time < 10.0
 
     def test_estimated_remaining_zero_processed(self):
         from optimized_pipeline import ProcessingStats
+
         s = ProcessingStats(total_files=10, processed_files=0)
         assert s.estimated_remaining == 0.0
 
     def test_estimated_remaining_with_progress(self):
         import time
+
         from optimized_pipeline import ProcessingStats
-        s = ProcessingStats(
-            total_files=10, processed_files=5,
-            start_time=time.time() - 10
-        )
+
+        s = ProcessingStats(total_files=10, processed_files=5, start_time=time.time() - 10)
         # 5 files in 10 seconds => 2s/file => 5 remaining => ~10s
         assert s.estimated_remaining > 0
 
@@ -2660,18 +2853,21 @@ class TestMemoryMonitor:
 
     def test_init(self):
         from optimized_pipeline import MemoryMonitor
+
         m = MemoryMonitor(limit_mb=2048)
         assert m.limit_mb == 2048
         assert m.peak_mb == 0.0
 
     def test_get_current_memory(self):
         from optimized_pipeline import MemoryMonitor
+
         m = MemoryMonitor()
         current = m.get_current_memory_mb()
         assert current > 0
 
     def test_register_callback(self):
         from optimized_pipeline import MemoryMonitor
+
         m = MemoryMonitor()
         calls = []
         m.register_callback(lambda mb: calls.append(mb))
@@ -2679,11 +2875,13 @@ class TestMemoryMonitor:
 
     def test_is_memory_available(self):
         from optimized_pipeline import MemoryMonitor
+
         m = MemoryMonitor(limit_mb=999999)  # Very high limit
         assert m.is_memory_available(500) is True
 
     def test_is_memory_not_available(self):
         from optimized_pipeline import MemoryMonitor
+
         m = MemoryMonitor(limit_mb=1)  # Very low limit
         assert m.is_memory_available(500) is False
 
@@ -2692,34 +2890,41 @@ class TestMemoryMonitor:
 # api_corrector.py テスト
 # ============================================================================
 
+
 @pytest.mark.unit
 class TestAPIProvider:
     """APIProviderの列挙型テスト"""
 
     def test_anthropic_value(self):
         from api_corrector import APIProvider
+
         assert APIProvider.ANTHROPIC.value == "anthropic"
 
     def test_openai_value(self):
         from api_corrector import APIProvider
+
         assert APIProvider.OPENAI.value == "openai"
 
     def test_azure_openai_value(self):
         from api_corrector import APIProvider
+
         assert APIProvider.AZURE_OPENAI.value == "azure_openai"
 
     def test_all_members(self):
         from api_corrector import APIProvider
+
         members = list(APIProvider)
         assert len(members) == 3
 
     def test_from_value(self):
         from api_corrector import APIProvider
+
         assert APIProvider("anthropic") is APIProvider.ANTHROPIC
         assert APIProvider("openai") is APIProvider.OPENAI
 
     def test_invalid_value(self):
         from api_corrector import APIProvider
+
         with pytest.raises(ValueError):
             APIProvider("invalid_provider")
 
@@ -2729,7 +2934,8 @@ class TestCorrectionConfig:
     """CorrectionConfigデータクラスのテスト"""
 
     def test_creation_with_defaults(self):
-        from api_corrector import CorrectionConfig, APIProvider
+        from api_corrector import APIProvider, CorrectionConfig
+
         config = CorrectionConfig(
             provider=APIProvider.ANTHROPIC,
             api_key="test-key",
@@ -2745,7 +2951,8 @@ class TestCorrectionConfig:
         assert config.retry_base_delay == 1.0
 
     def test_creation_with_custom_values(self):
-        from api_corrector import CorrectionConfig, APIProvider
+        from api_corrector import APIProvider, CorrectionConfig
+
         config = CorrectionConfig(
             provider=APIProvider.OPENAI,
             api_key="custom-key",
@@ -2763,7 +2970,8 @@ class TestCorrectionConfig:
         assert config.retry_base_delay == 2.0
 
     def test_api_key_hidden_in_repr(self):
-        from api_corrector import CorrectionConfig, APIProvider
+        from api_corrector import APIProvider, CorrectionConfig
+
         config = CorrectionConfig(
             provider=APIProvider.ANTHROPIC,
             api_key="secret-key-12345",
@@ -2779,7 +2987,7 @@ class TestBaseAPICorrectorSplitText:
 
     def _make_corrector(self):
         """テスト用のBaseAPICorrectorサブクラスを作成"""
-        from api_corrector import BaseAPICorrector, CorrectionConfig, APIProvider
+        from api_corrector import APIProvider, BaseAPICorrector, CorrectionConfig
 
         class DummyCorrector(BaseAPICorrector):
             def correct_text(self, text, context=None):
@@ -2870,7 +3078,7 @@ class TestBaseAPICorrectorCallWithRetry:
 
     def _make_corrector(self, retry_count=3, retry_base_delay=0.0):
         """テスト用のBaseAPICorrectorサブクラスを作成"""
-        from api_corrector import BaseAPICorrector, CorrectionConfig, APIProvider
+        from api_corrector import APIProvider, BaseAPICorrector, CorrectionConfig
 
         class DummyCorrector(BaseAPICorrector):
             def correct_text(self, text, context=None):
@@ -2977,7 +3185,7 @@ class TestBaseAPICorrectorCorrectSegments:
 
     def _make_corrector(self, is_available=False):
         """テスト用のBaseAPICorrectorサブクラスを作成"""
-        from api_corrector import BaseAPICorrector, CorrectionConfig, APIProvider
+        from api_corrector import APIProvider, BaseAPICorrector, CorrectionConfig
 
         class DummyCorrector(BaseAPICorrector):
             def correct_text(self, text, context=None):
@@ -3052,7 +3260,7 @@ class TestBaseAPICorrectorHandleAPIError:
     """BaseAPICorrector._handle_api_error() のテスト"""
 
     def _make_corrector(self):
-        from api_corrector import BaseAPICorrector, CorrectionConfig, APIProvider
+        from api_corrector import APIProvider, BaseAPICorrector, CorrectionConfig
 
         class DummyCorrector(BaseAPICorrector):
             def correct_text(self, text, context=None):
@@ -3070,36 +3278,42 @@ class TestBaseAPICorrectorHandleAPIError:
 
     def test_authentication_error(self):
         from exceptions import APIAuthenticationError
+
         c = self._make_corrector()
         with pytest.raises(APIAuthenticationError):
             c._handle_api_error(Exception("authentication failed"), "TestProvider")
 
     def test_api_key_error(self):
         from exceptions import APIAuthenticationError
+
         c = self._make_corrector()
         with pytest.raises(APIAuthenticationError):
             c._handle_api_error(Exception("invalid api key"), "TestProvider")
 
     def test_unauthorized_error(self):
         from exceptions import APIAuthenticationError
+
         c = self._make_corrector()
         with pytest.raises(APIAuthenticationError):
             c._handle_api_error(Exception("unauthorized access"), "TestProvider")
 
     def test_rate_limit_error(self):
         from exceptions import APIRateLimitError
+
         c = self._make_corrector()
         with pytest.raises(APIRateLimitError):
             c._handle_api_error(Exception("rate limit exceeded"), "TestProvider")
 
     def test_rate_limit_underscore_error(self):
         from exceptions import APIRateLimitError
+
         c = self._make_corrector()
         with pytest.raises(APIRateLimitError):
             c._handle_api_error(Exception("rate_limit hit"), "TestProvider")
 
     def test_generic_error(self):
         from exceptions import APIError
+
         c = self._make_corrector()
         with pytest.raises(APIError):
             c._handle_api_error(Exception("something went wrong"), "TestProvider")
@@ -3117,6 +3331,7 @@ except ImportError:
     # psutil がないため、モックを注入してリトライ
     try:
         from unittest.mock import MagicMock as _MagicMock
+
         _mock_psutil = _MagicMock()
         _mock_psutil.Process.return_value.memory_info.return_value.rss = 500 * 1024 * 1024
         _mock_psutil.cpu_percent.return_value = 30.0
@@ -3138,6 +3353,7 @@ class TestCheckpointManager:
     def test_init_creates_directory(self):
         """初期化時にディレクトリが作成される"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cp_dir = os.path.join(tmpdir, "subdir", "checkpoints")
             cm = _ebp_module.CheckpointManager(checkpoint_dir=cp_dir)
@@ -3147,6 +3363,7 @@ class TestCheckpointManager:
     def test_save_and_load(self):
         """チェックポイントの保存と読み込み"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
 
@@ -3171,6 +3388,7 @@ class TestCheckpointManager:
     def test_load_nonexistent(self):
         """存在しないチェックポイントの読み込みはNone"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
             result = cm.load()
@@ -3179,6 +3397,7 @@ class TestCheckpointManager:
     def test_load_wrong_batch_id(self):
         """異なるbatch_idでの読み込みはNone"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
             cm.save(
@@ -3194,6 +3413,7 @@ class TestCheckpointManager:
     def test_load_any_batch_id(self):
         """batch_id=Noneで読み込むと任意のチェックポイントを返す"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
             cm.save(
@@ -3210,6 +3430,7 @@ class TestCheckpointManager:
     def test_clear(self):
         """チェックポイントの削除"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
             cm.save(
@@ -3227,6 +3448,7 @@ class TestCheckpointManager:
     def test_clear_nonexistent(self):
         """存在しないチェックポイントのクリアも成功"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
             result = cm.clear()
@@ -3235,6 +3457,7 @@ class TestCheckpointManager:
     def test_get_resume_info_with_remaining(self):
         """残りファイルがある場合の再開情報取得"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
             cm.save(
@@ -3255,6 +3478,7 @@ class TestCheckpointManager:
     def test_get_resume_info_no_remaining(self):
         """残りファイルがない場合の再開情報はNone"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
             cm.save(
@@ -3270,6 +3494,7 @@ class TestCheckpointManager:
     def test_get_resume_info_no_checkpoint(self):
         """チェックポイントがない場合の再開情報はNone"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
             info = cm.get_resume_info()
@@ -3278,6 +3503,7 @@ class TestCheckpointManager:
     def test_save_overwrites_previous(self):
         """保存は前のチェックポイントを上書きする"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             cm = _ebp_module.CheckpointManager(checkpoint_dir=tmpdir)
             cm.save(
@@ -3416,6 +3642,7 @@ class TestBatchSizeMultiplier:
 # PySide6が利用できるかチェック
 try:
     from PySide6.QtCore import QThread
+
     _pyside6_available = True
 except ImportError:
     _pyside6_available = False
@@ -3428,6 +3655,7 @@ class TestFolderMonitorProcessedFiles:
     def test_save_and_load_processed_files(self):
         """処理済みファイルリストの保存と読み込み"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             # 手動で処理済みファイルリストを書き込み
             processed_path = os.path.join(tmpdir, ".processed_files.txt")
@@ -3449,6 +3677,7 @@ class TestFolderMonitorProcessedFiles:
     def test_save_processed_files_format(self):
         """保存フォーマットが1行1ファイルパスであること"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             processed_path = os.path.join(tmpdir, ".processed_files.txt")
             files = ["alpha.wav", "beta.mp3"]
@@ -3463,6 +3692,7 @@ class TestFolderMonitorProcessedFiles:
     def test_load_empty_file(self):
         """空ファイルの読み込みは空セットになる"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             processed_path = os.path.join(tmpdir, ".processed_files.txt")
             with open(processed_path, "w", encoding="utf-8") as f:
@@ -3475,6 +3705,7 @@ class TestFolderMonitorProcessedFiles:
     def test_load_nonexistent_file(self):
         """存在しないファイルの読み込み"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             processed_path = os.path.join(tmpdir, ".processed_files.txt")
             assert not os.path.exists(processed_path)
@@ -3486,15 +3717,28 @@ class TestFolderMonitorExtensionFiltering:
 
     # AUDIO_EXTENSIONSの期待値（folder_monitor.pyから抽出した定数）
     EXPECTED_AUDIO_EXTENSIONS = {
-        '.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac',
-        '.wma', '.opus', '.amr', '.3gp', '.webm',
-        '.mp4', '.avi', '.mov', '.mkv',
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".flac",
+        ".ogg",
+        ".aac",
+        ".wma",
+        ".opus",
+        ".amr",
+        ".3gp",
+        ".webm",
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".mkv",
     }
 
     @pytest.mark.skipif(not _pyside6_available, reason="PySide6 not available")
     def test_audio_extensions_set(self):
         """AUDIO_EXTENSIONSの定義を確認"""
         from folder_monitor import FolderMonitor
+
         assert FolderMonitor.AUDIO_EXTENSIONS == self.EXPECTED_AUDIO_EXTENSIONS
 
     def test_is_audio_file_wav(self):
@@ -3536,8 +3780,9 @@ class TestFolderMonitorExtensionFiltering:
     @pytest.mark.skipif(not _pyside6_available, reason="PySide6 not available")
     def test_all_video_formats_included(self):
         """動画形式がAUDIO_EXTENSIONSに含まれる"""
-        video_exts = {'.mp4', '.avi', '.mov', '.mkv'}
+        video_exts = {".mp4", ".avi", ".mov", ".mkv"}
         from folder_monitor import FolderMonitor
+
         assert video_exts.issubset(FolderMonitor.AUDIO_EXTENSIONS)
 
 
@@ -3550,7 +3795,7 @@ class TestFolderMonitorIsFileReady:
         try:
             if os.path.getsize(file_path) == 0:
                 return False
-            with open(file_path, 'r+b') as f:
+            with open(file_path, "r+b") as f:
                 f.read(1)
             return True
         except (OSError, IOError):
@@ -3559,6 +3804,7 @@ class TestFolderMonitorIsFileReady:
     def test_nonempty_file_is_ready(self):
         """内容のあるファイルはreadyと判定される"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             fpath = os.path.join(tmpdir, "test.wav")
             with open(fpath, "wb") as f:
@@ -3568,9 +3814,10 @@ class TestFolderMonitorIsFileReady:
     def test_empty_file_is_not_ready(self):
         """0バイトのファイルはreadyではない"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             fpath = os.path.join(tmpdir, "empty.wav")
-            with open(fpath, "wb") as f:
+            with open(fpath, "wb") as _f:  # noqa: F841
                 pass  # 0 bytes
             assert self._check_file_ready(fpath) is False
 
@@ -3587,8 +3834,10 @@ class TestFolderMonitorWithQt:
     def test_init(self):
         """FolderMonitorの初期化"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             from folder_monitor import FolderMonitor
+
             monitor = FolderMonitor(tmpdir, check_interval=5)
             assert monitor.folder_path == tmpdir
             assert monitor.check_interval == 5
@@ -3598,8 +3847,10 @@ class TestFolderMonitorWithQt:
     def test_is_audio_file_method(self):
         """is_audio_fileメソッドの動作確認"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             from folder_monitor import FolderMonitor
+
             monitor = FolderMonitor(tmpdir)
             assert monitor.is_audio_file("test.wav") is True
             assert monitor.is_audio_file("test.mp3") is True
@@ -3611,8 +3862,10 @@ class TestFolderMonitorWithQt:
     def test_mark_and_check_processed(self):
         """ファイルを処理済みとしてマークし、確認する"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             from folder_monitor import FolderMonitor
+
             monitor = FolderMonitor(tmpdir)
 
             test_file = os.path.join(tmpdir, "test.wav")
@@ -3626,8 +3879,10 @@ class TestFolderMonitorWithQt:
     def test_remove_from_processed(self):
         """処理済みリストからの削除"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             from folder_monitor import FolderMonitor
+
             monitor = FolderMonitor(tmpdir)
 
             test_file = os.path.join(tmpdir, "test.wav")
@@ -3642,6 +3897,7 @@ class TestFolderMonitorWithQt:
     def test_load_processed_files_on_init(self):
         """初期化時に処理済みファイルリストが読み込まれる"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             # 事前に処理済みファイルリストを作成
             processed_path = os.path.join(tmpdir, ".processed_files.txt")
@@ -3654,6 +3910,7 @@ class TestFolderMonitorWithQt:
                     f.write(f"{fp}\n")
 
             from folder_monitor import FolderMonitor
+
             monitor = FolderMonitor(tmpdir)
             assert len(monitor.processed_files) == 2
             for fp in test_files:
@@ -3662,8 +3919,10 @@ class TestFolderMonitorWithQt:
     def test_get_unprocessed_files_empty_dir(self):
         """空ディレクトリでは未処理ファイルなし"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             from folder_monitor import FolderMonitor
+
             monitor = FolderMonitor(tmpdir)
             result = monitor.get_unprocessed_files()
             assert result == []
@@ -3671,8 +3930,10 @@ class TestFolderMonitorWithQt:
     def test_is_file_ready_nonempty(self):
         """is_file_readyメソッドのテスト - 内容のあるファイル"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             from folder_monitor import FolderMonitor
+
             monitor = FolderMonitor(tmpdir)
             fpath = os.path.join(tmpdir, "test.wav")
             with open(fpath, "wb") as f:
@@ -3685,11 +3946,13 @@ class TestFolderMonitorWithQt:
     def test_is_file_ready_empty(self):
         """is_file_readyメソッドのテスト - 空ファイル"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             from folder_monitor import FolderMonitor
+
             monitor = FolderMonitor(tmpdir)
             fpath = os.path.join(tmpdir, "empty.wav")
-            with open(fpath, "wb") as f:
+            with open(fpath, "wb") as _f:  # noqa: F841
                 pass
             result = monitor.is_file_ready(fpath)
             assert result is False
@@ -3697,8 +3960,10 @@ class TestFolderMonitorWithQt:
     def test_stop(self):
         """stopメソッドで_stop_eventがセットされる"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             from folder_monitor import FolderMonitor
+
             monitor = FolderMonitor(tmpdir)
             assert monitor._stop_event.is_set() is False
             monitor.stop()
@@ -3708,6 +3973,7 @@ class TestFolderMonitorWithQt:
 # ============================================================================
 # 4a. base_engine.py 追加テスト - __enter__/__exit__ cleanup, unload_model edge cases
 # ============================================================================
+
 
 class TestBaseTranscriptionEngineExtended:
     """BaseTranscriptionEngine の拡張テスト
@@ -3721,6 +3987,7 @@ class TestBaseTranscriptionEngineExtended:
 
         class ConcreteEngine(BaseTranscriptionEngine):
             """正常に動作する具象エンジン"""
+
             def load_model(self) -> bool:
                 self.model = "mock_model"
                 self.is_loaded = True
@@ -3731,6 +3998,7 @@ class TestBaseTranscriptionEngineExtended:
 
         class FailingLoadEngine(BaseTranscriptionEngine):
             """load_model で例外を送出するエンジン"""
+
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
                 self.unload_called = False
@@ -3749,6 +4017,7 @@ class TestBaseTranscriptionEngineExtended:
 
         class FailingUnloadEngine(BaseTranscriptionEngine):
             """unload_model で例外を送出するエンジン"""
+
             def load_model(self) -> bool:
                 self.model = "mock_model"
                 self.is_loaded = True
@@ -3778,7 +4047,7 @@ class TestBaseTranscriptionEngineExtended:
     def test_enter_cleanup_on_load_failure_via_with(self):
         """with文で load_model が失敗した場合もクリーンアップが動作する"""
         with pytest.raises(RuntimeError, match="Model load failed"):
-            with self.FailingLoadEngine("test-model", device="cpu") as engine:
+            with self.FailingLoadEngine("test-model", device="cpu") as _engine:  # noqa: F841
                 pass  # pragma: no cover
 
     def test_exit_unload_error_does_not_mask_original_exception(self):
@@ -3829,7 +4098,7 @@ class TestBaseTranscriptionEngineExtended:
 
         # unload_model のtry/except内部で例外が発生するケースをシミュレート
         # torch.cuda.is_available() が例外を出す場合
-        with patch.dict('sys.modules', {'torch': MagicMock(cuda=MagicMock(is_available=MagicMock(return_value=False)))}):
+        with patch.dict("sys.modules", {"torch": MagicMock(cuda=MagicMock(is_available=MagicMock(return_value=False)))}):
             engine.unload_model()
 
         assert engine.model is None
@@ -3850,7 +4119,7 @@ class TestBaseTranscriptionEngineExtended:
 
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
-        with patch.dict('sys.modules', {'torch': mock_torch}):
+        with patch.dict("sys.modules", {"torch": mock_torch}):
             engine.unload_model()
 
         mock_torch.cuda.empty_cache.assert_called_once()
@@ -3862,8 +4131,8 @@ class TestBaseTranscriptionEngineExtended:
         engine.load_model()
 
         # torch のインポートを失敗させる
-        original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else None
-        with patch.dict('sys.modules', {'torch': None}):
+        _original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else None  # noqa: F841
+        with patch.dict("sys.modules", {"torch": None}):
             engine.unload_model()
 
         assert engine.model is None
@@ -3889,7 +4158,7 @@ class TestBaseTranscriptionEngineExtended:
         """_resolve_device で auto 指定時に CUDA が利用可能なら cuda を返す"""
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
-        with patch.dict('sys.modules', {'torch': mock_torch}):
+        with patch.dict("sys.modules", {"torch": mock_torch}):
             engine = self.ConcreteEngine("test-model", device="auto")
             assert engine.device == "cuda"
 
@@ -3897,7 +4166,7 @@ class TestBaseTranscriptionEngineExtended:
         """_resolve_device で auto 指定時に CUDA がなければ cpu を返す"""
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = False
-        with patch.dict('sys.modules', {'torch': mock_torch}):
+        with patch.dict("sys.modules", {"torch": mock_torch}):
             engine = self.ConcreteEngine("test-model", device="auto")
             assert engine.device == "cpu"
 
@@ -3925,6 +4194,7 @@ class TestBaseTranscriptionEngineExtended:
 # 4b. speaker_diarization_utils.py 追加テスト
 # ============================================================================
 
+
 class TestClusteringMixinExtended:
     """ClusteringMixin の拡張テスト
 
@@ -3935,6 +4205,7 @@ class TestClusteringMixinExtended:
 
     def setup_method(self):
         from speaker_diarization_utils import ClusteringMixin
+
         self.mixin = ClusteringMixin()
 
     def test_merge_consecutive_segments_length_mismatch_raises(self):
@@ -3987,22 +4258,28 @@ class TestClusteringMixinExtended:
 
     def test_simple_clustering_zero_norm_embeddings(self):
         """ゼロベクトルの埋め込みがあっても除算エラーにならない"""
-        embeddings = np.array([
-            [0.0, 0.0, 0.0],  # ゼロベクトル
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-        ], dtype=np.float32)
+        embeddings = np.array(
+            [
+                [0.0, 0.0, 0.0],  # ゼロベクトル
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+            ],
+            dtype=np.float32,
+        )
         labels = self.mixin._simple_clustering(embeddings, num_speakers=2)
         assert len(labels) == 3
 
     def test_simple_clustering_centroid_normalization(self):
         """セントロイドが単位球面上に正規化される（cosine distance の正当性のため）"""
-        embeddings = np.array([
-            [3.0, 0.0],
-            [2.0, 0.5],
-            [0.0, 4.0],
-            [0.2, 3.0],
-        ], dtype=np.float32)
+        embeddings = np.array(
+            [
+                [3.0, 0.0],
+                [2.0, 0.5],
+                [0.0, 4.0],
+                [0.2, 3.0],
+            ],
+            dtype=np.float32,
+        )
         labels = self.mixin._simple_clustering(embeddings, num_speakers=2)
         assert len(labels) == 4
         # 最初の2つは類似（x軸方向）、最後の2つは類似（y軸方向）
@@ -4023,20 +4300,24 @@ class TestClusteringMixinExtended:
 
     def test_perform_clustering_fallback_to_simple(self):
         """sklearn が利用不可の場合、_simple_clustering にフォールバックする"""
-        embeddings = np.array([
-            [1, 0, 0],
-            [0.9, 0.1, 0],
-            [0, 1, 0],
-            [0.1, 0.9, 0],
-        ], dtype=np.float32)
+        embeddings = np.array(
+            [
+                [1, 0, 0],
+                [0.9, 0.1, 0],
+                [0, 1, 0],
+                [0.1, 0.9, 0],
+            ],
+            dtype=np.float32,
+        )
 
-        with patch.dict('sys.modules', {'sklearn': None, 'sklearn.cluster': None}):
+        with patch.dict("sys.modules", {"sklearn": None, "sklearn.cluster": None}):
             # ImportError をシミュレート
-            original = self.mixin._perform_clustering
+            _original = self.mixin._perform_clustering  # noqa: F841
 
             def mock_perform(embeddings, num_speakers=None):
                 try:
                     from sklearn.cluster import AgglomerativeClustering
+
                     raise ImportError("mocked")
                 except ImportError:
                     return self.mixin._simple_clustering(embeddings, num_speakers or 2)
@@ -4051,6 +4332,7 @@ class TestSpeakerFormatterMixinExtended:
 
     def setup_method(self):
         from speaker_diarization_utils import SpeakerFormatterMixin
+
         self.formatter = SpeakerFormatterMixin()
 
     def test_find_speaker_at_time_boundary_start(self):
@@ -4142,6 +4424,7 @@ class TestSpeakerFormatterMixinExtended:
 # 4c. text_formatter.py 追加テスト - フィラー除去(日本語)、入力検証
 # ============================================================================
 
+
 class TestTextFormatterExtended:
     """TextFormatter の拡張テスト
 
@@ -4150,7 +4433,8 @@ class TestTextFormatterExtended:
     """
 
     def setup_method(self):
-        from text_formatter import TextFormatter, RegexPatterns, ValidationError
+        from text_formatter import RegexPatterns, TextFormatter, ValidationError
+
         self.formatter = TextFormatter()
         self.RegexPatterns = RegexPatterns
         self.ValidationError = ValidationError
@@ -4281,6 +4565,7 @@ class TestTextFormatterExtended:
         pattern = self.RegexPatterns.get_filler_pattern("えーと")
         # パターンが正規表現として有効であることを確認
         import re
+
         assert re.match(pattern.pattern, "えーと") is not None
 
     def test_filler_pattern_cache_works(self):
@@ -4292,7 +4577,9 @@ class TestTextFormatterExtended:
     def test_split_long_sentences(self):
         """長い文が助詞の位置で分割される"""
         # 60文字以上で読点なしの文
-        long_sentence = "これは非常に長い文章であり多くの情報を含んでいて読者にとって理解が難しい場合がある内容を説明している文です"
+        long_sentence = (
+            "これは非常に長い文章であり多くの情報を含んでいて読者にとって理解が難しい場合がある内容を説明している文です"
+        )
         result = self.formatter._split_long_sentences(long_sentence)
         # 読点が追加されているか
         if len(long_sentence) > 60:
@@ -4316,6 +4603,7 @@ class TestTextFormatterExtended:
 # 4d. custom_vocabulary.py 追加テスト - アトミック保存、import_words 検証
 # ============================================================================
 
+
 class TestCustomVocabularyExtended:
     """CustomVocabulary の拡張テスト
 
@@ -4326,8 +4614,9 @@ class TestCustomVocabularyExtended:
     def test_atomic_save_creates_file(self, tmp_path):
         """save_vocabulary がアトミック書き込みでファイルを作成する"""
         from custom_vocabulary import CustomVocabulary
+
         vocab_file = str(tmp_path / "atomic_test.json")
-        vocab = CustomVocabulary(vocab_file)
+        _vocab = CustomVocabulary(vocab_file)  # noqa: F841
         # ファイルが作成されたことを確認
         assert Path(vocab_file).exists()
         # 内容が正しいJSONであること
@@ -4339,6 +4628,7 @@ class TestCustomVocabularyExtended:
     def test_atomic_save_no_temp_file_left_on_success(self, tmp_path):
         """アトミック保存成功時に一時ファイルが残らない"""
         from custom_vocabulary import CustomVocabulary
+
         vocab_file = str(tmp_path / "atomic_test.json")
         vocab = CustomVocabulary(vocab_file)
         vocab.save_vocabulary()
@@ -4349,11 +4639,12 @@ class TestCustomVocabularyExtended:
     def test_atomic_save_no_temp_file_left_on_failure(self, tmp_path):
         """アトミック保存失敗時に一時ファイルがクリーンアップされる"""
         from custom_vocabulary import CustomVocabulary
+
         vocab_file = str(tmp_path / "atomic_test.json")
         vocab = CustomVocabulary(vocab_file)
 
         # os.replace を失敗させる
-        with patch('os.replace', side_effect=OSError("disk full")):
+        with patch("os.replace", side_effect=OSError("disk full")):
             vocab.save_vocabulary()  # エラーは内部でキャッチされる
 
         # 一時ファイルが残っていないことを確認
@@ -4363,6 +4654,7 @@ class TestCustomVocabularyExtended:
     def test_add_hotword_empty_raises_valueerror(self, tmp_path):
         """空文字列の追加は ValueError"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         with pytest.raises(ValueError, match="cannot be empty"):
             vocab.add_hotword("")
@@ -4370,6 +4662,7 @@ class TestCustomVocabularyExtended:
     def test_add_hotword_whitespace_only_raises_valueerror(self, tmp_path):
         """空白のみの文字列の追加は ValueError"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         with pytest.raises(ValueError, match="cannot be empty"):
             vocab.add_hotword("   ")
@@ -4377,6 +4670,7 @@ class TestCustomVocabularyExtended:
     def test_add_hotword_too_long_raises_valueerror(self, tmp_path):
         """MAX_HOTWORD_LENGTH を超える文字列の追加は ValueError"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         long_word = "あ" * 101
         with pytest.raises(ValueError, match="too long"):
@@ -4385,6 +4679,7 @@ class TestCustomVocabularyExtended:
     def test_add_hotword_strips_whitespace(self, tmp_path):
         """ホットワード追加時に前後の空白が除去される"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.add_hotword("  テスト用語  ")
         assert "テスト用語" in vocab.hotwords
@@ -4393,8 +4688,9 @@ class TestCustomVocabularyExtended:
     def test_import_words_from_text_skips_invalid(self, tmp_path):
         """import_words_from_text はバリデーションエラーの単語をスキップする"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
-        initial_count = len(vocab.hotwords)
+        _initial_count = len(vocab.hotwords)  # noqa: F841
         # 空行、空白のみ、長すぎる単語を含む
         long_word = "x" * 200
         text = f"ValidWord\n\n   \n{long_word}\nAnotherValid"
@@ -4408,6 +4704,7 @@ class TestCustomVocabularyExtended:
     def test_import_words_from_text_empty_lines_ignored(self, tmp_path):
         """import_words_from_text は空行を無視する"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         initial_count = len(vocab.hotwords)
         vocab.import_words_from_text("\n\n\n")
@@ -4416,6 +4713,7 @@ class TestCustomVocabularyExtended:
     def test_import_words_from_text_strips_each_word(self, tmp_path):
         """import_words_from_text は各行の前後空白を除去する"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.import_words_from_text("  SpacedWord  ")
         assert "SpacedWord" in vocab.hotwords
@@ -4423,6 +4721,7 @@ class TestCustomVocabularyExtended:
     def test_apply_replacements_delegates_to_construction_vocab(self, tmp_path):
         """apply_replacements は ConstructionVocabulary.apply_replacements_to_text に委譲する"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.replacements = {"テスト入力": "テスト出力"}
         result = vocab.apply_replacements("テスト入力の文")
@@ -4431,20 +4730,22 @@ class TestCustomVocabularyExtended:
     def test_load_vocabulary_file_too_large(self, tmp_path):
         """ファイルサイズが10MBを超える場合はロードされない"""
         from custom_vocabulary import CustomVocabulary
+
         vocab_file = tmp_path / "large.json"
         # ファイルを作成（実際には大きくないが、stat を mock する）
         vocab_file.write_text("{}", encoding="utf-8")
 
-        with patch.object(Path, 'stat') as mock_stat:
+        with patch.object(Path, "stat") as mock_stat:
             mock_stat_result = MagicMock()
             mock_stat_result.st_size = 11 * 1024 * 1024  # 11MB
             mock_stat.return_value = mock_stat_result
-            vocab = CustomVocabulary(str(vocab_file))
+            _vocab = CustomVocabulary(str(vocab_file))  # noqa: F841
             # ファイルが大きすぎるのでデフォルトデータは空のまま（もしくはload_vocabularyが何もしない）
 
     def test_load_vocabulary_invalid_json(self, tmp_path):
         """無効なJSONの場合、デフォルト語彙が作成される"""
         from custom_vocabulary import CustomVocabulary
+
         vocab_file = tmp_path / "invalid.json"
         vocab_file.write_text("{ invalid json }", encoding="utf-8")
         vocab = CustomVocabulary(str(vocab_file))
@@ -4454,6 +4755,7 @@ class TestCustomVocabularyExtended:
     def test_get_whisper_prompt_empty_hotwords(self, tmp_path):
         """ホットワードが空の場合、空文字列を返す"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.hotwords = []
         prompt = vocab.get_whisper_prompt()
@@ -4462,6 +4764,7 @@ class TestCustomVocabularyExtended:
     def test_get_whisper_prompt_limits_to_30_words(self, tmp_path):
         """Whisperプロンプトは最大30単語に制限される"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         vocab.hotwords = [f"Word{i}" for i in range(50)]
         prompt = vocab.get_whisper_prompt()
@@ -4472,6 +4775,7 @@ class TestCustomVocabularyExtended:
     def test_remove_hotword_nonexistent(self, tmp_path):
         """存在しないホットワードの削除は何も起きない"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         count = len(vocab.hotwords)
         vocab.remove_hotword("非存在ワード")
@@ -4480,6 +4784,7 @@ class TestCustomVocabularyExtended:
     def test_remove_replacement_nonexistent(self, tmp_path):
         """存在しない置換ルールの削除は何も起きない"""
         from custom_vocabulary import CustomVocabulary
+
         vocab = CustomVocabulary(str(tmp_path / "vocab.json"))
         count = len(vocab.replacements)
         vocab.remove_replacement("非存在キー")
@@ -4489,6 +4794,7 @@ class TestCustomVocabularyExtended:
 # ============================================================================
 # 4e. custom_dictionary.py 追加テスト - スレッドセーフシングルトン
 # ============================================================================
+
 
 class TestCustomDictionaryExtended:
     """CustomDictionary の拡張テスト
@@ -4500,15 +4806,18 @@ class TestCustomDictionaryExtended:
     def setup_method(self):
         # シングルトンをリセット
         import custom_dictionary
+
         custom_dictionary._custom_dictionary = None
 
     def teardown_method(self):
         import custom_dictionary
+
         custom_dictionary._custom_dictionary = None
 
     def test_singleton_returns_same_instance(self):
         """get_custom_dictionary は同じインスタンスを返す"""
         from custom_dictionary import get_custom_dictionary
+
         config = {"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}}
         d1 = get_custom_dictionary(config)
         d2 = get_custom_dictionary(config)
@@ -4516,8 +4825,9 @@ class TestCustomDictionaryExtended:
 
     def test_singleton_thread_safe(self):
         """複数スレッドから同時に get_custom_dictionary を呼んでも同一インスタンス"""
-        from custom_dictionary import get_custom_dictionary
         import custom_dictionary
+        from custom_dictionary import get_custom_dictionary
+
         custom_dictionary._custom_dictionary = None
 
         config = {"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}}
@@ -4539,6 +4849,7 @@ class TestCustomDictionaryExtended:
     def test_singleton_first_call_uses_config(self):
         """初回呼び出しの config が使われる"""
         from custom_dictionary import get_custom_dictionary
+
         config = {"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}}
         d = get_custom_dictionary(config)
         assert isinstance(d.hotwords, list)
@@ -4546,12 +4857,14 @@ class TestCustomDictionaryExtended:
     def test_init_with_none_config(self):
         """config が None の場合、空の辞書として扱われる"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary(None)
         assert isinstance(d.hotwords, list)
 
     def test_merge_custom_vocabulary_domains(self):
         """_merge_custom_vocabulary がドメイン別語彙をカテゴリに追加する"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
 
         # CustomVocabulary をモック
@@ -4570,6 +4883,7 @@ class TestCustomDictionaryExtended:
     def test_merge_construction_vocabulary_with_categories(self):
         """_merge_construction_vocabulary が指定カテゴリのみマージする"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
 
         mock_cv = MagicMock()
@@ -4588,6 +4902,7 @@ class TestCustomDictionaryExtended:
     def test_merge_construction_vocabulary_no_categories(self):
         """カテゴリ指定なしの場合、全ホットワードがマージされる"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
 
         mock_cv = MagicMock()
@@ -4605,6 +4920,7 @@ class TestCustomDictionaryExtended:
     def test_add_term_with_custom_vocab(self):
         """add_term がカスタム語彙にも同時に追加する"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         mock_cv = MagicMock()
         d._custom_vocab = mock_cv
@@ -4616,6 +4932,7 @@ class TestCustomDictionaryExtended:
     def test_add_replacement_with_custom_vocab(self):
         """add_replacement がカスタム語彙にも同時に追加する"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         mock_cv = MagicMock()
         d._custom_vocab = mock_cv
@@ -4627,6 +4944,7 @@ class TestCustomDictionaryExtended:
     def test_add_term_empty_does_nothing(self):
         """空文字列の add_term は何も追加しない"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         count = len(d.hotwords)
         d.add_term("", "cat")
@@ -4635,6 +4953,7 @@ class TestCustomDictionaryExtended:
     def test_reload_clears_and_reloads(self):
         """reload が全データをクリアして再読み込みする"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.hotwords = ["test"]
         d.replacements = {"a": "b"}
@@ -4647,18 +4966,21 @@ class TestCustomDictionaryExtended:
     def test_get_construction_vocabulary_none_when_disabled(self):
         """建設業用語辞書が無効の場合、get_construction_vocabulary は None を返す"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         assert d.get_construction_vocabulary() is None
 
     def test_get_custom_vocabulary_none_when_disabled(self):
         """カスタム語彙が無効の場合、get_custom_vocabulary は None を返す"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         assert d.get_custom_vocabulary() is None
 
     def test_get_whisper_prompt_by_category(self):
         """カテゴリ指定でプロンプトを生成できる"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.categories["test_cat"] = ["用語A", "用語B"]
         prompt = d.get_whisper_prompt(category="test_cat")
@@ -4668,6 +4990,7 @@ class TestCustomDictionaryExtended:
     def test_apply_replacements_longest_first(self):
         """置換は長い文字列から先に行われ、連鎖置換を防ぐ"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.replacements = {
             "けんたいきょう": "建退共",
@@ -4679,6 +5002,7 @@ class TestCustomDictionaryExtended:
     def test_search_terms_case_insensitive(self):
         """検索は大小文字を区別しない"""
         from custom_dictionary import CustomDictionary
+
         d = CustomDictionary({"construction_vocabulary": {"enabled": False}, "vocabulary": {"enabled": False}})
         d.hotwords = ["API", "api_test", "Other"]
         results = d.search_terms("api")
@@ -4691,35 +5015,33 @@ class TestCustomDictionaryExtended:
 # 4f. construction_vocabulary.py 追加テスト - apply_replacements_to_text
 # ============================================================================
 
+
 class TestConstructionVocabularyExtended:
     """ConstructionVocabulary.apply_replacements_to_text の拡張テスト"""
 
     def test_apply_replacements_to_text_japanese_no_word_boundary(self):
         """日本語テキストでは \\b を使わず re.escape でマッチする"""
         from construction_vocabulary import ConstructionVocabulary
+
         replacements = {"ほおがけ": "歩掛", "きじゅんない": "基準内"}
-        result = ConstructionVocabulary.apply_replacements_to_text(
-            "ほおがけの計算ときじゅんないの確認", replacements
-        )
+        result = ConstructionVocabulary.apply_replacements_to_text("ほおがけの計算ときじゅんないの確認", replacements)
         assert "歩掛" in result
         assert "基準内" in result
 
     def test_apply_replacements_to_text_ascii_uses_word_boundary(self):
         """ASCII テキストでは \\b ワード境界を使う"""
         from construction_vocabulary import ConstructionVocabulary
+
         replacements = {"API": "Application Programming Interface"}
-        result = ConstructionVocabulary.apply_replacements_to_text(
-            "Use the API to connect", replacements
-        )
+        result = ConstructionVocabulary.apply_replacements_to_text("Use the API to connect", replacements)
         assert "Application Programming Interface" in result
 
     def test_apply_replacements_to_text_ascii_word_boundary_prevents_partial(self):
         """ASCII の \\b ワード境界により部分一致は置換されない"""
         from construction_vocabulary import ConstructionVocabulary
+
         replacements = {"API": "Interface"}
-        result = ConstructionVocabulary.apply_replacements_to_text(
-            "RAPID deployment", replacements
-        )
+        result = ConstructionVocabulary.apply_replacements_to_text("RAPID deployment", replacements)
         # "API" in "RAPID" はワード境界に合致しないため置換されない
         assert "RAPID" in result
         assert "Interface" not in result
@@ -4727,30 +5049,32 @@ class TestConstructionVocabularyExtended:
     def test_apply_replacements_to_text_longest_first(self):
         """長い置換キーが先に処理され、連鎖置換を防止する"""
         from construction_vocabulary import ConstructionVocabulary
+
         replacements = {
             "けん": "検",
             "けんちく": "建築",
         }
-        result = ConstructionVocabulary.apply_replacements_to_text(
-            "けんちくの確認", replacements
-        )
+        result = ConstructionVocabulary.apply_replacements_to_text("けんちくの確認", replacements)
         assert "建築" in result
 
     def test_apply_replacements_to_text_empty_replacements(self):
         """空の置換辞書ではテキストがそのまま返される"""
         from construction_vocabulary import ConstructionVocabulary
+
         result = ConstructionVocabulary.apply_replacements_to_text("テスト", {})
         assert result == "テスト"
 
     def test_apply_replacements_to_text_empty_text(self):
         """空テキストでは空文字列が返される"""
         from construction_vocabulary import ConstructionVocabulary
+
         result = ConstructionVocabulary.apply_replacements_to_text("", {"a": "b"})
         assert result == ""
 
     def test_add_term_empty_raises(self, tmp_path):
         """空文字列の add_term は ValueError"""
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         with pytest.raises(ValueError, match="cannot be empty"):
             vocab.add_term("")
@@ -4758,6 +5082,7 @@ class TestConstructionVocabularyExtended:
     def test_add_term_whitespace_only_raises(self, tmp_path):
         """空白のみの add_term は ValueError"""
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         with pytest.raises(ValueError, match="cannot be empty"):
             vocab.add_term("   ")
@@ -4765,6 +5090,7 @@ class TestConstructionVocabularyExtended:
     def test_add_term_too_long_raises(self, tmp_path):
         """MAX_TERM_LENGTH を超える add_term は ValueError"""
         from construction_vocabulary import ConstructionVocabulary
+
         vocab = ConstructionVocabulary(str(tmp_path / "vocab.json"))
         with pytest.raises(ValueError, match="too long"):
             vocab.add_term("あ" * 101)
@@ -4772,12 +5098,14 @@ class TestConstructionVocabularyExtended:
     def test_construction_singleton_thread_safe(self):
         """get_construction_vocabulary のシングルトンがスレッドセーフ"""
         import construction_vocabulary
+
         construction_vocabulary._construction_vocab = None
 
         results = []
 
         def worker():
             from construction_vocabulary import get_construction_vocabulary
+
             v = get_construction_vocabulary()
             results.append(id(v))
 
@@ -4796,12 +5124,14 @@ class TestConstructionVocabularyExtended:
 # workers.py テスト
 # ============================================================================
 
+pytest.importorskip("PySide6")
+
 from workers import (
-    _normalize_segments,
-    SharedConstants,
-    stop_worker,
-    TranscriptionWorker,
     BatchTranscriptionWorker,
+    SharedConstants,
+    TranscriptionWorker,
+    _normalize_segments,
+    stop_worker,
 )
 
 
@@ -4901,12 +5231,12 @@ class TestSharedConstants:
 
     def test_supported_extensions(self):
         """サポートされる拡張子"""
-        assert '.mp3' in SharedConstants.SUPPORTED_EXTENSIONS
-        assert '.wav' in SharedConstants.SUPPORTED_EXTENSIONS
-        assert '.mp4' in SharedConstants.SUPPORTED_EXTENSIONS
-        assert '.flac' in SharedConstants.SUPPORTED_EXTENSIONS
+        assert ".mp3" in SharedConstants.SUPPORTED_EXTENSIONS
+        assert ".wav" in SharedConstants.SUPPORTED_EXTENSIONS
+        assert ".mp4" in SharedConstants.SUPPORTED_EXTENSIONS
+        assert ".flac" in SharedConstants.SUPPORTED_EXTENSIONS
         for ext in SharedConstants.SUPPORTED_EXTENSIONS:
-            assert ext.startswith('.')
+            assert ext.startswith(".")
 
     def test_audio_file_filter(self):
         """ファイルフィルタ文字列"""
@@ -4977,7 +5307,7 @@ class TestStopWorker:
 class TestTranscriptionWorkerInit:
     """TranscriptionWorker 初期化テスト"""
 
-    @patch('workers.TranscriptionEngine')
+    @patch("workers.TranscriptionEngine")
     def test_basic_init(self, mock_engine_cls):
         """基本初期化"""
         worker = TranscriptionWorker("/test/audio.mp3")
@@ -4986,14 +5316,14 @@ class TestTranscriptionWorkerInit:
         assert worker.diarizer is None
         assert not worker._cancel_event.is_set()
 
-    @patch('workers.TranscriptionEngine')
+    @patch("workers.TranscriptionEngine")
     def test_init_with_diarization(self, mock_engine_cls):
         """話者分離有効で初期化"""
-        with patch('workers.FreeSpeakerDiarizer') as mock_diar_cls:
+        with patch("workers.FreeSpeakerDiarizer") as _mock_diar_cls:  # noqa: F841
             worker = TranscriptionWorker("/test/audio.mp3", enable_diarization=True)
             assert worker.enable_diarization is True
 
-    @patch('workers.TranscriptionEngine')
+    @patch("workers.TranscriptionEngine")
     def test_cancel(self, mock_engine_cls):
         """キャンセルフラグ"""
         worker = TranscriptionWorker("/test/audio.mp3")
@@ -5023,11 +5353,7 @@ class TestBatchTranscriptionWorkerInit:
         """オプション付き初期化"""
         mock_formatter = MagicMock()
         worker = BatchTranscriptionWorker(
-            ["/a.mp3"],
-            enable_diarization=True,
-            max_workers=1,
-            formatter=mock_formatter,
-            use_llm_correction=True
+            ["/a.mp3"], enable_diarization=True, max_workers=1, formatter=mock_formatter, use_llm_correction=True
         )
         assert worker.enable_diarization is True
         assert worker.max_workers == 1  # エンジン排他のため常に1

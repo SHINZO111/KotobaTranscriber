@@ -3,30 +3,34 @@ KotobaTranscriber - 文字起こしエンジン
 kotoba-whisper v2.2を使用した日本語音声文字起こし
 """
 
-import os
 import atexit
-import subprocess
+import logging
+import os
+import subprocess  # nosec B404 - subprocess is required for ffmpeg invocation
 import tempfile
 import threading
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import torch
 from transformers import pipeline
-from typing import Optional, Dict, Any, List
-import logging
-from pathlib import Path
+
 from base_engine import BaseTranscriptionEngine
-from validators import Validator, ValidationError
 from config_manager import get_config
-from exceptions import ModelLoadError, TranscriptionFailedError, AudioFormatError
+from exceptions import AudioFormatError, ModelLoadError, TranscriptionFailedError
+from validators import ValidationError, Validator
 
 # オプション: 音声前処理とカスタム語彙
 try:
     from audio_preprocessor import AudioPreprocessor
+
     PREPROCESSOR_AVAILABLE = True
 except ImportError:
     PREPROCESSOR_AVAILABLE = False
 
 try:
     from custom_vocabulary import CustomVocabulary
+
     VOCABULARY_AVAILABLE = True
 except ImportError:
     VOCABULARY_AVAILABLE = False
@@ -38,7 +42,7 @@ config = get_config()
 logger = logging.getLogger(__name__)
 
 # 動画コンテナ拡張子（ffmpegで事前に音声抽出が必要）
-VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.3gp'}
+VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".3gp"}
 
 
 def _validate_ffmpeg_path(path: str) -> bool:
@@ -68,7 +72,7 @@ def _validate_ffmpeg_path(path: str) -> bool:
         Path(r"C:\Program Files (x86)\ffmpeg"),
         Path("/usr/bin"),
         Path("/usr/local/bin"),
-        Path("/opt/ffmpeg")
+        Path("/opt/ffmpeg"),
     ]
 
     # パスが許可リストのいずれかの配下にあるか厳密にチェック
@@ -89,7 +93,7 @@ def _validate_ffmpeg_path(path: str) -> bool:
         return False
 
     # ffmpeg実行ファイルの存在確認
-    ffmpeg_exe = os.path.join(real_path, "ffmpeg.exe" if os.name == 'nt' else "ffmpeg")
+    ffmpeg_exe = os.path.join(real_path, "ffmpeg.exe" if os.name == "nt" else "ffmpeg")
     if not os.path.isfile(ffmpeg_exe):
         logger.error(f"ffmpeg executable not found: {ffmpeg_exe}")
         return False
@@ -197,6 +201,9 @@ class TranscriptionEngine(BaseTranscriptionEngine):
 
         # 基底クラスの初期化
         super().__init__(model_name, device, language)
+        # Re-declare types for mypy (set by super().__init__)
+        self.device: str = self.device
+        self.is_loaded: bool = self.is_loaded
 
         # スレッドセーフティ対策
         # CRITICAL: モデルの並行アクセスを防ぐためのロック
@@ -215,7 +222,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                 self.preprocessor = AudioPreprocessor(
                     noise_reduce=config.get("audio.preprocessing.noise_reduction", default=True),
                     normalize=config.get("audio.preprocessing.normalize", default=True),
-                    remove_silence=config.get("audio.preprocessing.remove_silence", default=False)
+                    remove_silence=config.get("audio.preprocessing.remove_silence", default=False),
                 )
                 logger.info("Audio preprocessing enabled")
 
@@ -323,17 +330,18 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         Returns:
             str: ASCII専用の短縮パス、またはフォールバックとして元のパス
         """
-        if os.name != 'nt':
+        if os.name != "nt":
             return path
         try:
             import ctypes
+
             buf = ctypes.create_unicode_buffer(512)
-            result = ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 512)
+            result = ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 512)  # type: ignore[attr-defined]
             if result > 0:
                 short = buf.value
                 # 短縮パスがASCIIのみか確認
                 try:
-                    short.encode('ascii')
+                    short.encode("ascii")
                     return short
                 except UnicodeEncodeError:
                     pass  # 8.3パスも非ASCIIの場合はフォールバック
@@ -359,7 +367,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
             subprocess.TimeoutExpired: ffmpegがタイムアウトした場合
             AudioFormatError: ffmpegが非ゼロ終了した場合
         """
-        temp_fd, temp_wav_path = tempfile.mkstemp(suffix='.wav', prefix='transcribe_')
+        temp_fd, temp_wav_path = tempfile.mkstemp(suffix=".wav", prefix="transcribe_")
         os.close(temp_fd)
 
         with self._temp_files_lock:
@@ -381,18 +389,23 @@ class TranscriptionEngine(BaseTranscriptionEngine):
             raise FileNotFoundError(f"Video file not found after path conversion: {video_path}")
 
         cmd = [
-            'ffmpeg', '-i', short_video_path,
-            '-vn',             # 映像除去
-            '-acodec', 'pcm_s16le',  # 16bit PCM WAV
-            '-ar', '16000',    # 16kHz（Whisper要求）
-            '-ac', '1',        # モノラル
-            '-y',              # 上書き許可
-            temp_wav_path
+            "ffmpeg",
+            "-i",
+            short_video_path,
+            "-vn",  # 映像除去
+            "-acodec",
+            "pcm_s16le",  # 16bit PCM WAV
+            "-ar",
+            "16000",  # 16kHz（Whisper要求）
+            "-ac",
+            "1",  # モノラル
+            "-y",  # 上書き許可
+            temp_wav_path,
         ]
 
         logger.info(f"Extracting audio from video: {video_path}")
         try:
-            subprocess.run(
+            subprocess.run(  # nosec B603 - shell=False is intentional; cmd is constructed from validated inputs
                 cmd,
                 capture_output=True,
                 text=True,
@@ -402,22 +415,22 @@ class TranscriptionEngine(BaseTranscriptionEngine):
             )
         except subprocess.CalledProcessError as e:
             # Log full stderr for debugging (truncated to avoid excessive log size)
-            stderr_msg = e.stderr[:500] if e.stderr else 'no error output'
+            stderr_msg = e.stderr[:500] if e.stderr else "no error output"
             # Log detailed stderr at DEBUG level (not retained in production)
             logger.debug(f"ffmpeg stderr (exit {e.returncode}): {stderr_msg}")
             # Log generic error at ERROR level (retained in production)
             logger.error(f"ffmpeg failed (exit {e.returncode}): Video audio extraction failed")
-            raise AudioFormatError(f"Video audio extraction failed") from e
+            raise AudioFormatError("Video audio extraction failed") from e
 
         logger.info(f"Audio extracted to: {temp_wav_path}")
         return temp_wav_path
 
-    def transcribe(
+    def transcribe(  # noqa: C901
         self,
         audio_path: str,
         chunk_length_s: Optional[int] = None,
         add_punctuation: Optional[bool] = None,
-        return_timestamps: Optional[bool] = None
+        return_timestamps: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
         音声ファイルを文字起こし
@@ -444,9 +457,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
         # ファイルパスを検証（音声/動画ファイル拡張子のみ許可）
         try:
             validated_path = Validator.validate_file_path(
-                audio_path,
-                allowed_extensions=Validator.ALLOWED_AUDIO_EXTENSIONS,
-                must_exist=True
+                audio_path, allowed_extensions=Validator.ALLOWED_AUDIO_EXTENSIONS, must_exist=True
             )
             logger.debug(f"File path validated: {validated_path}")
         except ValidationError as e:
@@ -490,8 +501,8 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                         temp_fd, temp_ascii_path = tempfile.mkstemp(suffix=file_ext, prefix="transcribe_")
 
                         # バイナリモードで完全コピー（メタデータも含む）
-                        with open(validated_path, 'rb') as src:
-                            with os.fdopen(temp_fd, 'wb') as dst:
+                        with open(validated_path, "rb") as src:
+                            with os.fdopen(temp_fd, "wb") as dst:
                                 # 大きなファイルにも対応するためチャンク単位でコピー
                                 chunk_size = 1024 * 1024  # 1MB
                                 while True:
@@ -537,10 +548,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
             task = config.get("model.whisper.task", default="transcribe")
 
             # generate_kwargsを構築
-            generate_kwargs = {
-                "language": language,
-                "task": task
-            }
+            generate_kwargs = {"language": language, "task": task}
 
             # ホットワード（初期プロンプト）を追加（有効な場合）
             if self.vocabulary is not None:
@@ -561,7 +569,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                     str(processed_audio_path),  # Pathオブジェクトを文字列に変換
                     chunk_length_s=chunk_length_s,
                     return_timestamps=return_timestamps,
-                    generate_kwargs=generate_kwargs
+                    generate_kwargs=generate_kwargs,
                 )
 
             # 後処理: カスタム語彙の置換を適用
@@ -573,7 +581,7 @@ class TranscriptionEngine(BaseTranscriptionEngine):
                     logger.info("Applied vocabulary replacements")
 
             logger.info("Transcription completed successfully")
-            return result
+            return dict(result)
 
         except TranscriptionFailedError:
             raise

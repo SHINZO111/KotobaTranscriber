@@ -4,15 +4,16 @@ SRT/VTT形式の字幕ファイル生成
 """
 
 import html
-from typing import List, Dict, Any, Optional
-from pathlib import Path
 import logging
-from time_utils import format_time_srt, format_time_vtt
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from export.common import (
     atomic_write_text,
-    merge_short_segments as _merge_short_segments,
-    split_long_segments as _split_long_segments,
 )
+from export.common import merge_short_segments as _merge_short_segments
+from export.common import split_long_segments as _split_long_segments
+from time_utils import format_time_srt, format_time_vtt
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +28,16 @@ class SubtitleExporter:
     @staticmethod
     def format_srt_time(seconds: float) -> str:
         """秒数をSRT時間形式に変換 (HH:MM:SS,mmm)"""
-        return format_time_srt(seconds)
+        return str(format_time_srt(seconds))
 
     @staticmethod
     def format_vtt_time(seconds: float) -> str:
         """秒数をVTT時間形式に変換 (HH:MM:SS.mmm)"""
-        return format_time_vtt(seconds)
+        return str(format_time_vtt(seconds))
 
-    def export_srt(self,
-                   segments: List[Dict[str, Any]],
-                   output_path: str,
-                   speaker_segments: Optional[List[Dict]] = None) -> bool:
+    def export_srt(
+        self, segments: List[Dict[str, Any]], output_path: str, speaker_segments: Optional[List[Dict]] = None
+    ) -> bool:
         """
         SRT字幕ファイルをエクスポート
 
@@ -64,10 +64,9 @@ class SubtitleExporter:
             logger.error(f"SRT export failed: {e}")
             return False
 
-    def export_vtt(self,
-                   segments: List[Dict[str, Any]],
-                   output_path: str,
-                   speaker_segments: Optional[List[Dict]] = None) -> bool:
+    def export_vtt(
+        self, segments: List[Dict[str, Any]], output_path: str, speaker_segments: Optional[List[Dict]] = None
+    ) -> bool:
         """
         VTT字幕ファイルをエクスポート
 
@@ -93,9 +92,7 @@ class SubtitleExporter:
             logger.error(f"VTT export failed: {e}")
             return False
 
-    def generate_srt_content(self,
-                            segments: List[Dict[str, Any]],
-                            speaker_segments: Optional[List[Dict]] = None) -> str:
+    def generate_srt_content(self, segments: List[Dict[str, Any]], speaker_segments: Optional[List[Dict]] = None) -> str:
         """
         SRT形式のコンテンツを生成
 
@@ -131,9 +128,7 @@ class SubtitleExporter:
 
         return "\n".join(lines)
 
-    def generate_vtt_content(self,
-                            segments: List[Dict[str, Any]],
-                            speaker_segments: Optional[List[Dict]] = None) -> str:
+    def generate_vtt_content(self, segments: List[Dict[str, Any]], speaker_segments: Optional[List[Dict]] = None) -> str:
         """
         VTT形式のコンテンツを生成
 
@@ -165,9 +160,7 @@ class SubtitleExporter:
 
         return "\n".join(lines)
 
-    def _get_speaker_for_time(self,
-                             time: float,
-                             speaker_segments: Optional[List[Dict]]) -> Optional[str]:
+    def _get_speaker_for_time(self, time: float, speaker_segments: Optional[List[Dict]]) -> Optional[str]:
         """
         指定時刻の話者を取得
 
@@ -183,29 +176,30 @@ class SubtitleExporter:
 
         for seg in speaker_segments:
             if seg.get("start", 0) <= time <= seg.get("end", 0):
-                return seg.get("speaker")
+                speaker = seg.get("speaker")
+                return str(speaker) if speaker is not None else None
 
         return None
 
-    def merge_short_segments(self,
-                            segments: List[Dict[str, Any]],
-                            min_duration: float = 1.0,
-                            max_chars: int = 40) -> List[Dict[str, Any]]:
+    def merge_short_segments(
+        self, segments: List[Dict[str, Any]], min_duration: float = 1.0, max_chars: int = 40
+    ) -> List[Dict[str, Any]]:
         """短いセグメントをマージして見やすくする"""
-        return _merge_short_segments(segments, min_duration, max_chars)
+        return list(_merge_short_segments(segments, min_duration, max_chars))
 
-    def split_long_segments(self,
-                           segments: List[Dict[str, Any]],
-                           max_chars: int = 40,
-                           max_duration: float = 5.0) -> List[Dict[str, Any]]:
+    def split_long_segments(
+        self, segments: List[Dict[str, Any]], max_chars: int = 40, max_duration: float = 5.0
+    ) -> List[Dict[str, Any]]:
         """長いセグメントを分割"""
-        return _split_long_segments(segments, max_chars, max_duration)
+        return list(_split_long_segments(segments, max_chars, max_duration))
 
-    def export_auto(self,
-                   segments: List[Dict[str, Any]],
-                   base_path: str,
-                   formats: List[str] = None,
-                   speaker_segments: Optional[List[Dict]] = None) -> Dict[str, bool]:
+    def export_auto(
+        self,
+        segments: List[Dict[str, Any]],
+        base_path: str,
+        formats: List[str] = None,
+        speaker_segments: Optional[List[Dict]] = None,
+    ) -> Dict[str, bool]:
         """
         複数フォーマットで自動エクスポート
 
@@ -222,20 +216,20 @@ class SubtitleExporter:
             formats = ["srt", "vtt"]
 
         results = {}
-        base_path = Path(base_path)
+        base = Path(base_path)
 
         for fmt in formats:
             try:
                 if fmt == "srt":
-                    output_path = base_path.with_suffix(".srt")
+                    output_path = base.with_suffix(".srt")
                     results[fmt] = self.export_srt(segments, str(output_path), speaker_segments)
 
                 elif fmt == "vtt":
-                    output_path = base_path.with_suffix(".vtt")
+                    output_path = base.with_suffix(".vtt")
                     results[fmt] = self.export_vtt(segments, str(output_path), speaker_segments)
 
                 elif fmt == "txt":
-                    output_path = base_path.with_suffix("_字幕.txt")
+                    output_path = base.with_suffix("_字幕.txt")
                     results[fmt] = self._export_txt(segments, str(output_path))
 
             except Exception as e:
@@ -247,10 +241,7 @@ class SubtitleExporter:
     def _export_txt(self, segments: List[Dict[str, Any]], output_path: str) -> bool:
         """プレーンテキストでエクスポート"""
         try:
-            content = ''.join(
-                f"[{segment.get('start', 0):.2f}s] {segment.get('text', '')}\n"
-                for segment in segments
-            )
+            content = "".join(f"[{segment.get('start', 0):.2f}s] {segment.get('text', '')}\n" for segment in segments)
             atomic_write_text(output_path, content)
 
             return True
@@ -273,21 +264,14 @@ class TranscriptionResult:
 
     def add_segment(self, start: float, end: float, text: str, speaker: Optional[str] = None):
         """セグメントを追加"""
-        segment = {
-            "start": start,
-            "end": end,
-            "text": text,
-            "speaker": speaker
-        }
+        segment = {"start": start, "end": end, "text": text, "speaker": speaker}
         self.segments.append(segment)
 
     def set_speaker_segments(self, speaker_segments: List[Dict]):
         """話者分離結果を設定"""
         self.speaker_segments = speaker_segments
 
-    def export(self,
-              base_path: str,
-              formats: List[str] = None) -> Dict[str, bool]:
+    def export(self, base_path: str, formats: List[str] = None) -> Dict[str, bool]:
         """
         複数フォーマットでエクスポート
 
@@ -299,12 +283,7 @@ class TranscriptionResult:
             エクスポート結果
         """
         exporter = SubtitleExporter()
-        return exporter.export_auto(
-            self.segments,
-            base_path,
-            formats,
-            self.speaker_segments
-        )
+        return exporter.export_auto(self.segments, base_path, formats, self.speaker_segments)
 
 
 if __name__ == "__main__":

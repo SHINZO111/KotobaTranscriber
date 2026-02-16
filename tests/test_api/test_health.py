@@ -1,7 +1,8 @@
 """Health API テスト"""
 
-import sys
 import os
+import sys
+
 import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
@@ -10,13 +11,15 @@ if src_dir not in sys.path:
 
 # httpx + TestClient のインポートをtry-except
 try:
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
 
 try:
     from api.main import app
+
     APP_AVAILABLE = True
 except ImportError:
     APP_AVAILABLE = False

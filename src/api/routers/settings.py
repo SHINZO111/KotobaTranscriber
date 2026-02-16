@@ -4,8 +4,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from api.schemas import SettingsModel, ConfigModel
 from api.dependencies import get_app_settings, get_config_manager
+from api.schemas import ConfigModel, SettingsModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -45,7 +45,11 @@ def _mask_sensitive_keys(data, sensitive_keys=("api_key", "secret", "password", 
     """辞書内の機密キーの値をマスクする（部分一致）"""
     if isinstance(data, dict):
         return {
-            k: ("****" if any(s in k.lower() for s in sensitive_keys) and v is not None else _mask_sensitive_keys(v, sensitive_keys))
+            k: (
+                "****"
+                if any(s in k.lower() for s in sensitive_keys) and v is not None
+                else _mask_sensitive_keys(v, sensitive_keys)
+            )
             for k, v in data.items()
         }
     if isinstance(data, list):

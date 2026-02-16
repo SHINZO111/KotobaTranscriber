@@ -55,9 +55,9 @@ class EventBus:
         self._shutting_down = True
         sentinel = {"type": "__shutdown__", "data": {}, "timestamp": time.time()}
         subscribers = self._get_snapshot()
-        for sub_id, queue in subscribers:
+        for sub_id, sub_queue in subscribers:
             try:
-                queue.put_nowait(sentinel)
+                sub_queue.put_nowait(sentinel)
             except (asyncio.QueueFull, Exception):
                 pass
 
@@ -86,9 +86,7 @@ class EventBus:
                 if self._loop and self._loop.is_running():
                     # asyncio.Queue への追加（スレッドセーフ）
                     try:
-                        self._loop.call_soon_threadsafe(
-                            self._put_nowait, async_queue, event, sub_id
-                        )
+                        self._loop.call_soon_threadsafe(self._put_nowait, async_queue, event, sub_id)
                     except RuntimeError:
                         # イベントループが停止中 — フォールバックに移行
                         logger.debug("Event loop closing, falling back to threading.Queue")

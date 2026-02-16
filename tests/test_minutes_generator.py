@@ -2,17 +2,17 @@
 議事録生成のテスト
 """
 
-import unittest
-import tempfile
 import json
+import sys
+import tempfile
+import unittest
 from pathlib import Path
 
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from meeting_minutes_generator import (
-    MeetingMinutesGenerator,
     MeetingMinutes,
+    MeetingMinutesGenerator,
     StatementType,
     get_minutes_generator,
     quick_generate,
@@ -44,7 +44,7 @@ class TestMinutesGenerator(unittest.TestCase):
             title="テスト会議",
             date="2026年2月3日",
             location="会議室A",
-            attendees=["田中", "佐藤", "山田"]
+            attendees=["田中", "佐藤", "山田"],
         )
 
         self.assertIsNotNone(minutes)
@@ -56,10 +56,7 @@ class TestMinutesGenerator(unittest.TestCase):
 
     def test_generate_decisions(self):
         """決定事項抽出テスト"""
-        minutes = self.generator.generate_dict(
-            segments=self.test_segments,
-            title="テスト会議"
-        )
+        minutes = self.generator.generate_dict(segments=self.test_segments, title="テスト会議")
 
         # 決定事項が抽出されているか
         self.assertIn("decisions", minutes)
@@ -67,10 +64,7 @@ class TestMinutesGenerator(unittest.TestCase):
 
     def test_generate_action_items(self):
         """アクションアイテム抽出テスト"""
-        minutes = self.generator.generate_dict(
-            segments=self.test_segments,
-            title="テスト会議"
-        )
+        minutes = self.generator.generate_dict(segments=self.test_segments, title="テスト会議")
 
         # アクションアイテムが抽出されているか
         self.assertIn("action_items", minutes)
@@ -85,11 +79,7 @@ class TestMinutesGenerator(unittest.TestCase):
 
     def test_classify_statements_list(self):
         """発言分類テスト"""
-        statements = [
-            "外壁材はタイルに決定しました。",
-            "予算について確認です。",
-            "調整をお願いします。"
-        ]
+        statements = ["外壁材はタイルに決定しました。", "予算について確認です。", "調整をお願いします。"]
 
         classified = self.generator.classify_statements_list(statements)
         self.assertIn("decisions", classified)
@@ -98,12 +88,9 @@ class TestMinutesGenerator(unittest.TestCase):
 
     def test_save_minutes(self):
         """議事録保存テスト"""
-        minutes = self.generator.generate_dict(
-            segments=self.test_segments,
-            title="テスト会議"
-        )
+        minutes = self.generator.generate_dict(segments=self.test_segments, title="テスト会議")
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
             temp_path = f.name
 
         try:
@@ -112,7 +99,7 @@ class TestMinutesGenerator(unittest.TestCase):
             self.assertTrue(Path(temp_path).exists())
 
             # 内容を確認
-            with open(temp_path, 'r', encoding='utf-8') as f:
+            with open(temp_path, "r", encoding="utf-8") as f:
                 content = f.read()
             self.assertIn("テスト会議", content)
         finally:
@@ -122,12 +109,9 @@ class TestMinutesGenerator(unittest.TestCase):
     def test_generate_from_file(self):
         """ファイルからの生成テスト"""
         # テスト用JSONファイルを作成
-        test_data = {
-            "segments": self.test_segments,
-            "title": "ファイルテスト"
-        }
+        test_data = {"segments": self.test_segments, "title": "ファイルテスト"}
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
             json.dump(test_data, f)
             temp_path = f.name
 
@@ -214,7 +198,7 @@ class TestMeetingMinutes(unittest.TestCase):
             location="会議室A",
             attendees=["田中", "佐藤"],
             decisions=["決定事項1"],
-            action_items=[]
+            action_items=[],
         )
 
         text = minutes.to_text()

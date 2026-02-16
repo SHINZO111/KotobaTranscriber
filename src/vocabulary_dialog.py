@@ -4,12 +4,24 @@
 """
 
 import logging
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QListWidget, QTextEdit, QMessageBox, QGroupBox,
-    QTabWidget, QWidget, QListWidgetItem
-)
+
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
 from custom_vocabulary import CustomVocabulary
 
 logger = logging.getLogger(__name__)
@@ -29,11 +41,7 @@ class VocabularyDialog(QDialog):
         except Exception as e:
             logger.error(f"Failed to initialize vocabulary: {e}")
             self.vocabulary = None
-            QMessageBox.warning(
-                self,
-                "エラー",
-                f"語彙ファイルの読み込みに失敗しました:\n{e}"
-            )
+            QMessageBox.warning(self, "エラー", f"語彙ファイルの読み込みに失敗しました:\n{e}")
             self.reject()
             return
 
@@ -80,8 +88,7 @@ class VocabularyDialog(QDialog):
 
         # 説明
         info_label = QLabel(
-            "ホットワードは文字起こし時にWhisperに提示され、認識精度が向上します。\n"
-            "専門用語や固有名詞を登録してください。"
+            "ホットワードは文字起こし時にWhisperに提示され、認識精度が向上します。\n" "専門用語や固有名詞を登録してください。"
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -128,10 +135,7 @@ class VocabularyDialog(QDialog):
         layout = QVBoxLayout()
 
         # 説明
-        info_label = QLabel(
-            "よくある誤認識を自動的に修正します。\n"
-            "例: 「エーピーアイ」→「API」"
-        )
+        info_label = QLabel("よくある誤認識を自動的に修正します。\n" "例: 「エーピーアイ」→「API」")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
@@ -191,18 +195,13 @@ class VocabularyDialog(QDialog):
         layout = QVBoxLayout()
 
         # 説明
-        info_label = QLabel(
-            "ホットワードをテキスト形式でインポート/エクスポートできます。\n"
-            "1行に1単語を記入してください。"
-        )
+        info_label = QLabel("ホットワードをテキスト形式でインポート/エクスポートできます。\n" "1行に1単語を記入してください。")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
         # テキストエリア
         self.import_export_text = QTextEdit()
-        self.import_export_text.setPlaceholderText(
-            "例:\nPython\nJavaScript\nKubernetes\nDocker"
-        )
+        self.import_export_text.setPlaceholderText("例:\nPython\nJavaScript\nKubernetes\nDocker")
         layout.addWidget(self.import_export_text)
 
         # ボタン
@@ -285,7 +284,7 @@ class VocabularyDialog(QDialog):
             "確認",
             "全てのホットワードを削除しますか？\nこの操作は取り消せません。",
             QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.No,
         )
 
         if reply == QMessageBox.Yes:
@@ -378,6 +377,7 @@ class VocabularyDialog(QDialog):
 if __name__ == "__main__":
     # テスト用コード
     import sys
+
     from PySide6.QtWidgets import QApplication
 
     logging.basicConfig(level=logging.INFO)

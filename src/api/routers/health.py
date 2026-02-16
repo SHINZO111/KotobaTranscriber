@@ -6,6 +6,7 @@ import signal
 import threading
 
 from fastapi import APIRouter, HTTPException
+
 from api.schemas import HealthResponse, MessageResponse
 
 logger = logging.getLogger(__name__)
@@ -21,12 +22,14 @@ async def health_check():
 
     try:
         from transcription_engine import TranscriptionEngine
+
         engines["kotoba_whisper"] = True
     except ImportError:
         engines["kotoba_whisper"] = False
 
     try:
         from faster_whisper_engine import FasterWhisperEngine
+
         engines["faster_whisper"] = True
     except ImportError:
         engines["faster_whisper"] = False

@@ -1,11 +1,12 @@
 """EventBus 単体テスト"""
 
 import asyncio
-import sys
 import os
-import pytest
+import sys
 import threading
 import time
+
+import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
 if src_dir not in sys.path:
@@ -44,10 +45,7 @@ class TestEventBus:
             await asyncio.sleep(0.05)
             bus.emit("test", {"value": 2})
 
-        await asyncio.wait_for(
-            asyncio.gather(consumer(), producer()),
-            timeout=3.0
-        )
+        await asyncio.wait_for(asyncio.gather(consumer(), producer()), timeout=3.0)
 
         assert len(received) == 2
         assert received[0]["type"] == "test"
@@ -129,10 +127,7 @@ class TestEventBus:
             await asyncio.sleep(0.05)
             bus.emit("ts_test", {})
 
-        await asyncio.wait_for(
-            asyncio.gather(consumer(), producer()),
-            timeout=3.0
-        )
+        await asyncio.wait_for(asyncio.gather(consumer(), producer()), timeout=3.0)
 
         assert "timestamp" in received[0]
         assert isinstance(received[0]["timestamp"], float)

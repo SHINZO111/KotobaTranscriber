@@ -6,20 +6,31 @@
 import logging
 import threading
 import time as _time
+from typing import Callable, Optional
+
 import numpy as np
-from typing import Optional, Callable
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit,
-    QLabel, QComboBox, QProgressBar, QCheckBox, QGroupBox,
-    QSpinBox, QDoubleSpinBox
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import QThread, Signal, Qt, QTimer
 
 logger = logging.getLogger(__name__)
 
 # faster-whisperインポート
 try:
     from faster_whisper_engine import FasterWhisperEngine
+
     FASTER_WHISPER_AVAILABLE = True
 except ImportError:
     FASTER_WHISPER_AVAILABLE = False
@@ -29,6 +40,7 @@ except ImportError:
 try:
     import pyaudio
     import webrtcvad
+
     PYAUDIO_AVAILABLE = True
 except ImportError:
     PYAUDIO_AVAILABLE = False
@@ -45,12 +57,14 @@ class RealtimeTranscriptionWorker(QThread):
     error_occurred = Signal(str)  # エラー発生
     volume_changed = Signal(float)  # 音量レベル変更
 
-    def __init__(self,
-                 model_size: str = "base",
-                 device: str = "auto",
-                 sample_rate: int = 16000,
-                 buffer_duration: float = 3.0,
-                 vad_threshold: float = 0.5):
+    def __init__(
+        self,
+        model_size: str = "base",
+        device: str = "auto",
+        sample_rate: int = 16000,
+        buffer_duration: float = 3.0,
+        vad_threshold: float = 0.5,
+    ):
         super().__init__()
 
         self.model_size = model_size
@@ -82,11 +96,7 @@ class RealtimeTranscriptionWorker(QThread):
         try:
             # faster-whisperエンジン初期化
             if FASTER_WHISPER_AVAILABLE:
-                self.engine = FasterWhisperEngine(
-                    model_size=self.model_size,
-                    device=self.device,
-                    language="ja"
-                )
+                self.engine = FasterWhisperEngine(model_size=self.model_size, device=self.device, language="ja")
                 self.status_changed.emit("モデルをロード中...")
                 if not self.engine.load_model():
                     self.error_occurred.emit("モデルのロードに失敗しました")
@@ -105,13 +115,13 @@ class RealtimeTranscriptionWorker(QThread):
                 try:
                     self.engine.unload_model()
                 except Exception:
-                    pass
+                    pass  # nosec B110 - cleanup in error handler, safe to ignore
                 self.engine = None
             if self.audio is not None:
                 try:
                     self.audio.terminate()
                 except Exception:
-                    pass
+                    pass  # nosec B110 - cleanup in error handler, safe to ignore
                 self.audio = None
             self.error_occurred.emit(f"初期化エラー: {str(e)}")
             return False
@@ -132,7 +142,7 @@ class RealtimeTranscriptionWorker(QThread):
                     channels=1,
                     rate=self.sample_rate,
                     input=True,
-                    frames_per_buffer=int(self.sample_rate * 0.03)  # 30ms chunks
+                    frames_per_buffer=int(self.sample_rate * 0.03),  # 30ms chunks
                 )
 
                 self.status_changed.emit("🎤 録音中...")
@@ -144,10 +154,7 @@ class RealtimeTranscriptionWorker(QThread):
 
                     # オーディオデータ読み取り
                     try:
-                        data = self.stream.read(
-                            int(self.sample_rate * 0.03),
-                            exception_on_overflow=False
-                        )
+                        data = self.stream.read(int(self.sample_rate * 0.03), exception_on_overflow=False)
 
                         # NumPy配列に変換
                         audio_chunk = np.frombuffer(data, dtype=np.int16)
@@ -165,19 +172,19 @@ class RealtimeTranscriptionWorker(QThread):
                             n = len(audio_float)
                             space = self._max_buffer_samples - self._write_pos
                             if n <= space:
-                                self._ring_buffer[self._write_pos:self._write_pos + n] = audio_float
+                                self._ring_buffer[self._write_pos : self._write_pos + n] = audio_float
                                 self._write_pos += n
                             else:
                                 # バッファが溢れる場合: 古いデータを捨てて末尾のみ保持
                                 if n >= self._max_buffer_samples:
                                     # 新データだけでバッファ全体を超える場合
-                                    self._ring_buffer[:] = audio_float[-self._max_buffer_samples:]
+                                    self._ring_buffer[:] = audio_float[-self._max_buffer_samples :]
                                     self._write_pos = self._max_buffer_samples
                                 else:
                                     # 既存データをシフトして新データを追加
                                     keep = self._max_buffer_samples - n
-                                    self._ring_buffer[:keep] = self._ring_buffer[self._write_pos - keep:self._write_pos]
-                                    self._ring_buffer[keep:keep + n] = audio_float
+                                    self._ring_buffer[:keep] = self._ring_buffer[self._write_pos - keep : self._write_pos]
+                                    self._ring_buffer[keep : keep + n] = audio_float
                                     self._write_pos = self._max_buffer_samples
 
                         # VADチェック
@@ -213,7 +220,7 @@ class RealtimeTranscriptionWorker(QThread):
                     logger.debug(f"Audio cleanup failed: {e}")
                 # エンジンの解放
                 try:
-                    if hasattr(self, 'engine') and self.engine is not None:
+                    if hasattr(self, "engine") and self.engine is not None:
                         self.engine.unload_model()
                 except Exception as e:
                     logger.debug(f"Engine unload failed: {e}")
@@ -239,16 +246,13 @@ class RealtimeTranscriptionWorker(QThread):
             if self._write_pos == 0:
                 return
             # リングバッファから有効範囲をコピーしてクリア
-            audio_data = self._ring_buffer[:self._write_pos].copy()
+            audio_data = self._ring_buffer[: self._write_pos].copy()
             self._write_pos = 0
 
         try:
             # 文字起こし
             result = self.engine.transcribe(
-                audio_data,
-                sample_rate=self.sample_rate,
-                beam_size=1,  # リアルタイム用に最小化
-                temperature=0.0
+                audio_data, sample_rate=self.sample_rate, beam_size=1, temperature=0.0  # リアルタイム用に最小化
             )
 
             text = result.get("text", "").strip()
@@ -304,13 +308,15 @@ class RealtimeTab(QWidget):
         model_layout = QHBoxLayout()
         model_layout.addWidget(QLabel("モデル:"))
         self.model_combo = QComboBox()
-        self.model_combo.addItems([
-            "tiny (最速・低精度)",
-            "base (速い・普通)",
-            "small (普通・良精度)",
-            "medium (遅い・高精度)",
-            "large-v3 (最遅・最高精度)"
-        ])
+        self.model_combo.addItems(
+            [
+                "tiny (最速・低精度)",
+                "base (速い・普通)",
+                "small (普通・良精度)",
+                "medium (遅い・高精度)",
+                "large-v3 (最遅・最高精度)",
+            ]
+        )
         self.model_combo.setCurrentIndex(1)  # baseをデフォルト
         model_layout.addWidget(self.model_combo)
         model_layout.addStretch()
@@ -426,11 +432,7 @@ class RealtimeTab(QWidget):
         buffer_duration = self.buffer_spin.value()
 
         # ワーカー作成
-        self.worker = RealtimeTranscriptionWorker(
-            model_size=model_size,
-            device=device,
-            buffer_duration=buffer_duration
-        )
+        self.worker = RealtimeTranscriptionWorker(model_size=model_size, device=device, buffer_duration=buffer_duration)
 
         # シグナル接続
         self.worker.text_ready.connect(self.on_text_ready)
@@ -518,8 +520,9 @@ class RealtimeTab(QWidget):
 
     def save_text(self, format_type: str):
         """テキストを保存"""
-        from PySide6.QtWidgets import QFileDialog
         from datetime import datetime
+
+        from PySide6.QtWidgets import QFileDialog
 
         text = self.text_edit.toPlainText()
         if not text:
@@ -528,15 +531,12 @@ class RealtimeTab(QWidget):
         default_name = f"リアルタイム文字起こし_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format_type}"
 
         file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "保存",
-            default_name,
-            f"{format_type.upper()} Files (*.{format_type})"
+            self, "保存", default_name, f"{format_type.upper()} Files (*.{format_type})"
         )
 
         if file_path:
             try:
-                with open(file_path, 'w', encoding='utf-8') as f:
+                with open(file_path, "w", encoding="utf-8") as f:
                     f.write(text)
                 self.status_label.setText(f"✅ 保存しました: {file_path}")
             except Exception as e:
@@ -545,6 +545,7 @@ class RealtimeTab(QWidget):
 
 if __name__ == "__main__":
     import sys
+
     from PySide6.QtWidgets import QApplication
 
     logging.basicConfig(level=logging.INFO)

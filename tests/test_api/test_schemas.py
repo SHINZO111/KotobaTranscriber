@@ -1,7 +1,8 @@
 """Pydantic スキーマテスト"""
 
-import sys
 import os
+import sys
+
 import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
@@ -10,15 +11,26 @@ if src_dir not in sys.path:
 
 try:
     from api.schemas import (
-        TranscribeRequest, TranscribeResponse, BatchTranscribeRequest,
+        BatchTranscribeRequest,
         BatchTranscribeResponse,
-        RealtimeControlRequest, RealtimeStatusResponse,
-        MonitorRequest, MonitorStatusResponse,
-        ExportRequest, ExportResponse,
-        SettingsModel, HealthResponse, ModelInfoResponse,
-        FormatTextRequest, CorrectTextRequest, DiarizeRequest,
-        ConfigModel, MessageResponse,
+        ConfigModel,
+        CorrectTextRequest,
+        DiarizeRequest,
+        ExportRequest,
+        ExportResponse,
+        FormatTextRequest,
+        HealthResponse,
+        MessageResponse,
+        ModelInfoResponse,
+        MonitorRequest,
+        MonitorStatusResponse,
+        RealtimeControlRequest,
+        RealtimeStatusResponse,
+        SettingsModel,
+        TranscribeRequest,
+        TranscribeResponse,
     )
+
     SCHEMAS_AVAILABLE = True
 except ImportError:
     SCHEMAS_AVAILABLE = False
@@ -57,6 +69,7 @@ class TestSchemas:
     def test_batch_request_max_workers_range(self):
         """max_workers の範囲チェック"""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             BatchTranscribeRequest(
                 file_paths=["/a.mp3"],
@@ -88,9 +101,7 @@ class TestSchemas:
 
     def test_health_response(self):
         """HealthResponse"""
-        resp = HealthResponse(
-            engines={"kotoba_whisper": True, "faster_whisper": False}
-        )
+        resp = HealthResponse(engines={"kotoba_whisper": True, "faster_whisper": False})
         assert resp.status == "ok"
         assert resp.engines["kotoba_whisper"] is True
 

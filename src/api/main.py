@@ -15,23 +15,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import TokenAuthMiddleware, get_token_manager
 from api.event_bus import get_event_bus
-from api.websocket import manager
 from api.routers import (
-    transcription,
-    realtime,
-    models,
-    postprocess,
-    settings,
-    monitor,
     export,
     health,
+    models,
+    monitor,
+    postprocess,
+    realtime,
+    settings,
+    transcription,
 )
+from api.websocket import manager
 
 # ロギング設定
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -46,7 +43,6 @@ async def lifespan(app: FastAPI):
 
         # TokenManager 初期化
         token_manager = get_token_manager()
-        current_token = token_manager.get_current_token()
         logger.info(f"TokenManager initialized (TTL: {token_manager._ttl_seconds}s)")
 
         logger.info("KotobaTranscriber API started")
@@ -60,6 +56,7 @@ async def lifespan(app: FastAPI):
     bus.shutdown()
 
     from api.dependencies import get_worker_state
+
     state = get_worker_state()
 
     worker = state.get_transcription_worker()
@@ -107,7 +104,7 @@ app.add_middleware(
     allow_origins=[
         "tauri://localhost",
         "https://tauri.localhost",
-        "http://localhost:1420",   # Vite dev server
+        "http://localhost:1420",  # Vite dev server
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],

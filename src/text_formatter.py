@@ -3,11 +3,12 @@
 文字起こし結果の後処理を行う
 """
 
+import logging
 import re
 import threading
-from typing import List, Dict
-import logging
-from validators import Validator, ValidationError
+from typing import Dict, List
+
+from validators import ValidationError, Validator
 
 logger = logging.getLogger(__name__)
 
@@ -17,30 +18,46 @@ class PunctuationRules:
 
     # 接続詞リスト
     CONJUNCTIONS = [
-        'しかし', 'また', 'そして', 'それで', 'つまり', 'ところで',
-        'さらに', 'ただし', 'ですが', 'でも', 'けれど', 'けれども',
-        'だから', 'なので', 'そのため', 'したがって'
+        "しかし",
+        "また",
+        "そして",
+        "それで",
+        "つまり",
+        "ところで",
+        "さらに",
+        "ただし",
+        "ですが",
+        "でも",
+        "けれど",
+        "けれども",
+        "だから",
+        "なので",
+        "そのため",
+        "したがって",
     ]
 
     # 段落区切り用接続詞
-    PARAGRAPH_BREAK_WORDS = [
-        'しかし', 'また', 'ところで', 'さて', 'では', 'それでは', 'ちなみに'
-    ]
+    PARAGRAPH_BREAK_WORDS = ["しかし", "また", "ところで", "さて", "では", "それでは", "ちなみに"]
 
     # 丁寧語の語尾
     POLITE_ENDINGS = [
-        'です', 'ます', 'ました', 'でした', 'ません', 'ませんでした',
-        'でしょう', 'ましょう', 'ください', 'くださいました'
+        "です",
+        "ます",
+        "ました",
+        "でした",
+        "ません",
+        "ませんでした",
+        "でしょう",
+        "ましょう",
+        "ください",
+        "くださいました",
     ]
 
     # 引用動詞
-    QUOTE_VERBS = [
-        '思います', '思った', '言います', '言った', '聞きます', '聞いた',
-        '考えます', '考えた'
-    ]
+    QUOTE_VERBS = ["思います", "思った", "言います", "言った", "聞きます", "聞いた", "考えます", "考えた"]
 
     # 助詞（長文分割用）
-    PARTICLES = ['て', 'で', 'が', 'を', 'に', 'は', 'も']
+    PARTICLES = ["て", "で", "が", "を", "に", "は", "も"]
 
     # 長文の閾値
     LONG_SENTENCE_MIN_LENGTH = 60  # 句読点を追加する最小文字数
@@ -53,24 +70,24 @@ class RegexPatterns:
     """
 
     # Common patterns used across multiple methods
-    CONSECUTIVE_COMMAS = re.compile(r'[、]{2,}')
-    CONSECUTIVE_PERIODS = re.compile(r'[。]{2,}')
-    CONSECUTIVE_SPACES = re.compile(r'\s+')
-    PUNCTUATION_SPACES = re.compile(r'([、。！？])\s+')
+    CONSECUTIVE_COMMAS = re.compile(r"[、]{2,}")
+    CONSECUTIVE_PERIODS = re.compile(r"[。]{2,}")
+    CONSECUTIVE_SPACES = re.compile(r"\s+")
+    PUNCTUATION_SPACES = re.compile(r"([、。！？])\s+")
 
     # Punctuation rules
-    COMMA_BEFORE_PERIOD = re.compile(r'、([。！？])')
-    TE_DE_LONG_SENTENCE = re.compile(r'([てで])([^、。！？\n]{40,}?)([^、。！？\n]{20,})')
-    GA_LONG_SENTENCE = re.compile(r'([が])([^、。！？\n]{35,})')
-    REASON_PUNCTUATION = re.compile(r'(ので|から)([^、。！？\n])')
-    CONDITION_PUNCTUATION = re.compile(r'(たら|れば|なら)([^、。！？\n])')
-    TARI_PUNCTUATION = re.compile(r'(たり)([^、。！？\n])')
+    COMMA_BEFORE_PERIOD = re.compile(r"、([。！？])")
+    TE_DE_LONG_SENTENCE = re.compile(r"([てで])([^、。！？\n]{40,}?)([^、。！？\n]{20,})")
+    GA_LONG_SENTENCE = re.compile(r"([が])([^、。！？\n]{35,})")
+    REASON_PUNCTUATION = re.compile(r"(ので|から)([^、。！？\n])")
+    CONDITION_PUNCTUATION = re.compile(r"(たら|れば|なら)([^、。！？\n])")
+    TARI_PUNCTUATION = re.compile(r"(たり)([^、。！？\n])")
 
     # Sentence splitting
-    SENTENCE_SPLIT = re.compile(r'([。！？\n])')
+    SENTENCE_SPLIT = re.compile(r"([。！？\n])")
 
     # Repeated words
-    REPEATED_WORDS = re.compile(r'\b(\w+)\s+\1\b')
+    REPEATED_WORDS = re.compile(r"\b(\w+)\s+\1\b")
 
     # Dynamically compiled patterns cache
     _pattern_cache: Dict[str, re.Pattern] = {}
@@ -95,7 +112,7 @@ class RegexPatterns:
             if key not in cls._pattern_cache:
                 # Japanese text has no word boundaries between characters,
                 # so use lookaround-free pattern with optional trailing punctuation
-                pattern = re.escape(filler) + r'[、。]?\s*'
+                pattern = re.escape(filler) + r"[、。]?\s*"
                 cls._pattern_cache[key] = re.compile(pattern, re.IGNORECASE)
             return cls._pattern_cache[key]
 
@@ -113,7 +130,7 @@ class RegexPatterns:
         key = f"conj_{conjunction}"
         with cls._cache_lock:
             if key not in cls._pattern_cache:
-                pattern = r'([^、。！？\n])(' + re.escape(conjunction) + r')'
+                pattern = r"([^、。！？\n])(" + re.escape(conjunction) + r")"
                 cls._pattern_cache[key] = re.compile(pattern)
             return cls._pattern_cache[key]
 
@@ -131,7 +148,7 @@ class RegexPatterns:
         key = f"quote_{verb}"
         with cls._cache_lock:
             if key not in cls._pattern_cache:
-                pattern = r'と(' + re.escape(verb) + ')'
+                pattern = r"と(" + re.escape(verb) + ")"
                 cls._pattern_cache[key] = re.compile(pattern)
             return cls._pattern_cache[key]
 
@@ -149,7 +166,7 @@ class RegexPatterns:
         key = f"polite_{ending}"
         with cls._cache_lock:
             if key not in cls._pattern_cache:
-                pattern = r'(' + re.escape(ending) + r')([^。！？\n])'
+                pattern = r"(" + re.escape(ending) + r")([^。！？\n])"
                 cls._pattern_cache[key] = re.compile(pattern)
             return cls._pattern_cache[key]
 
@@ -161,26 +178,50 @@ class TextFormatter:
     # NOTE: 単一文字のフィラー('あ','え','ん')は意味のある日本語単語の一部を
     # 破壊するため含めない。長音符付き('あー','えー','んー')のみ安全。
     FILLER_WORDS = [
-        'あー', 'ああ', 'あのー', 'あの',
-        'えー', 'ええ', 'えっと', 'えーと',
-        'そのー',
-        'まあ', 'まー',
-        'うーん',
-        'んー',
-        'なんか', 'なんて',
-        'ごめん', 'ごめんなさい',  # 不要な謝罪表現
+        "あー",
+        "ああ",
+        "あのー",
+        "あの",
+        "えー",
+        "ええ",
+        "えっと",
+        "えーと",
+        "そのー",
+        "まあ",
+        "まー",
+        "うーん",
+        "んー",
+        "なんか",
+        "なんて",
+        "ごめん",
+        "ごめんなさい",  # 不要な謝罪表現
     ]
 
     # 積極的削除用の追加フィラー語（レベル2: aggressive=True 時のみ使用）
     # 'その','はい','うん' は文脈により意味を持つため aggressive のみ
     AGGRESSIVE_FILLER_WORDS = [
-        'その', 'はい', 'うん',
-        'ちょっと', 'やっぱり', 'やはり', 'やっぱ',
-        'まあまあ', 'とりあえず', 'いわゆる',
-        'ですです', 'ですね', 'ますね',
-        'そうですね', 'そうそう', 'そうそうそう',
-        'ほんとに', 'ほんとうに', 'まじで',
-        'けっこう', 'けど', 'だけど',
+        "その",
+        "はい",
+        "うん",
+        "ちょっと",
+        "やっぱり",
+        "やはり",
+        "やっぱ",
+        "まあまあ",
+        "とりあえず",
+        "いわゆる",
+        "ですです",
+        "ですね",
+        "ますね",
+        "そうですね",
+        "そうそう",
+        "そうそうそう",
+        "ほんとに",
+        "ほんとうに",
+        "まじで",
+        "けっこう",
+        "けど",
+        "だけど",
     ]
 
     def __init__(self):
@@ -214,14 +255,14 @@ class TextFormatter:
         filler_list = self.FILLER_WORDS + self.AGGRESSIVE_FILLER_WORDS if aggressive else self.FILLER_WORDS
         for filler in filler_list:
             pattern = RegexPatterns.get_filler_pattern(filler)
-            result = pattern.sub('', result)
+            result = pattern.sub("", result)
 
         # 連続する句読点を整理（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.CONSECUTIVE_COMMAS.sub('、', result)
-        result = RegexPatterns.CONSECUTIVE_PERIODS.sub('。', result)
+        result = RegexPatterns.CONSECUTIVE_COMMAS.sub("、", result)
+        result = RegexPatterns.CONSECUTIVE_PERIODS.sub("。", result)
 
         # 連続するスペースを1つに（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.CONSECUTIVE_SPACES.sub(' ', result)
+        result = RegexPatterns.CONSECUTIVE_SPACES.sub(" ", result)
 
         # 行頭・行末の空白を削除
         result = result.strip()
@@ -241,53 +282,53 @@ class TextFormatter:
         result = text
 
         # 既存の句読点の後のスペースを削除（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.PUNCTUATION_SPACES.sub(r'\1', result)
+        result = RegexPatterns.PUNCTUATION_SPACES.sub(r"\1", result)
 
         # 1. 接続詞の前に読点（文頭以外、既に句読点がない場合のみ）
         for conj in PunctuationRules.CONJUNCTIONS:
             # 文頭・改行直後でない接続詞の前に読点（プリコンパイル済みパターンを使用）
             pattern = RegexPatterns.get_conjunction_pattern(conj)
-            result = pattern.sub(r'\1、\2', result)
+            result = pattern.sub(r"\1、\2", result)
 
         # 2. 「～て」「～で」の後に文が続く場合、意味的な区切りで読点
         # 長い文（40文字以上）の場合のみ（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.TE_DE_LONG_SENTENCE.sub(r'\1、\2\3', result)
+        result = RegexPatterns.TE_DE_LONG_SENTENCE.sub(r"\1、\2\3", result)
 
         # 3. 「～が」の後に対比・逆接が続く場合に読点
         # 「～が」の後に長い文（35文字以上）がある場合（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.GA_LONG_SENTENCE.sub(r'\1、\2', result)
+        result = RegexPatterns.GA_LONG_SENTENCE.sub(r"\1、\2", result)
 
         # 4. 理由・原因を表す「～ので」「～から」の後に読点（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.REASON_PUNCTUATION.sub(r'\1、\2', result)
+        result = RegexPatterns.REASON_PUNCTUATION.sub(r"\1、\2", result)
 
         # 5. 条件を表す「～たら」「～れば」「～なら」の後に読点（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.CONDITION_PUNCTUATION.sub(r'\1、\2', result)
+        result = RegexPatterns.CONDITION_PUNCTUATION.sub(r"\1、\2", result)
 
         # 6. 列挙の「～たり」の後に読点（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.TARI_PUNCTUATION.sub(r'\1、\2', result)
+        result = RegexPatterns.TARI_PUNCTUATION.sub(r"\1、\2", result)
 
         # 7. 引用の「～と」の後に読点（思う、言う、聞く等の前）
         for verb in PunctuationRules.QUOTE_VERBS:
             # プリコンパイル済みパターンを使用
             pattern = RegexPatterns.get_quote_verb_pattern(verb)
-            result = pattern.sub(r'と、\1', result)
+            result = pattern.sub(r"と、\1", result)
 
         # 8. 長すぎる文を検出して適切な位置に読点を追加
         result = self._split_long_sentences(result)
 
         # 10. 句点・疑問符・感嘆符の直前の読点を削除（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.COMMA_BEFORE_PERIOD.sub(r'\1', result)
+        result = RegexPatterns.COMMA_BEFORE_PERIOD.sub(r"\1", result)
 
         # 11. 文末処理
         # 「です」「ます」等の丁寧語の後に句点がない場合
         for ending in PunctuationRules.POLITE_ENDINGS:
             # プリコンパイル済みパターンを使用
             pattern = RegexPatterns.get_polite_ending_pattern(ending)
-            result = pattern.sub(r'\1。\2', result)
+            result = pattern.sub(r"\1。\2", result)
 
         # 12. 文末に何もない場合は句点を追加
-        if result and not result.endswith(('。', '！', '？', '…', '\n')):
-            result += '。'
+        if result and not result.endswith(("。", "！", "？", "…", "\n")):
+            result += "。"
 
         return result
 
@@ -301,27 +342,27 @@ class TextFormatter:
         Returns:
             str: 処理済みテキスト
         """
-        sentences = text.split('。')
+        sentences = text.split("。")
         processed_sentences = []
 
         for sentence in sentences:
-            if len(sentence) > PunctuationRules.LONG_SENTENCE_MIN_LENGTH and '、' not in sentence:
+            if len(sentence) > PunctuationRules.LONG_SENTENCE_MIN_LENGTH and "、" not in sentence:
                 # 文の中間付近で自然な区切り（助詞の後）を探す
                 mid_point = len(sentence) // 2
                 # 中間地点から前後10文字の範囲で助詞を探す
-                search_range = sentence[max(0, mid_point-10):min(len(sentence), mid_point+10)]
+                search_range = sentence[max(0, mid_point - 10) : min(len(sentence), mid_point + 10)]
 
                 for particle in PunctuationRules.PARTICLES:
                     if particle in search_range:
                         # 助詞の後に読点を追加
-                        insert_pos = sentence.find(particle, max(0, mid_point-10))
+                        insert_pos = sentence.find(particle, max(0, mid_point - 10))
                         if insert_pos != -1 and insert_pos + 1 < len(sentence):
-                            sentence = sentence[:insert_pos+1] + '、' + sentence[insert_pos+1:]
+                            sentence = sentence[: insert_pos + 1] + "、" + sentence[insert_pos + 1 :]
                             break
 
             processed_sentences.append(sentence)
 
-        return '。'.join(processed_sentences)
+        return "。".join(processed_sentences)
 
     def format_paragraphs(self, text: str, max_sentences_per_paragraph: int = 4) -> str:
         """
@@ -347,16 +388,13 @@ class TextFormatter:
         # 段落あたりの文数を検証（1〜10が妥当）
         try:
             max_sentences_per_paragraph = Validator.validate_positive_integer(
-                max_sentences_per_paragraph,
-                min_val=1,
-                max_val=10,
-                name="max_sentences_per_paragraph"
+                max_sentences_per_paragraph, min_val=1, max_val=10, name="max_sentences_per_paragraph"
             )
         except ValidationError as e:
             logger.warning(f"Invalid max_sentences_per_paragraph: {e}, using default value 4")
             max_sentences_per_paragraph = 4
         # 既に適切な改行がある場合（連続改行が2つ以上）
-        if '\n\n' in text:
+        if "\n\n" in text:
             return text
 
         # 文で分割（句点、感嘆符、疑問符で区切る）
@@ -365,8 +403,8 @@ class TextFormatter:
 
         # 文と句読点をペアにする
         paired_sentences = []
-        for i in range(0, len(sentences)-1, 2):
-            sentence = sentences[i] + (sentences[i+1] if i+1 < len(sentences) else '')
+        for i in range(0, len(sentences) - 1, 2):
+            sentence = sentences[i] + (sentences[i + 1] if i + 1 < len(sentences) else "")
             sentence = sentence.strip()
             if sentence:
                 paired_sentences.append(sentence)
@@ -385,7 +423,7 @@ class TextFormatter:
         if len(paragraphs) <= 1:
             return text
 
-        return '\n\n'.join(paragraphs)
+        return "\n\n".join(paragraphs)
 
     def _create_paragraphs(self, sentences: List[str], max_per_paragraph: int) -> List[str]:
         """
@@ -407,27 +445,16 @@ class TextFormatter:
             current_length += 1
 
             # 段落を分ける条件判定
-            should_break = self._should_break_paragraph(
-                current_length,
-                max_per_paragraph,
-                i,
-                sentences
-            )
+            should_break = self._should_break_paragraph(current_length, max_per_paragraph, i, sentences)
 
             if should_break or i == len(sentences) - 1:
-                paragraphs.append(''.join(current_paragraph))
+                paragraphs.append("".join(current_paragraph))
                 current_paragraph = []
                 current_length = 0
 
         return paragraphs
 
-    def _should_break_paragraph(
-        self,
-        current_length: int,
-        max_length: int,
-        current_index: int,
-        sentences: List[str]
-    ) -> bool:
+    def _should_break_paragraph(self, current_length: int, max_length: int, current_index: int, sentences: List[str]) -> bool:
         """
         段落を分けるべきか判定
 
@@ -464,14 +491,17 @@ class TextFormatter:
             重複が削除されたテキスト
         """
         # 同じ単語が2回以上連続している場合は1回に（プリコンパイル済みパターンを使用）
-        result = RegexPatterns.REPEATED_WORDS.sub(r'\1', text)
+        result = RegexPatterns.REPEATED_WORDS.sub(r"\1", text)
         return result
 
-    def format_all(self, text: str,
-                   remove_fillers: bool = True,
-                   add_punctuation: bool = True,
-                   format_paragraphs: bool = True,
-                   clean_repeated: bool = True) -> str:
+    def format_all(
+        self,
+        text: str,
+        remove_fillers: bool = True,
+        add_punctuation: bool = True,
+        format_paragraphs: bool = True,
+        clean_repeated: bool = True,
+    ) -> str:
         """
         すべての整形を適用
 
@@ -509,7 +539,7 @@ if __name__ == "__main__":
     test_texts = [
         "あのーこれはテストですねえーと今日はいい天気ですあのー明日も晴れるといいですね",
         "えーとですね今日は会議がありましてそれでプロジェクトの進捗を確認しましたしかし問題がいくつかありましてその対応を検討することになりました",
-        "これはテストですこれはテストですこれはテストです"
+        "これはテストですこれはテストですこれはテストです",
     ]
 
     for i, test_text in enumerate(test_texts, 1):

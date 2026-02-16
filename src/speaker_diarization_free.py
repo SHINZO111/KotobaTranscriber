@@ -4,9 +4,11 @@ speechbrainを使用したトークン不要の話者分離
 """
 
 import logging
-from typing import List, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
-from speaker_diarization_utils import SpeakerFormatterMixin, ClusteringMixin
+
+from speaker_diarization_utils import ClusteringMixin, SpeakerFormatterMixin
 
 logger = logging.getLogger(__name__)
 
@@ -15,14 +17,17 @@ try:
     import torch
     import torchaudio
     from speechbrain.pretrained import SpeakerRecognition
+
     SPEECHBRAIN_AVAILABLE = True
 except (ImportError, AttributeError, Exception) as e:
     SPEECHBRAIN_AVAILABLE = False
     logger.warning(f"speechbrain not available: {e}")
 
 try:
-    from resemblyzer import VoiceEncoder, preprocess_wav
     from pathlib import Path
+
+    from resemblyzer import VoiceEncoder, preprocess_wav
+
     RESEMBLYZER_AVAILABLE = True
 except (ImportError, AttributeError, Exception) as e:
     RESEMBLYZER_AVAILABLE = False
@@ -73,7 +78,7 @@ class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
                     source="speechbrain/spkrec-ecapa-voxceleb",
                     savedir="models/speechbrain_speaker",
                     run_opts={"device": self.device},
-                    use_symlinks=False  # シンボリックリンクを使用しない
+                    use_symlinks=False,  # シンボリックリンクを使用しない
                 )
                 logger.info("speechbrain model loaded")
 
@@ -141,8 +146,8 @@ class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
         hop_length = segment_samples // 2
 
         # セグメントごとに埋め込みを取得
-        embeddings = []
-        timestamps = []
+        embeddings: List[Any] = []
+        timestamps: List[Tuple[float, float]] = []
 
         for start_sample in range(0, waveform.shape[1] - segment_samples, hop_length):
             end_sample = start_sample + segment_samples
@@ -150,6 +155,8 @@ class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
 
             # 埋め込みを取得
             with torch.no_grad():
+                if self.encoder is None:
+                    raise RuntimeError("encoder is not initialized")
                 embedding = self.encoder.encode_batch(segment.to(self.device))
                 embeddings.append(embedding.cpu().numpy().flatten())
 
@@ -166,7 +173,7 @@ class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
         segments = self._merge_consecutive_segments(labels, timestamps)
 
         logger.info(f"Found {len(set(labels))} speakers")
-        return segments
+        return list(segments)
 
     def _diarize_resemblyzer(self, audio_path: str, num_speakers: Optional[int]) -> List[Dict]:
         """resemblyzerを使用した話者分離"""
@@ -180,13 +187,15 @@ class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
         hop_length = segment_length // 2
 
         # セグメントごとに埋め込みを取得
-        embeddings = []
-        timestamps = []
+        embeddings: List[Any] = []
+        timestamps: List[Tuple[float, float]] = []
 
         for start_sample in range(0, len(wav) - segment_length, hop_length):
             end_sample = start_sample + segment_length
             segment = wav[start_sample:end_sample]
 
+            if self.encoder is None:
+                raise RuntimeError("encoder is not initialized")
             embedding = self.encoder.embed_utterance(segment)
             embeddings.append(embedding)
 
@@ -202,7 +211,7 @@ class FreeSpeakerDiarizer(SpeakerFormatterMixin, ClusteringMixin):
         # 結果を整形（ClusteringMixin から継承）
         segments = self._merge_consecutive_segments(labels, timestamps)
 
-        return segments
+        return list(segments)
 
     # format_with_speakers と get_speaker_statistics は
     # SpeakerFormatterMixin から継承

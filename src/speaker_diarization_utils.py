@@ -6,22 +6,19 @@
 """
 
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['SpeakerFormatterMixin', 'ClusteringMixin']
+__all__ = ["SpeakerFormatterMixin", "ClusteringMixin"]
 
 
 class ClusteringMixin:
     """クラスタリング機能を提供するMixin"""
 
-    def _perform_clustering(
-        self,
-        embeddings: np.ndarray,
-        num_speakers: Optional[int] = None
-    ) -> np.ndarray:
+    def _perform_clustering(self, embeddings: np.ndarray, num_speakers: Optional[int] = None) -> np.ndarray:
         """
         埋め込みベクトルをクラスタリングして話者ラベルを割り当て
 
@@ -36,7 +33,7 @@ class ClusteringMixin:
             from sklearn.cluster import AgglomerativeClustering, KMeans
 
             if len(embeddings) == 0:
-                return np.array([])
+                return np.array([])  # type: ignore[no-any-return]
 
             if num_speakers is not None and num_speakers > 0:
                 n_clusters = min(num_speakers, len(embeddings))
@@ -44,15 +41,11 @@ class ClusteringMixin:
                 # 自動推定: シルエットスコアで最適なクラスタ数を決定
                 n_clusters = self._estimate_num_speakers(embeddings)
 
-            clustering = AgglomerativeClustering(
-                n_clusters=n_clusters,
-                metric='cosine',
-                linkage='average'
-            )
+            clustering = AgglomerativeClustering(n_clusters=n_clusters, metric="cosine", linkage="average")
             labels = clustering.fit_predict(embeddings)
 
             logger.info(f"Clustering complete: {n_clusters} speakers detected")
-            return labels
+            return labels  # type: ignore[no-any-return]
 
         except ImportError:
             logger.warning("scikit-learn not available, falling back to simple clustering")
@@ -81,13 +74,9 @@ class ClusteringMixin:
             best_k = 2
 
             for k in range(2, max_k + 1):
-                clustering = AgglomerativeClustering(
-                    n_clusters=k,
-                    metric='cosine',
-                    linkage='average'
-                )
+                clustering = AgglomerativeClustering(n_clusters=k, metric="cosine", linkage="average")
                 labels = clustering.fit_predict(embeddings)
-                score = silhouette_score(embeddings, labels, metric='cosine')
+                score = silhouette_score(embeddings, labels, metric="cosine")
 
                 if score > best_score:
                     best_score = score
@@ -120,7 +109,7 @@ class ClusteringMixin:
 
         # シンプルなk-means
         centroids = normalized[:n_clusters].copy()
-        labels = np.zeros(len(normalized), dtype=int)
+        labels: np.ndarray = np.zeros(len(normalized), dtype=int)
 
         for _ in range(20):
             # 割り当て
@@ -140,11 +129,7 @@ class ClusteringMixin:
 
         return labels
 
-    def _merge_consecutive_segments(
-        self,
-        labels: np.ndarray,
-        timestamps: List[Tuple[float, float]]
-    ) -> List[Dict]:
+    def _merge_consecutive_segments(self, labels: np.ndarray, timestamps: List[Tuple[float, float]]) -> List[Dict]:
         """
         連続する同一話者のセグメントをマージ
 
@@ -159,9 +144,7 @@ class ClusteringMixin:
             return []
 
         if len(labels) != len(timestamps):
-            raise ValueError(
-                f"labels and timestamps length mismatch: {len(labels)} != {len(timestamps)}"
-            )
+            raise ValueError(f"labels and timestamps length mismatch: {len(labels)} != {len(timestamps)}")
 
         segments = []
         current_speaker = labels[0]
@@ -172,21 +155,21 @@ class ClusteringMixin:
             if labels[i] == current_speaker:
                 current_end = timestamps[i][1]
             else:
-                segments.append({
-                    "speaker": f"SPEAKER_{current_speaker:02d}",
-                    "start": round(current_start, 2),
-                    "end": round(current_end, 2)
-                })
+                segments.append(
+                    {
+                        "speaker": f"SPEAKER_{current_speaker:02d}",
+                        "start": round(current_start, 2),
+                        "end": round(current_end, 2),
+                    }
+                )
                 current_speaker = labels[i]
                 current_start = timestamps[i][0]
                 current_end = timestamps[i][1]
 
         # 最後のセグメント
-        segments.append({
-            "speaker": f"SPEAKER_{current_speaker:02d}",
-            "start": round(current_start, 2),
-            "end": round(current_end, 2)
-        })
+        segments.append(
+            {"speaker": f"SPEAKER_{current_speaker:02d}", "start": round(current_start, 2), "end": round(current_end, 2)}
+        )
 
         return segments
 
@@ -194,11 +177,7 @@ class ClusteringMixin:
 class SpeakerFormatterMixin:
     """話者情報のフォーマット機能を提供するMixin"""
 
-    def format_with_speakers(
-        self,
-        text_segments: List[Dict],
-        speaker_segments: List[Dict]
-    ) -> str:
+    def format_with_speakers(self, text_segments: List[Dict], speaker_segments: List[Dict]) -> str:
         """
         文字起こしセグメントに話者情報を付与してフォーマット
 
@@ -212,7 +191,7 @@ class SpeakerFormatterMixin:
         if not speaker_segments:
             return "\n".join(seg.get("text", "") for seg in text_segments)
 
-        lines = []
+        lines: list = []
         current_speaker = None
 
         for seg in text_segments:
@@ -234,10 +213,7 @@ class SpeakerFormatterMixin:
 
         return "\n".join(lines)
 
-    def get_speaker_statistics(
-        self,
-        speaker_segments: List[Dict]
-    ) -> Dict[str, Dict]:
+    def get_speaker_statistics(self, speaker_segments: List[Dict]) -> Dict[str, Dict]:
         """
         話者ごとの統計情報を取得
 
@@ -263,19 +239,13 @@ class SpeakerFormatterMixin:
         total_time = sum(s["total_time"] for s in stats.values())
         if total_time > 0:
             for speaker in stats:
-                stats[speaker]["percentage"] = round(
-                    stats[speaker]["total_time"] / total_time * 100, 1
-                )
+                stats[speaker]["percentage"] = round(stats[speaker]["total_time"] / total_time * 100, 1)
 
         return stats
 
-    def _find_speaker_at_time(
-        self,
-        timestamp: float,
-        speaker_segments: List[Dict]
-    ) -> str:
+    def _find_speaker_at_time(self, timestamp: float, speaker_segments: List[Dict]) -> str:
         """指定時刻の話者を特定"""
         for seg in speaker_segments:
             if seg.get("start", 0) <= timestamp <= seg.get("end", 0):
-                return seg.get("speaker", "UNKNOWN")
+                return str(seg.get("speaker", "UNKNOWN"))
         return "UNKNOWN"

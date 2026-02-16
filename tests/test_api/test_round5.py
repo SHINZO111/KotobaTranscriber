@@ -6,19 +6,40 @@ import os
 import sys
 import threading
 import time
+from unittest.mock import MagicMock, PropertyMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
-from api.event_bus import EventBus
+try:
+    from api.workers import _normalize_segments, BATCH_FILE_TIMEOUT_SECONDS
+    _HAS_WORKERS = True
+except ImportError:
+    _HAS_WORKERS = False
+    _normalize_segments = None
+    BATCH_FILE_TIMEOUT_SECONDS = None
 
+try:
+    import fastapi  # noqa: F401
+    _HAS_FASTAPI = True
+except ImportError:
+    _HAS_FASTAPI = False
+
+try:
+    import pydantic  # noqa: F401
+    _HAS_PYDANTIC = True
+except ImportError:
+    _HAS_PYDANTIC = False
+
+from api.event_bus import EventBus
 
 # ============================================================
 # EventBus shutdown: subscribers unblocked
 # ============================================================
+
 
 class TestEventBusShutdownUnblock:
     """shutdown() がアクティブなサブスクライバーをアンブロックする"""
@@ -62,9 +83,11 @@ class TestEventBusShutdownUnblock:
 
         tasks = []
         for _ in range(3):
+
             async def consumer():
                 async for event in bus.subscribe():
                     pass
+
             tasks.append(asyncio.create_task(consumer()))
 
         await asyncio.sleep(0.05)
@@ -103,17 +126,19 @@ class TestEventBusShutdownUnblock:
 # _normalize_segments
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_WORKERS, reason="torch/PySide6 not available")
 class TestNormalizeSegments:
     """_normalize_segments の各フォーマット対応テスト"""
 
     def test_chunks_format(self):
         """chunks キーからセグメントを正規化"""
-        from api.workers import _normalize_segments
-
-        result = {"chunks": [
-            {"text": "hello", "timestamp": [0.0, 1.5]},
-            {"text": "world", "timestamp": [1.5, 3.0]},
-        ]}
+        result = {
+            "chunks": [
+                {"text": "hello", "timestamp": [0.0, 1.5]},
+                {"text": "world", "timestamp": [1.5, 3.0]},
+            ]
+        }
         segments = _normalize_segments(result)
         assert len(segments) == 2
         assert segments[0]["text"] == "hello"
@@ -124,19 +149,17 @@ class TestNormalizeSegments:
 
     def test_segments_format(self):
         """segments キーからそのまま取得"""
-        from api.workers import _normalize_segments
-
-        result = {"segments": [
-            {"text": "test", "start": 0.0, "end": 2.0},
-        ]}
+        result = {
+            "segments": [
+                {"text": "test", "start": 0.0, "end": 2.0},
+            ]
+        }
         segments = _normalize_segments(result)
         assert len(segments) == 1
         assert segments[0]["start"] == 0.0
 
     def test_no_timestamp_key(self):
         """timestamp も start もない場合は 0 をデフォルト"""
-        from api.workers import _normalize_segments
-
         result = {"segments": [{"text": "no_time"}]}
         segments = _normalize_segments(result)
         assert segments[0]["start"] == 0
@@ -144,15 +167,11 @@ class TestNormalizeSegments:
 
     def test_empty_result(self):
         """空の結果"""
-        from api.workers import _normalize_segments
-
         segments = _normalize_segments({})
         assert segments == []
 
     def test_single_timestamp(self):
         """timestamp が1要素のタプル"""
-        from api.workers import _normalize_segments
-
         result = {"chunks": [{"text": "x", "timestamp": [5.0]}]}
         segments = _normalize_segments(result)
         assert segments[0]["start"] == 5.0
@@ -163,6 +182,8 @@ class TestNormalizeSegments:
 # Export router: _get_segments helper
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_FASTAPI or not _HAS_PYDANTIC, reason="fastapi/pydantic not available")
 class TestExportGetSegments:
     """_get_segments ヘルパー関数のテスト"""
 
@@ -171,11 +192,7 @@ class TestExportGetSegments:
         from api.routers.export import _get_segments
         from api.schemas import ExportRequest
 
-        req = ExportRequest(
-            text="test",
-            segments=[{"text": "a", "start": 0, "end": 1}],
-            output_path="/tmp/test.txt"
-        )
+        req = ExportRequest(text="test", segments=[{"text": "a", "start": 0, "end": 1}], output_path="/tmp/test.txt")
         result = _get_segments(req)
         assert result == [{"text": "a", "start": 0, "end": 1}]
 
@@ -184,11 +201,7 @@ class TestExportGetSegments:
         from api.routers.export import _get_segments
         from api.schemas import ExportRequest
 
-        req = ExportRequest(
-            text="hello world",
-            segments=[],
-            output_path="/tmp/test.txt"
-        )
+        req = ExportRequest(text="hello world", segments=[], output_path="/tmp/test.txt")
         result = _get_segments(req)
         assert len(result) == 1
         assert result[0]["text"] == "hello world"
@@ -200,12 +213,15 @@ class TestExportGetSegments:
 # Config flatten: recursive dict handling
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not available")
 class TestConfigFlattenRecursion:
     """settings.py の flatten_and_set が深いネストを処理する"""
 
     def test_flat_config_update(self):
         """フラットなキーの更新"""
         from api.routers.settings import flatten_and_set
+
         calls = {}
 
         class MockConfig:
@@ -219,6 +235,7 @@ class TestConfigFlattenRecursion:
     def test_nested_config_update(self):
         """ネストされた dict の再帰展開"""
         from api.routers.settings import flatten_and_set
+
         calls = {}
 
         class MockConfig:
@@ -235,6 +252,7 @@ class TestConfigFlattenRecursion:
     def test_mixed_depth_config(self):
         """浅いキーと深いキーの混在"""
         from api.routers.settings import flatten_and_set
+
         calls = {}
 
         class MockConfig:
@@ -251,12 +269,15 @@ class TestConfigFlattenRecursion:
 # Transcription router: engine lock
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not available")
 class TestTranscriptionEngineLock:
     """エンジンロックによる排他制御テスト"""
 
     def test_engine_lock_exists(self):
         """_engine_lock がモジュールレベルで定義されている"""
         from api.routers.transcription import _engine_lock
+
         assert isinstance(_engine_lock, type(threading.Lock()))
 
     def test_do_transcribe_checks_is_loaded(self):
@@ -305,20 +326,25 @@ class TestTranscriptionEngineLock:
 # Postprocess router: correct-text provider mapping
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_PYDANTIC, reason="pydantic not available")
 class TestCorrectTextProviderMapping:
     """correct-text エンドポイントのプロバイダーマッピングテスト"""
 
     def test_valid_provider_accepted_by_schema(self):
         """有効なプロバイダーがスキーマで受け入れられる"""
         from api.schemas import CorrectTextRequest
+
         for p in ("local", "claude", "openai"):
             req = CorrectTextRequest(text="test", provider=p)
             assert req.provider == p
 
     def test_invalid_provider_rejected_by_schema(self):
         """無効なプロバイダーはスキーマで拒否される"""
-        from api.schemas import CorrectTextRequest
         from pydantic import ValidationError
+
+        from api.schemas import CorrectTextRequest
+
         for p in ("anthropic", "gpt4", ""):
             with pytest.raises(ValidationError):
                 CorrectTextRequest(text="test", provider=p)
@@ -328,28 +354,34 @@ class TestCorrectTextProviderMapping:
 # Export router: format validation
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_FASTAPI or not _HAS_PYDANTIC, reason="fastapi/pydantic not available")
 class TestExportFormatValidation:
     """エクスポートフォーマットの検証テスト"""
 
     def test_supported_formats_accepted_by_schema(self):
         """サポートされているフォーマットがスキーマで受け入れられる"""
         from api.schemas import ExportRequest
+
         for fmt in ("txt", "docx", "xlsx", "srt", "vtt", "json"):
             req = ExportRequest(text="test", output_path="/tmp/out", format=fmt)
             assert req.format == fmt
 
     def test_unsupported_format_rejected_by_schema(self):
         """未サポートフォーマットはスキーマで拒否される"""
-        from api.schemas import ExportRequest
         from pydantic import ValidationError
+
+        from api.schemas import ExportRequest
+
         with pytest.raises(ValidationError):
             ExportRequest(text="test", output_path="/tmp/out", format="pdf")
 
     def test_srt_requires_segments(self):
         """SRT/VTTエクスポートにはセグメントが必要"""
+        from fastapi import HTTPException
+
         from api.routers.export import _export_srt, _export_vtt
         from api.schemas import ExportRequest
-        from fastapi import HTTPException
 
         req = ExportRequest(text="test", segments=[], output_path="/tmp/test.srt")
 
@@ -359,9 +391,10 @@ class TestExportFormatValidation:
 
     def test_vtt_requires_segments(self):
         """VTTエクスポートにはセグメントが必要"""
+        from fastapi import HTTPException
+
         from api.routers.export import _export_vtt
         from api.schemas import ExportRequest
-        from fastapi import HTTPException
 
         req = ExportRequest(text="test", segments=[], output_path="/tmp/test.vtt")
 
@@ -374,6 +407,8 @@ class TestExportFormatValidation:
 # Export router: txt export
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_FASTAPI or not _HAS_PYDANTIC, reason="fastapi/pydantic not available")
 class TestExportTxt:
     """TXT エクスポートのテスト"""
 
@@ -413,6 +448,7 @@ class TestExportTxt:
 # ============================================================
 # WorkerState thread-safety
 # ============================================================
+
 
 class TestWorkerState:
     """WorkerState のスレッドセーフなアクセステスト"""
@@ -477,6 +513,7 @@ class TestWorkerState:
 # EventBus emit thread-safety stress
 # ============================================================
 
+
 class TestEventBusThreadSafety:
     """EventBus のスレッドセーフ性ストレステスト"""
 
@@ -488,7 +525,7 @@ class TestEventBusThreadSafety:
         bus.set_loop(loop)
 
         received = []
-        done = asyncio.Event()
+        _done = asyncio.Event()  # noqa: F841
 
         async def consumer():
             count = 0
@@ -519,12 +556,14 @@ class TestEventBusThreadSafety:
 # P2-5: FolderMonitorService processed_files pruning
 # ============================================================
 
+
 class TestFolderMonitorPruning:
     """processed_files セットの上限と刈り込みテスト"""
 
     def test_max_processed_entries_constant(self):
         """MAX_PROCESSED_ENTRIES 定数が設定されている"""
         from api.folder_monitor_service import FolderMonitorService
+
         assert hasattr(FolderMonitorService, "MAX_PROCESSED_ENTRIES")
         assert FolderMonitorService.MAX_PROCESSED_ENTRIES > 0
 
@@ -579,12 +618,13 @@ class TestFolderMonitorPruning:
 # P2-8: Batch timeout constant
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_WORKERS, reason="torch/PySide6 not available")
 class TestBatchTimeoutConstant:
     """バッチタイムアウト定数のテスト"""
 
     def test_batch_file_timeout_constant_exists(self):
         """BATCH_FILE_TIMEOUT_SECONDS 定数が存在する"""
-        from api.workers import BATCH_FILE_TIMEOUT_SECONDS
         assert isinstance(BATCH_FILE_TIMEOUT_SECONDS, (int, float))
         assert BATCH_FILE_TIMEOUT_SECONDS > 0
 
@@ -593,6 +633,8 @@ class TestBatchTimeoutConstant:
 # P2-9: Export extension validation
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_FASTAPI or not _HAS_PYDANTIC, reason="fastapi/pydantic not available")
 class TestExportExtensionValidation:
     """エクスポート拡張子検証テスト"""
 
@@ -600,12 +642,12 @@ class TestExportExtensionValidation:
     async def test_mismatched_extension_rejected(self):
         """拡張子がフォーマットと一致しない場合は400"""
         try:
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
         except ImportError:
             pytest.skip("httpx not installed")
         try:
-            from api.main import app
             from api.auth import get_token_manager
+            from api.main import app
         except ImportError:
             pytest.skip("FastAPI app not importable")
 
@@ -616,8 +658,7 @@ class TestExportExtensionValidation:
         async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as client:
             response = await client.post(
                 "/api/export/srt",
-                json={"text": "test", "output_path": "/tmp/test.txt",
-                      "segments": [{"text": "a", "start": 0, "end": 1}]}
+                json={"text": "test", "output_path": "/tmp/test.txt", "segments": [{"text": "a", "start": 0, "end": 1}]},
             )
             assert response.status_code == 400
 
@@ -625,6 +666,7 @@ class TestExportExtensionValidation:
     async def test_matching_extension_accepted(self):
         """拡張子がフォーマットと一致する場合はパスする（別の理由で失敗する可能性がある）"""
         from api.routers.export import _FORMAT_EXTENSIONS
+
         assert "txt" in _FORMAT_EXTENSIONS
         assert _FORMAT_EXTENSIONS["srt"] == ".srt"
 
@@ -633,11 +675,14 @@ class TestExportExtensionValidation:
 # P2-11: Shutdown rate limiting
 # ============================================================
 
+
+@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not available")
 class TestShutdownRateLimit:
     """シャットダウン二重呼び出し防止テスト"""
 
     def test_shutdown_flag_exists(self):
         """_shutdown_requested フラグが存在する"""
         from api.routers import health
+
         assert hasattr(health, "_shutdown_requested")
         assert hasattr(health, "_shutdown_lock")

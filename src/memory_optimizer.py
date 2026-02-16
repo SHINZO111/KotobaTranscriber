@@ -8,16 +8,18 @@ import gc
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
 import logging
-from typing import Optional, Callable, Dict, Any
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, Optional
 
 try:
     import psutil
+
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
@@ -28,6 +30,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MemoryStatus:
     """メモリ状態"""
+
     rss_mb: float
     vms_mb: float
     system_percent: float
@@ -40,19 +43,15 @@ class MemoryStatus:
 class MemoryOptimizer:
     """
     メモリ最適化ユーティリティ
-    
+
     推論処理の前後でメモリをクリーンアップし、
     メモリリークを検出・防止する
     """
-    
-    def __init__(
-        self, 
-        warning_threshold_mb: int = 6144, 
-        critical_threshold_mb: int = 8192
-    ):
+
+    def __init__(self, warning_threshold_mb: int = 6144, critical_threshold_mb: int = 8192):
         """
         初期化
-        
+
         Args:
             warning_threshold_mb: 警告閾値（MB）
             critical_threshold_mb: クリティカル閾値（MB）
@@ -60,33 +59,33 @@ class MemoryOptimizer:
         self.warning_threshold = warning_threshold_mb
         self.critical_threshold = critical_threshold_mb
         self._baseline_memory = 0
-        self._peak_memory = 0
+        self._peak_memory: float = 0.0
         # psutil.Process をキャッシュ（毎回生成のオーバーヘッド削減）
         self._process = psutil.Process() if PSUTIL_AVAILABLE else None
-    
+
     @contextmanager
     def optimized_inference(self, device: str = "cuda"):
         """
         推論用コンテキストマネージャ
-        
+
         使用例:
             optimizer = MemoryOptimizer()
             with optimizer.optimized_inference("cuda"):
                 result = model(input_data)
-        
+
         Args:
             device: デバイス名（"cuda", "cpu", "mps"）
         """
         try:
             # 推論前のクリーンアップ
             self._pre_inference_cleanup(device)
-            
+
             yield self
-            
+
         finally:
             # 推論後のクリーンアップ
             self._post_inference_cleanup(device)
-    
+
     def _pre_inference_cleanup(self, device: str):
         """推論前クリーンアップ"""
         gc.collect()
@@ -96,9 +95,9 @@ class MemoryOptimizer:
             torch.cuda.synchronize()
 
             # ベースライン記録
-            self._baseline_memory = torch.cuda.memory_allocated() / (1024 ** 2)
+            self._baseline_memory = torch.cuda.memory_allocated() / (1024**2)
             logger.debug(f"Pre-inference CUDA memory: {self._baseline_memory:.1f}MB")
-    
+
     def _post_inference_cleanup(self, device: str):
         """推論後クリーンアップ"""
         gc.collect()
@@ -107,59 +106,53 @@ class MemoryOptimizer:
             torch.cuda.empty_cache()
 
             # メモリリークチェック
-            current_memory = torch.cuda.memory_allocated() / (1024 ** 2)
+            current_memory = torch.cuda.memory_allocated() / (1024**2)
             self._peak_memory = max(self._peak_memory, current_memory)
 
             if current_memory > self._baseline_memory * 1.5:
-                logger.warning(
-                    f"Potential memory leak detected: "
-                    f"{self._baseline_memory:.1f}MB -> {current_memory:.1f}MB"
-                )
-    
+                logger.warning(f"Potential memory leak detected: " f"{self._baseline_memory:.1f}MB -> {current_memory:.1f}MB")
+
     def check_memory(self, action: Optional[Callable] = None) -> MemoryStatus:
         """
         メモリ状態をチェック
-        
+
         Args:
             action: クリティカル時に実行するコールバック関数
-            
+
         Returns:
             MemoryStatus: メモリ状態
         """
         if not PSUTIL_AVAILABLE:
             logger.warning("psutil not available, memory check limited")
-            return MemoryStatus(
-                rss_mb=0, vms_mb=0, 
-                system_percent=0, system_available_mb=0
-            )
-        
+            return MemoryStatus(rss_mb=0, vms_mb=0, system_percent=0, system_available_mb=0)
+
         memory_info = self._process.memory_info()
         system_memory = psutil.virtual_memory()
-        
+
         status = MemoryStatus(
             rss_mb=memory_info.rss / (1024 * 1024),
             vms_mb=memory_info.vms / (1024 * 1024),
             system_percent=system_memory.percent,
-            system_available_mb=system_memory.available / (1024 * 1024)
+            system_available_mb=system_memory.available / (1024 * 1024),
         )
-        
+
         # CUDA情報
         if TORCH_AVAILABLE and torch.cuda.is_available():
-            status.cuda_allocated_mb = torch.cuda.memory_allocated() / (1024 ** 2)
-            status.cuda_reserved_mb = torch.cuda.memory_reserved() / (1024 ** 2)
-        
+            status.cuda_allocated_mb = torch.cuda.memory_allocated() / (1024**2)
+            status.cuda_reserved_mb = torch.cuda.memory_reserved() / (1024**2)
+
         # 閾値チェック
         if status.rss_mb > self.critical_threshold:
-            status.level = 'critical'
+            status.level = "critical"
             logger.error(f"CRITICAL: Memory usage {status.rss_mb:.0f}MB")
             if action:
                 action()
         elif status.rss_mb > self.warning_threshold:
-            status.level = 'warning'
+            status.level = "warning"
             logger.warning(f"WARNING: Memory usage {status.rss_mb:.0f}MB")
-        
+
         return status
-    
+
     def force_cleanup(self):
         """強制クリーンアップ"""
         gc.collect()
@@ -169,19 +162,20 @@ class MemoryOptimizer:
             torch.cuda.synchronize()
 
         logger.info("Forced memory cleanup completed")
-    
+
     def get_peak_memory(self) -> Dict[str, float]:
         """ピークメモリ使用量を取得"""
-        result = {'peak_mb': self._peak_memory}
+        result = {"peak_mb": self._peak_memory}
 
         if TORCH_AVAILABLE and torch.cuda.is_available():
-            result['cuda_peak_mb'] = torch.cuda.max_memory_allocated() / (1024 ** 2)
+            result["cuda_peak_mb"] = torch.cuda.max_memory_allocated() / (1024**2)
             torch.cuda.reset_peak_memory_stats()
 
         return result
 
 
 if TORCH_AVAILABLE:
+
     class MemoryEfficientModel:
         """
         メモリ効率的なモデルラッパー
@@ -194,11 +188,7 @@ if TORCH_AVAILABLE:
             self.max_chunk_size = max_chunk_size
             self.optimizer = MemoryOptimizer()
 
-        def process_in_chunks(
-            self,
-            data: torch.Tensor,
-            process_fn: Optional[Callable] = None
-        ) -> torch.Tensor:
+        def process_in_chunks(self, data: torch.Tensor, process_fn: Optional[Callable] = None) -> torch.Tensor:
             """
             データをチャンク単位で処理
 
@@ -216,7 +206,7 @@ if TORCH_AVAILABLE:
 
             with self.optimizer.optimized_inference(str(data.device)):
                 for i in range(0, len(data), self.max_chunk_size):
-                    chunk = data[i:i + self.max_chunk_size]
+                    chunk = data[i : i + self.max_chunk_size]
 
                     with torch.no_grad():
                         result = process_fn(chunk)

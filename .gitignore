@@ -85,6 +85,7 @@ skills/
 
 # Test artifacts
 tests/test_report_*.txt
+.test_tmp/
 
 # Generated config data
 config/construction_vocabulary.json

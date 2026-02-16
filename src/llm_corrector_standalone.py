@@ -7,17 +7,19 @@ import logging
 import re
 from typing import Optional
 
-from text_formatter import TextFormatter
 from exceptions import ModelLoadError
+from text_formatter import TextFormatter
 
 logger = logging.getLogger(__name__)
 
 # 高度な補正用のインポート（オプション）
 try:
-    import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
     import warnings
-    warnings.filterwarnings('ignore')
+
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+
+    warnings.filterwarnings("ignore")
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
@@ -27,9 +29,7 @@ except ImportError:
 class StandaloneLLMCorrector:
     """transformersベースの単独動作LLM補正クラス"""
 
-    def __init__(self,
-                 model_name: str = "rinna/japanese-gpt2-medium",
-                 device: str = "auto"):
+    def __init__(self, model_name: str = "rinna/japanese-gpt2-medium", device: str = "auto"):
         """
         初期化
 
@@ -70,15 +70,11 @@ class StandaloneLLMCorrector:
 
             # トークナイザーとモデルをロード
             # セキュリティ: trust_remote_code=Falseで安全にモデルをロード
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
-                trust_remote_code=False
-            )
+            # Model name is configured by user; trust_remote_code=False ensures safety
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, trust_remote_code=False)  # nosec B615
 
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                trust_remote_code=False
+            self.model = AutoModelForCausalLM.from_pretrained(  # nosec B615
+                self.model_name, torch_dtype=torch.float16 if self.device == "cuda" else torch.float32, trust_remote_code=False
             )
 
             # デバイスに移動
@@ -87,10 +83,7 @@ class StandaloneLLMCorrector:
 
             # パイプライン作成
             self.pipe = pipeline(
-                "text-generation",
-                model=self.model,
-                tokenizer=self.tokenizer,
-                device=0 if self.device == "cuda" else -1
+                "text-generation", model=self.model, tokenizer=self.tokenizer, device=0 if self.device == "cuda" else -1
             )
 
             self.is_loaded = True
@@ -131,6 +124,9 @@ class StandaloneLLMCorrector:
 補正後の文章:"""
 
             # テキスト生成
+            if self.pipe is None or self.tokenizer is None:
+                return text
+
             result = self.pipe(
                 prompt,
                 max_new_tokens=max_length,
@@ -138,19 +134,19 @@ class StandaloneLLMCorrector:
                 temperature=0.7,
                 top_p=0.9,
                 repetition_penalty=1.2,
-                pad_token_id=self.tokenizer.eos_token_id
+                pad_token_id=self.tokenizer.eos_token_id,
             )
 
             # 生成結果から補正文を抽出
-            generated = result[0]['generated_text']
+            generated = result[0]["generated_text"]
 
             # プロンプトの後の部分を取得
             if "補正後の文章:" in generated:
                 corrected = generated.split("補正後の文章:")[1].strip()
                 # 最初の句点までを取得（余計な生成を防ぐ）
-                sentences = corrected.split('。')
+                sentences = corrected.split("。")
                 if sentences:
-                    corrected = '。'.join(sentences[:3]) + '。'  # 最大3文まで
+                    corrected = "。".join(sentences[:3]) + "。"  # 最大3文まで
                     return corrected if len(corrected) > 10 else text
 
             return text
@@ -182,15 +178,12 @@ class StandaloneLLMCorrector:
 
 要約:"""
 
-            result = self.pipe(
-                prompt,
-                max_new_tokens=150,
-                do_sample=True,
-                temperature=0.7,
-                repetition_penalty=1.2
-            )
+            if self.pipe is None:
+                return text[:200] + "..."
 
-            generated = result[0]['generated_text']
+            result = self.pipe(prompt, max_new_tokens=150, do_sample=True, temperature=0.7, repetition_penalty=1.2)
+
+            generated = result[0]["generated_text"]
 
             if "要約:" in generated:
                 summary = generated.split("要約:")[1].strip()
@@ -244,36 +237,34 @@ class SimpleLLMCorrector:
         filler_list = TextFormatter.FILLER_WORDS + TextFormatter.AGGRESSIVE_FILLER_WORDS
         result = text
         for filler in filler_list:
-            result = re.sub(re.escape(filler) + r'\s*', '', result)
+            result = re.sub(re.escape(filler) + r"\s*", "", result)
 
         # 基本的な補正ルール
         corrections = {
             # よくある音声認識の間違い
-            '言ってわ': '言っては',
-            '思ってわ': '思っては',
-
+            "言ってわ": "言っては",
+            "思ってわ": "思っては",
             # 重複表現の削除
-            'ですです': 'です',
-            'ますます': 'ます',
-            'ました。ました': 'ました',
-
+            "ですです": "です",
+            "ますます": "ます",
+            "ました。ました": "ました",
             # スペースの整理
-            '　': ' ',  # 全角スペースを半角に
+            "　": " ",  # 全角スペースを半角に
         }
 
         for wrong, correct in corrections.items():
             result = result.replace(wrong, correct)
 
         # 連続する句読点の削除
-        result = re.sub(r'、{2,}', '、', result)
-        result = re.sub(r'。{2,}', '。', result)
+        result = re.sub(r"、{2,}", "、", result)
+        result = re.sub(r"。{2,}", "。", result)
 
         # 連続するスペースを1つに
-        result = re.sub(r'\s+', ' ', result)
+        result = re.sub(r"\s+", " ", result)
         result = result.strip()
 
         # 句読点処理はTextFormatterに委譲
-        result = self._formatter.add_punctuation(result)
+        result = str(self._formatter.add_punctuation(result))
 
         return result
 

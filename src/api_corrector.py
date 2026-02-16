@@ -3,27 +3,26 @@ APIベース文章補正モジュール
 Claude 3.5 Sonnet / OpenAI GPT-4 API統合
 """
 
+import logging
 import os
 import re
 import time
-import logging
-from typing import Optional, List, Dict, Any
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
-from exceptions import (
-    APIError as KotobaAPIError,
-    APIConnectionError as KotobaAPIConnectionError,
-    APIAuthenticationError as KotobaAPIAuthenticationError,
-    APIRateLimitError as KotobaAPIRateLimitError,
-)
+from exceptions import APIAuthenticationError as KotobaAPIAuthenticationError
+from exceptions import APIConnectionError as KotobaAPIConnectionError
+from exceptions import APIError as KotobaAPIError
+from exceptions import APIRateLimitError as KotobaAPIRateLimitError
 
 logger = logging.getLogger(__name__)
 
 
 class APIProvider(Enum):
     """APIプロバイダー"""
+
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     AZURE_OPENAI = "azure_openai"
@@ -32,6 +31,7 @@ class APIProvider(Enum):
 @dataclass
 class CorrectionConfig:
     """補正設定"""
+
     provider: APIProvider
     api_key: str = field(repr=False)
     model: str
@@ -132,10 +132,9 @@ class BaseAPICorrector(ABC):
             except (KotobaAPIRateLimitError, KotobaAPIConnectionError) as e:
                 last_error = e
                 if attempt < self.config.retry_count - 1:
-                    delay = self.config.retry_base_delay * (2 ** attempt)
+                    delay = self.config.retry_base_delay * (2**attempt)
                     logger.warning(
-                        f"API call failed (attempt {attempt + 1}/{self.config.retry_count}), "
-                        f"retrying in {delay:.1f}s: {e}"
+                        f"API call failed (attempt {attempt + 1}/{self.config.retry_count}), " f"retrying in {delay:.1f}s: {e}"
                     )
                     time.sleep(delay)
             except KotobaAPIError:
@@ -157,7 +156,7 @@ class BaseAPICorrector(ABC):
             return [text]
 
         # 文で分割（区切り文字を前の文に結合）
-        parts = re.split(r'([。！？])', text)
+        parts = re.split(r"([。！？])", text)
         sentences = []
         for i in range(0, len(parts) - 1, 2):
             sentences.append(parts[i] + parts[i + 1])
@@ -195,6 +194,7 @@ class ClaudeCorrector(BaseAPICorrector):
         """Anthropicクライアントを初期化"""
         try:
             import anthropic
+
             self.client = anthropic.Anthropic(api_key=self.config.api_key)
             self.is_available = True
             logger.info("Claude client initialized")
@@ -206,15 +206,14 @@ class ClaudeCorrector(BaseAPICorrector):
     def _call_claude_api(self, user_content: str) -> str:
         """単一チャンクのClaude API呼び出し"""
         try:
+            if self.client is None:
+                raise RuntimeError("client is not initialized")
             response = self.client.messages.create(
                 model=self.config.model or self.DEFAULT_MODEL,
                 max_tokens=self.config.max_tokens,
                 temperature=self.config.temperature,
                 system=self.SYSTEM_PROMPT,
-                messages=[{
-                    "role": "user",
-                    "content": user_content
-                }]
+                messages=[{"role": "user", "content": user_content}],
             )
             return response.content[0].text if response.content else ""
         except KotobaAPIError:
@@ -269,15 +268,14 @@ class ClaudeCorrector(BaseAPICorrector):
             return text[:max_length] + "..."
 
         try:
+            if self.client is None:
+                raise RuntimeError("client is not initialized")
             response = self.client.messages.create(
                 model=self.config.model or self.DEFAULT_MODEL,
                 max_tokens=min(max_length, 1024),
                 temperature=0.5,
                 system="以下の文章を簡潔に要約してください。",
-                messages=[{
-                    "role": "user",
-                    "content": text
-                }]
+                messages=[{"role": "user", "content": text}],
             )
 
             return response.content[0].text if response.content else text[:max_length]
@@ -301,6 +299,7 @@ class OpenAICorrector(BaseAPICorrector):
         """OpenAIクライアントを初期化"""
         try:
             import openai
+
             self.client = openai.OpenAI(api_key=self.config.api_key)
             self.is_available = True
             logger.info("OpenAI client initialized")
@@ -312,15 +311,14 @@ class OpenAICorrector(BaseAPICorrector):
     def _call_openai_api(self, user_content: str) -> str:
         """単一チャンクのOpenAI API呼び出し"""
         try:
-            messages = [
-                {"role": "system", "content": self.SYSTEM_PROMPT},
-                {"role": "user", "content": user_content}
-            ]
+            if self.client is None:
+                raise RuntimeError("client is not initialized")
+            messages = [{"role": "system", "content": self.SYSTEM_PROMPT}, {"role": "user", "content": user_content}]
             response = self.client.chat.completions.create(
                 model=self.config.model or self.DEFAULT_MODEL,
                 messages=messages,
                 max_tokens=self.config.max_tokens,
-                temperature=self.config.temperature
+                temperature=self.config.temperature,
             )
             return response.choices[0].message.content if response.choices else ""
         except KotobaAPIError:
@@ -375,14 +373,16 @@ class OpenAICorrector(BaseAPICorrector):
             return text[:max_length] + "..."
 
         try:
+            if self.client is None:
+                raise RuntimeError("client is not initialized")
             response = self.client.chat.completions.create(
                 model=self.config.model or self.DEFAULT_MODEL,
                 messages=[
                     {"role": "system", "content": "以下の文章を簡潔に要約してください。"},
-                    {"role": "user", "content": text}
+                    {"role": "user", "content": text},
                 ],
                 max_tokens=min(max_length, 1024),
-                temperature=0.5
+                temperature=0.5,
             )
 
             return response.choices[0].message.content if response.choices else text[:max_length]
@@ -398,11 +398,13 @@ class HybridCorrector:
     ローカルLLM + APIの組み合わせ
     """
 
-    def __init__(self,
-                 local_corrector=None,
-                 api_corrector: Optional[BaseAPICorrector] = None,
-                 use_api_for_long_text: bool = True,
-                 long_text_threshold: int = 500):
+    def __init__(
+        self,
+        local_corrector=None,
+        api_corrector: Optional[BaseAPICorrector] = None,
+        use_api_for_long_text: bool = True,
+        long_text_threshold: int = 500,
+    ):
         """
         初期化
 
@@ -429,15 +431,15 @@ class HybridCorrector:
         """
         # 短い文章はローカルで処理
         if len(text) < self.long_text_threshold and self.local:
-            return self.local.correct_text(text)
+            return str(self.local.correct_text(text))
 
         # 長い文章はAPIを使用
         if self.use_api_for_long_text and self.api and self.api.is_available:
-            return self.api.correct_text(text)
+            return str(self.api.correct_text(text))
 
         # フォールバック
         if self.local:
-            return self.local.correct_text(text)
+            return str(self.local.correct_text(text))
 
         return text
 
@@ -453,19 +455,17 @@ class HybridCorrector:
         """
         if self.api and self.api.is_available:
             try:
-                return self.api.correct_text(text)
+                return str(self.api.correct_text(text))
             except Exception as e:
                 logger.warning(f"API correction failed, falling back to local: {e}")
 
         if self.local:
-            return self.local.correct_text(text)
+            return str(self.local.correct_text(text))
 
         return text
 
 
-def create_corrector(provider: str,
-                    api_key: Optional[str] = None,
-                    model: Optional[str] = None) -> Optional[BaseAPICorrector]:
+def create_corrector(provider: str, api_key: Optional[str] = None, model: Optional[str] = None) -> Optional[BaseAPICorrector]:
     """
     プロバイダーに応じた補正器を作成
 
@@ -477,11 +477,7 @@ def create_corrector(provider: str,
     Returns:
         補正器インスタンス
     """
-    config = CorrectionConfig(
-        provider=APIProvider(provider),
-        api_key=api_key or "",
-        model=model or ""
-    )
+    config = CorrectionConfig(provider=APIProvider(provider), api_key=api_key or "", model=model or "")
 
     if provider == "claude":
         return ClaudeCorrector(config)
@@ -500,6 +496,7 @@ if __name__ == "__main__":
     # ローカル補正テスト
     try:
         from llm_corrector_standalone import SimpleLLMCorrector
+
         local = SimpleLLMCorrector()
 
         test_text = "えーとですね今日は会議がありましてですです"

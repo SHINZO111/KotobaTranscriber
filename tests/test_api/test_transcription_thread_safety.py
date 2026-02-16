@@ -4,21 +4,23 @@ TranscriptionEngine スレッドセーフティテスト
 モデル推論の排他制御が正しく動作することを検証
 """
 
-import pytest
 import os
+
+# TranscriptionEngineをインポート
+import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+from unittest.mock import MagicMock, Mock, patch
 
+import pytest
 
-# TranscriptionEngineをインポート
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-from transcription_engine import TranscriptionEngine
+pytest.importorskip("torch")
 from exceptions import ModelLoadError
+from transcription_engine import TranscriptionEngine
 
 
 @pytest.fixture
@@ -31,9 +33,7 @@ def mock_pipeline():
         # __call__ をモックして推論結果を返す
         mock_instance.return_value = {
             "text": "これはテスト文字起こしです。",
-            "chunks": [
-                {"timestamp": (0.0, 2.0), "text": "これはテスト文字起こしです。"}
-            ]
+            "chunks": [{"timestamp": (0.0, 2.0), "text": "これはテスト文字起こしです。"}],
         }
 
         mock.return_value = mock_instance
@@ -59,23 +59,23 @@ def temp_audio_file():
     # ダミーのWAVファイルを作成（最小限のWAVヘッダー）
     with open(path, "wb") as f:
         # RIFFヘッダー
-        f.write(b'RIFF')
-        f.write((36).to_bytes(4, 'little'))  # ファイルサイズ - 8
-        f.write(b'WAVE')
+        f.write(b"RIFF")
+        f.write((36).to_bytes(4, "little"))  # ファイルサイズ - 8
+        f.write(b"WAVE")
 
         # fmtチャンク
-        f.write(b'fmt ')
-        f.write((16).to_bytes(4, 'little'))  # fmtチャンクサイズ
-        f.write((1).to_bytes(2, 'little'))   # オーディオフォーマット (1 = PCM)
-        f.write((1).to_bytes(2, 'little'))   # チャンネル数
-        f.write((16000).to_bytes(4, 'little'))  # サンプルレート
-        f.write((32000).to_bytes(4, 'little'))  # バイトレート
-        f.write((2).to_bytes(2, 'little'))   # ブロックアライン
-        f.write((16).to_bytes(2, 'little'))  # ビット深度
+        f.write(b"fmt ")
+        f.write((16).to_bytes(4, "little"))  # fmtチャンクサイズ
+        f.write((1).to_bytes(2, "little"))  # オーディオフォーマット (1 = PCM)
+        f.write((1).to_bytes(2, "little"))  # チャンネル数
+        f.write((16000).to_bytes(4, "little"))  # サンプルレート
+        f.write((32000).to_bytes(4, "little"))  # バイトレート
+        f.write((2).to_bytes(2, "little"))  # ブロックアライン
+        f.write((16).to_bytes(2, "little"))  # ビット深度
 
         # dataチャンク
-        f.write(b'data')
-        f.write((0).to_bytes(4, 'little'))   # dataチャンクサイズ
+        f.write(b"data")
+        f.write((0).to_bytes(4, "little"))  # dataチャンクサイズ
 
     yield path
 
@@ -135,10 +135,7 @@ class TestTranscriptionThreadSafety:
                 call_times.append(time.time())
             # 処理時間をシミュレート（50ms）
             time.sleep(0.05)
-            return {
-                "text": f"テスト文字起こし（スレッド{threading.current_thread().name}）",
-                "chunks": []
-            }
+            return {"text": f"テスト文字起こし（スレッド{threading.current_thread().name}）", "chunks": []}
 
         # モックの推論メソッドに追跡機能を追加
         mock_pipeline.return_value.side_effect = track_call
@@ -165,8 +162,9 @@ class TestTranscriptionThreadSafety:
 
         # 検証
         assert len(errors) == 0, f"Errors occurred: {errors}"
-        assert len(results) == num_threads * calls_per_thread, \
-            f"Expected {num_threads * calls_per_thread} results, got {len(results)}"
+        assert (
+            len(results) == num_threads * calls_per_thread
+        ), f"Expected {num_threads * calls_per_thread} results, got {len(results)}"
 
         # 推論が排他制御されていることを確認
         # 各呼び出しは50ms以上かかるので、同時実行されていなければタイムスタンプが重ならない
@@ -174,8 +172,7 @@ class TestTranscriptionThreadSafety:
         for i in range(len(sorted_times) - 1):
             time_diff = sorted_times[i + 1] - sorted_times[i]
             # 同時実行されていなければ、次の呼び出しまでに少なくとも40ms以上の差がある（マージン考慮）
-            assert time_diff >= 0.03, \
-                f"Calls overlapped: time difference {time_diff:.3f}s is too small"
+            assert time_diff >= 0.03, f"Calls overlapped: time difference {time_diff:.3f}s is too small"
 
     def test_model_load_from_uninitialized_state(self, engine, temp_audio_file, mock_pipeline):
         """
@@ -273,8 +270,7 @@ class TestTranscriptionThreadSafety:
         thread_b.join(timeout=5)
 
         # 検証: スレッドAが完全に終了してからスレッドBが開始される
-        assert execution_order == ["A_start", "A_end", "B_start", "B_end"], \
-            f"Execution order is incorrect: {execution_order}"
+        assert execution_order == ["A_start", "A_end", "B_start", "B_end"], f"Execution order is incorrect: {execution_order}"
 
     def test_model_lock_reentrancy(self, engine, temp_audio_file, mock_pipeline):
         """
@@ -313,7 +309,7 @@ class TestTranscriptionThreadSafety:
         lock = threading.Lock()
 
         original_load = engine._load_model_with_device
-        original_call = mock_pipeline.return_value
+        _original_call = mock_pipeline.return_value  # noqa: F841
 
         def tracked_load(*args, **kwargs):
             """ロード時のイベントを記録"""
@@ -330,7 +326,7 @@ class TestTranscriptionThreadSafety:
             with lock:
                 lock_events.append(("inference_start", threading.current_thread().name))
             time.sleep(0.1)  # 推論時間をシミュレート
-            result = {"text": f"テスト結果", "chunks": []}
+            result = {"text": "テスト結果", "chunks": []}
             with lock:
                 lock_events.append(("inference_end", threading.current_thread().name))
             return result
@@ -376,13 +372,11 @@ class TestTranscriptionThreadSafety:
                 b_first_idx = min([lock_events.index(e) for e in thread_b_events])
 
                 # スレッドAの推論が完全に終わる前にスレッドBが開始してはいけない
-                assert b_first_idx > a_inference_end_idx, \
-                    f"ThreadB started before ThreadA completed inference. Events: {lock_events}"
+                assert (
+                    b_first_idx > a_inference_end_idx
+                ), f"ThreadB started before ThreadA completed inference. Events: {lock_events}"
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("torch").cuda.is_available(),
-        reason="CUDA not available"
-    )
+    @pytest.mark.skipif(not pytest.importorskip("torch").cuda.is_available(), reason="CUDA not available")
     def test_cuda_memory_cleanup_under_concurrent_load(self, engine, temp_audio_file, mock_pipeline):
         """
         並行実行中の CUDA メモリリークが発生しないこと
@@ -432,8 +426,7 @@ class TestTranscriptionThreadSafety:
         # メモリ使用量が初期値に近い（許容誤差: 100MB）
         final_memory = torch.cuda.memory_allocated()
         memory_diff = abs(final_memory - initial_memory)
-        assert memory_diff < 100 * 1024 * 1024, \
-            f"Memory leak detected: {memory_diff / (1024 * 1024):.2f} MB difference"
+        assert memory_diff < 100 * 1024 * 1024, f"Memory leak detected: {memory_diff / (1024 * 1024):.2f} MB difference"
 
 
 class TestTranscriptionErrorHandling:

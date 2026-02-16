@@ -1,10 +1,11 @@
 """EventBus 高度なテスト — shutdown, QueueFull, 複数サブスクライバー"""
 
 import asyncio
-import sys
 import os
-import pytest
+import sys
 import threading
+
+import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
 if src_dir not in sys.path:
@@ -94,10 +95,7 @@ class TestEventBusMultipleSubscribers:
             await asyncio.sleep(0.1)
             bus.emit("broadcast", {"msg": "hello"})
 
-        await asyncio.wait_for(
-            asyncio.gather(consumer_a(), consumer_b(), producer()),
-            timeout=3.0
-        )
+        await asyncio.wait_for(asyncio.gather(consumer_a(), consumer_b(), producer()), timeout=3.0)
 
         assert len(received_a) == 1
         assert len(received_b) == 1
@@ -138,6 +136,8 @@ class TestEventBusCounterMonotonic:
     async def test_counter_increments(self):
         """カウンターが単調増加する（衝突回避）"""
         bus = EventBus()
+        loop = asyncio.get_running_loop()
+        bus.set_loop(loop)
         bus._counter = 999_999
 
         async def consumer():

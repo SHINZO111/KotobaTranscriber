@@ -4,26 +4,26 @@ threading.Thread + EventBus による TranscriptionWorker / BatchTranscriptionWo
 FastAPI バックエンドから使用。
 """
 
-import os
 import logging
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, List
+from typing import List, Optional
 
+from api.event_bus import EventBus, get_event_bus
 from constants import SharedConstants, normalize_segments
-from transcription_engine import TranscriptionEngine
-from text_formatter import TextFormatter
-from speaker_diarization_free import FreeSpeakerDiarizer
-from validators import Validator, ValidationError
 from exceptions import (
-    FileProcessingError,
     AudioFormatError,
+    FileProcessingError,
+    InsufficientMemoryError,
     ModelLoadError,
     TranscriptionFailedError,
-    InsufficientMemoryError,
 )
-from api.event_bus import EventBus, get_event_bus
+from speaker_diarization_free import FreeSpeakerDiarizer
+from text_formatter import TextFormatter
+from transcription_engine import TranscriptionEngine
 from transcription_worker_base import TranscriptionLogic
+from validators import ValidationError, Validator
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,7 @@ class TranscriptionWorker(threading.Thread):
     EventBus 経由で progress / finished / error イベントを発行。
     """
 
-    def __init__(self, audio_path: str, enable_diarization: bool = False,
-                 event_bus: Optional[EventBus] = None):
+    def __init__(self, audio_path: str, enable_diarization: bool = False, event_bus: Optional[EventBus] = None):
         super().__init__(daemon=True)
         self.audio_path = audio_path
         self.enable_diarization = enable_diarization
@@ -145,10 +144,15 @@ class BatchTranscriptionWorker(threading.Thread):
     EventBus 経由で batch_progress / file_finished / all_finished / error イベントを発行。
     """
 
-    def __init__(self, audio_paths: List[str], enable_diarization: bool = False,
-                 max_workers: int = 1, formatter=None,
-                 use_llm_correction: bool = False,
-                 event_bus: Optional[EventBus] = None):
+    def __init__(
+        self,
+        audio_paths: List[str],
+        enable_diarization: bool = False,
+        max_workers: int = 1,
+        formatter=None,
+        use_llm_correction: bool = False,
+        event_bus: Optional[EventBus] = None,
+    ):
         super().__init__(daemon=True)
         self.audio_paths = audio_paths
         self.enable_diarization = enable_diarization
@@ -163,7 +167,7 @@ class BatchTranscriptionWorker(threading.Thread):
         self._cancel_event = threading.Event()
         self._executor = None
         self._executor_lock = threading.RLock()  # TOCTOU 競合防止用ロック
-        self._shared_engine = None
+        self._shared_engine: Optional[TranscriptionEngine] = None
         self._engine_lock = threading.Lock()
         self._bus = event_bus or get_event_bus()
 
@@ -179,7 +183,7 @@ class BatchTranscriptionWorker(threading.Thread):
                 executor.shutdown(wait=False)
                 logger.debug("Executor shutdown requested")
 
-    def process_single_file(self, audio_path: str):
+    def process_single_file(self, audio_path: str):  # noqa: C901
         """単一ファイルを処理"""
         if self._cancel_event.is_set():
             return audio_path, "処理がキャンセルされました", False
@@ -198,6 +202,8 @@ class BatchTranscriptionWorker(threading.Thread):
                     if self._shared_engine is None:
                         self._shared_engine = TranscriptionEngine()
                         self._shared_engine.load_model()
+                    if self._shared_engine is None:
+                        raise RuntimeError("_shared_engine is not initialized")
                     result = self._shared_engine.transcribe(str(validated_path), return_timestamps=True)
                     text = result.get("text", "")
             except ModelLoadError as e:
@@ -231,8 +237,7 @@ class BatchTranscriptionWorker(threading.Thread):
             try:
                 if self.formatter:
                     formatted_text = self.formatter.format_all(
-                        text, remove_fillers=True, add_punctuation=True,
-                        format_paragraphs=True, clean_repeated=True
+                        text, remove_fillers=True, add_punctuation=True, format_paragraphs=True, clean_repeated=True
                     )
                 else:
                     formatted_text = text
@@ -243,11 +248,10 @@ class BatchTranscriptionWorker(threading.Thread):
             # 出力ファイル保存（アトミック書き込み）
             try:
                 from export.common import atomic_write_text
+
                 base_name = os.path.splitext(audio_path)[0]
                 output_file = f"{base_name}_文字起こし.txt"
-                validated_output = Validator.validate_file_path(
-                    output_file, allowed_extensions=[".txt"], must_exist=False
-                )
+                validated_output = Validator.validate_file_path(output_file, allowed_extensions=[".txt"], must_exist=False)
                 atomic_write_text(str(validated_output), formatted_text)
                 return audio_path, formatted_text, True
             except ValidationError as e:
@@ -272,10 +276,7 @@ class BatchTranscriptionWorker(threading.Thread):
                 self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
 
             try:
-                future_to_path = {
-                    self._executor.submit(self.process_single_file, path): path
-                    for path in self.audio_paths
-                }
+                future_to_path = {self._executor.submit(self.process_single_file, path): path for path in self.audio_paths}
 
                 for future in as_completed(future_to_path):
                     if self._cancel_event.is_set():
@@ -292,16 +293,22 @@ class BatchTranscriptionWorker(threading.Thread):
                             completed_snapshot = self.completed
 
                         filename = os.path.basename(audio_path)
-                        self._bus.emit("batch_progress", {
-                            "completed": completed_snapshot,
-                            "total": total,
-                            "filename": filename,
-                        })
-                        self._bus.emit("file_finished", {
-                            "file_path": audio_path,
-                            "text": result_text,
-                            "success": success,
-                        })
+                        self._bus.emit(
+                            "batch_progress",
+                            {
+                                "completed": completed_snapshot,
+                                "total": total,
+                                "filename": filename,
+                            },
+                        )
+                        self._bus.emit(
+                            "file_finished",
+                            {
+                                "file_path": audio_path,
+                                "text": result_text,
+                                "success": success,
+                            },
+                        )
 
                     except Exception as future_error:
                         file_path = future_to_path.get(future, "unknown")
@@ -311,16 +318,22 @@ class BatchTranscriptionWorker(threading.Thread):
                             self.failed_count += 1
                             completed_snapshot = self.completed
                         filename = os.path.basename(file_path) if file_path != "unknown" else "unknown"
-                        self._bus.emit("batch_progress", {
-                            "completed": completed_snapshot,
-                            "total": total,
-                            "filename": filename,
-                        })
-                        self._bus.emit("file_finished", {
-                            "file_path": file_path,
-                            "text": "処理中にエラーが発生しました",
-                            "success": False,
-                        })
+                        self._bus.emit(
+                            "batch_progress",
+                            {
+                                "completed": completed_snapshot,
+                                "total": total,
+                                "filename": filename,
+                            },
+                        )
+                        self._bus.emit(
+                            "file_finished",
+                            {
+                                "file_path": file_path,
+                                "text": "処理中にエラーが発生しました",
+                                "success": False,
+                            },
+                        )
 
             finally:
                 # Executor シャットダウン（ロックで保護）
@@ -329,10 +342,13 @@ class BatchTranscriptionWorker(threading.Thread):
                         self._executor.shutdown(wait=True)
                         self._executor = None
 
-            self._bus.emit("all_finished", {
-                "success_count": self.success_count,
-                "failed_count": self.failed_count,
-            })
+            self._bus.emit(
+                "all_finished",
+                {
+                    "success_count": self.success_count,
+                    "failed_count": self.failed_count,
+                },
+            )
 
         except Exception as e:
             logger.error(f"Batch processing error: {e}", exc_info=True)

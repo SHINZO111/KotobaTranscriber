@@ -7,7 +7,7 @@ import os
 from fastapi import APIRouter, HTTPException
 
 from api.schemas import ExportRequest, ExportResponse
-from validators import Validator, ValidationError
+from validators import ValidationError, Validator
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,7 +27,7 @@ def _validate_output_path(output_path: str):
     """出力パスのバリデーション（パストラバーサル防止）"""
     try:
         Validator.validate_file_path(output_path, must_exist=False)
-    except ValidationError as e:
+    except ValidationError:
         raise HTTPException(status_code=400, detail="出力パスが不正です")
 
 
@@ -75,6 +75,7 @@ async def export_file(format: str, req: ExportRequest):
 def _export_txt(req: ExportRequest) -> ExportResponse:
     """テキストファイルとしてエクスポート"""
     from export.common import atomic_write_text, validate_export_path
+
     validate_export_path(req.output_path)
     atomic_write_text(req.output_path, req.text)
     return ExportResponse(success=True, output_path=req.output_path, message="TXTエクスポート完了")
@@ -83,6 +84,7 @@ def _export_txt(req: ExportRequest) -> ExportResponse:
 def _export_docx(req: ExportRequest) -> ExportResponse:
     """Word文書としてエクスポート"""
     from export.word_exporter import WordExporter
+
     exporter = WordExporter()
     if not exporter.has_python_docx:
         raise HTTPException(status_code=501, detail="python-docxがインストールされていません")
@@ -96,6 +98,7 @@ def _export_docx(req: ExportRequest) -> ExportResponse:
 def _export_xlsx(req: ExportRequest) -> ExportResponse:
     """Excelファイルとしてエクスポート"""
     from export.excel_exporter import ExcelExporter
+
     exporter = ExcelExporter()
     if not exporter.has_openpyxl:
         raise HTTPException(status_code=501, detail="openpyxlがインストールされていません")
@@ -111,8 +114,10 @@ def _export_srt(req: ExportRequest) -> ExportResponse:
     if not req.segments:
         raise HTTPException(status_code=400, detail="SRTエクスポートにはセグメント情報が必要です")
     from export.common import validate_export_path
+
     validate_export_path(req.output_path)
     from subtitle_exporter import SubtitleExporter
+
     exporter = SubtitleExporter()
     success = exporter.export_srt(req.segments, req.output_path)
     if not success:
@@ -125,8 +130,10 @@ def _export_vtt(req: ExportRequest) -> ExportResponse:
     if not req.segments:
         raise HTTPException(status_code=400, detail="VTTエクスポートにはセグメント情報が必要です")
     from export.common import validate_export_path
+
     validate_export_path(req.output_path)
     from subtitle_exporter import SubtitleExporter
+
     exporter = SubtitleExporter()
     success = exporter.export_vtt(req.segments, req.output_path)
     if not success:
@@ -137,7 +144,9 @@ def _export_vtt(req: ExportRequest) -> ExportResponse:
 def _export_json(req: ExportRequest) -> ExportResponse:
     """JSONファイルとしてエクスポート"""
     import json
+
     from export.common import atomic_write_text, validate_export_path
+
     validate_export_path(req.output_path)
     data = {
         "text": req.text,

@@ -3,14 +3,16 @@
 指定フォルダを監視し、未処理のファイルを自動文字起こし
 """
 
-import os
-import time
 import logging
+import os
 import tempfile
 import threading
-from typing import List, Set, Callable
+import time
 from pathlib import Path
+from typing import Callable, List, Set
+
 from PySide6.QtCore import QThread, Signal
+
 from constants import SharedConstants
 
 logger = logging.getLogger(__name__)
@@ -48,7 +50,7 @@ class FolderMonitor(QThread):
         """処理済みファイルリストを読み込み"""
         try:
             # 監視フォルダ内の.processed_filesファイルから読み込み
-            processed_file_path = os.path.join(self.folder_path, '.processed_files.txt')
+            processed_file_path = os.path.join(self.folder_path, ".processed_files.txt")
             if os.path.exists(processed_file_path):
                 # ファイルサイズ制限 (50MB)
                 MAX_PROCESSED_SIZE = 50 * 1024 * 1024
@@ -57,7 +59,7 @@ class FolderMonitor(QThread):
                     logger.error(f"Processed files list too large: {file_size} bytes, skipping")
                     self.processed_files = set()
                     return
-                with open(processed_file_path, 'r', encoding='utf-8') as f:
+                with open(processed_file_path, "r", encoding="utf-8") as f:
                     self.processed_files = set(line.strip() for line in f if line.strip())
                 logger.info(f"Loaded {len(self.processed_files)} processed files")
         except (IOError, OSError, UnicodeDecodeError) as e:
@@ -72,10 +74,10 @@ class FolderMonitor(QThread):
         try:
             with self._processed_lock:
                 files_copy = sorted(self.processed_files)
-            processed_file_path = os.path.join(self.folder_path, '.processed_files.txt')
-            fd, tmp_path = tempfile.mkstemp(dir=self.folder_path, suffix='.tmp')
+            processed_file_path = os.path.join(self.folder_path, ".processed_files.txt")
+            fd, tmp_path = tempfile.mkstemp(dir=self.folder_path, suffix=".tmp")
             try:
-                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     for file_path in files_copy:
                         f.write(f"{file_path}\n")
                 os.replace(tmp_path, processed_file_path)
@@ -163,18 +165,20 @@ class FolderMonitor(QThread):
             try:
                 logger.debug(f"Attempting exclusive lock on: {file_path}")
                 # 読み書きモードで排他的に開く
-                with open(file_path, 'r+b') as f:
+                with open(file_path, "r+b") as f:
                     # ファイル全体をロック（Windows: msvcrt, Unix: fcntl）
-                    if os.name == 'nt':
+                    if os.name == "nt":
                         import msvcrt
+
                         try:
-                            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-                            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+                            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
+                            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
                         except IOError:
                             logger.debug(f"File is locked by another process: {file_path}")
                             return False
                     else:
                         import fcntl
+
                         try:
                             fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                             fcntl.flock(f.fileno(), fcntl.LOCK_UN)

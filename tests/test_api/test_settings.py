@@ -1,7 +1,8 @@
 """Settings API テスト"""
 
-import sys
 import os
+import sys
+
 import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
@@ -9,14 +10,16 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 try:
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
 
 try:
-    from api.main import app
     from api.auth import get_token_manager
+    from api.main import app
+
     APP_AVAILABLE = True
 except ImportError:
     APP_AVAILABLE = False
@@ -50,10 +53,7 @@ class TestSettingsAPI:
         """PATCH /api/settings"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.patch(
-                "/api/settings",
-                json={"theme": "dark"}
-            )
+            response = await client.patch("/api/settings", json={"theme": "dark"})
             assert response.status_code == 200
             data = response.json()
             assert "updated" in data
@@ -77,10 +77,7 @@ class TestSettingsAPI:
         """PATCH /api/config — 設定更新"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.patch(
-                "/api/config",
-                json={"output": {"default_format": "srt"}}
-            )
+            response = await client.patch("/api/config", json={"output": {"default_format": "srt"}})
             assert response.status_code == 200
             data = response.json()
             assert "updated" in data

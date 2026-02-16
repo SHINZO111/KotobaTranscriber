@@ -7,11 +7,11 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['BaseTranscriptionEngine']
+__all__ = ["BaseTranscriptionEngine"]
 
 
 class BaseTranscriptionEngine(ABC):
@@ -27,12 +27,7 @@ class BaseTranscriptionEngine(ABC):
         # 自動的にモデルがアンロードされる
     """
 
-    def __init__(
-        self,
-        model_name: str,
-        device: str = "auto",
-        language: str = "ja"
-    ):
+    def __init__(self, model_name: str, device: str = "auto", language: str = "ja"):
         """
         初期化
 
@@ -48,8 +43,7 @@ class BaseTranscriptionEngine(ABC):
         self.is_loaded: bool = False
 
         logger.debug(
-            f"{self.__class__.__name__} initialized: "
-            f"model={model_name}, device={self.device}, language={language}"
+            f"{self.__class__.__name__} initialized: " f"model={model_name}, device={self.device}, language={language}"
         )
 
     def _resolve_device(self, device: str) -> str:
@@ -65,6 +59,7 @@ class BaseTranscriptionEngine(ABC):
         if device == "auto":
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     return "cuda"
             except ImportError:
@@ -111,6 +106,7 @@ class BaseTranscriptionEngine(ABC):
                 # GPUキャッシュをクリア
                 try:
                     import torch
+
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
                 except ImportError:
@@ -123,7 +119,7 @@ class BaseTranscriptionEngine(ABC):
                 self.model = None
                 self.is_loaded = False
 
-    def __enter__(self) -> 'BaseTranscriptionEngine':
+    def __enter__(self) -> "BaseTranscriptionEngine":
         """
         コンテキストマネージャのエントリ
 
@@ -138,7 +134,7 @@ class BaseTranscriptionEngine(ABC):
             raise
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """
         コンテキストマネージャの終了
 
@@ -147,8 +143,6 @@ class BaseTranscriptionEngine(ABC):
             exc_val: 例外値
             exc_tb: トレースバック
 
-        Returns:
-            False（例外を再送出）
         """
         try:
             self.unload_model()
@@ -157,7 +151,6 @@ class BaseTranscriptionEngine(ABC):
             if exc_type is None:
                 raise
             logger.warning(f"Error during model unload in __exit__: {e}")
-        return False  # 例外を再送出
 
     def __del__(self):
         """
@@ -170,7 +163,7 @@ class BaseTranscriptionEngine(ABC):
             try:
                 logger.debug(f"Error during cleanup in __del__: {e}")
             except Exception:
-                pass  # ログ出力自体が失敗する場合は無視
+                pass  # nosec B110 - ログ出力自体が失敗する場合は無視
 
     def is_available(self) -> bool:
         """
@@ -193,7 +186,7 @@ class BaseTranscriptionEngine(ABC):
             "model_name": self.model_name,
             "device": self.device,
             "language": self.language,
-            "is_loaded": self.is_loaded
+            "is_loaded": self.is_loaded,
         }
 
 

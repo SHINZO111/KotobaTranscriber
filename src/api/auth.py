@@ -4,12 +4,13 @@ API認証モジュール
 Tauri sidecarはstdout JSONからトークンを受け取り、Authorization: Bearer <token> で送信する。
 """
 
-import secrets
 import logging
 import os
-import time
+import secrets
 import threading
+import time
 from typing import Optional
+
 from fastapi import Request, WebSocket
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse

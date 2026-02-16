@@ -1,12 +1,13 @@
 """EventBus スレッド安全性テスト"""
 
 import asyncio
-import sys
 import os
-import pytest
+import sys
 import threading
 import time
 from collections import Counter
+
+import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
 if src_dir not in sys.path:
@@ -77,16 +78,14 @@ class TestEventBusThreadSafety:
         with received_lock:
             received_count = len(received)
 
-        assert received_count == total_expected, (
-            f"Expected {total_expected} events, received {received_count}"
-        )
+        assert received_count == total_expected, f"Expected {total_expected} events, received {received_count}"
 
         # スレッドIDごとのイベント数を確認
         thread_counts = Counter(event["data"]["thread_id"] for event in received)
         for tid in range(num_threads):
-            assert thread_counts[tid] == events_per_thread, (
-                f"Thread {tid}: expected {events_per_thread}, got {thread_counts[tid]}"
-            )
+            assert (
+                thread_counts[tid] == events_per_thread
+            ), f"Thread {tid}: expected {events_per_thread}, got {thread_counts[tid]}"
 
     @pytest.mark.asyncio
     async def test_emit_without_event_loop(self):
@@ -142,7 +141,7 @@ class TestEventBusThreadSafety:
 
         # 検証
         with received_lock:
-            received_count = len(received)
+            _received_count = len(received)  # noqa: F841
 
         # フォールバックキューからイベントが配信されることを確認
         # 注: フォールバックキューのイベントは購読開始時に移行しないため、
@@ -237,9 +236,7 @@ class TestEventBusThreadSafety:
         with received_lock:
             received_count = len(received)
 
-        assert received_count == total_expected, (
-            f"Expected {total_expected} events, received {received_count}"
-        )
+        assert received_count == total_expected, f"Expected {total_expected} events, received {received_count}"
 
     @pytest.mark.asyncio
     async def test_fallback_queue_cleanup_on_unsubscribe(self):
@@ -260,6 +257,7 @@ class TestEventBusThreadSafety:
         bus.set_loop(loop)
 
         received = []
+
         async def consumer():
             async for event in bus.subscribe():
                 received.append(event)
@@ -320,6 +318,4 @@ class TestEventBusThreadSafety:
 
         # 全サブスクライバーが全イベントを受信
         for idx, received in enumerate(results):
-            assert len(received) == num_events, (
-                f"Subscriber {idx}: expected {num_events}, got {len(received)}"
-            )
+            assert len(received) == num_events, f"Subscriber {idx}: expected {num_events}, got {len(received)}"

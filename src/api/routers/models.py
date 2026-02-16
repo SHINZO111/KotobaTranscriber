@@ -5,8 +5,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from api.schemas import ModelInfoResponse, MessageResponse
-from api.dependencies import get_transcription_engine, get_faster_whisper_engine
+from api.dependencies import get_faster_whisper_engine, get_transcription_engine
+from api.schemas import MessageResponse, ModelInfoResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -56,22 +56,22 @@ async def get_model_info(engine: str):
     """モデル情報を取得"""
     if engine == "kotoba":
         eng = get_transcription_engine()
-        is_loaded = eng is not None and hasattr(eng, 'model') and eng.model is not None
+        is_loaded = eng is not None and hasattr(eng, "model") and eng.model is not None
         return ModelInfoResponse(
             engine="kotoba_whisper",
             is_loaded=is_loaded,
-            model_name=getattr(eng, 'model_name', None) if eng else None,
-            device=getattr(eng, 'device', None) if eng else None,
+            model_name=getattr(eng, "model_name", None) if eng else None,
+            device=getattr(eng, "device", None) if eng else None,
         )
 
     elif engine == "faster-whisper":
         eng = get_faster_whisper_engine()
-        is_loaded = eng is not None and hasattr(eng, 'model') and eng.model is not None
+        is_loaded = eng is not None and hasattr(eng, "model") and eng.model is not None
         return ModelInfoResponse(
             engine="faster_whisper",
             is_loaded=is_loaded,
-            model_name=getattr(eng, 'model_size', None) if eng else None,
-            device=getattr(eng, 'device', None) if eng else None,
+            model_name=getattr(eng, "model_size", None) if eng else None,
+            device=getattr(eng, "device", None) if eng else None,
         )
 
     else:

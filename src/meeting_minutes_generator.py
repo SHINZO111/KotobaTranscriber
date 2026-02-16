@@ -7,15 +7,16 @@ import logging
 import re
 import threading
 from dataclasses import dataclass, field
-from typing import Any, List, Dict, Optional
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class StatementType(Enum):
     """発言タイプ"""
+
     GENERAL = "一般"
     DECISION = "決定事項"
     CONFIRMATION = "確認事項"
@@ -29,6 +30,7 @@ class StatementType(Enum):
 @dataclass
 class Statement:
     """発言データ"""
+
     speaker: str
     text: str
     timestamp: Optional[float] = None
@@ -39,6 +41,7 @@ class Statement:
 @dataclass
 class ActionItem:
     """アクションアイテム"""
+
     description: str
     assignee: Optional[str] = None
     due_date: Optional[str] = None
@@ -49,6 +52,7 @@ class ActionItem:
 @dataclass
 class MeetingMinutes:
     """議事録データ"""
+
     title: str
     date: str
     location: str = ""
@@ -61,7 +65,7 @@ class MeetingMinutes:
     next_meeting: str = ""
     notes: str = ""
 
-    def to_text(self) -> str:
+    def to_text(self) -> str:  # noqa: C901
         """テキスト形式で出力"""
         lines = [
             "=" * 60,
@@ -107,11 +111,11 @@ class MeetingMinutes:
 
         if self.action_items:
             lines.extend(["", "【アクションアイテム】"])
-            for i, item in enumerate(self.action_items, 1):
-                assignee = f"担当: {item.assignee}" if item.assignee else "担当: 未割当"
-                due = f"期限: {item.due_date}" if item.due_date else "期限: 未設定"
-                lines.append(f"  {i}. {item.description}")
-                lines.append(f"      ({assignee}, {due}, 優先度: {item.priority})")
+            for i, action in enumerate(self.action_items, 1):
+                assignee = f"担当: {action.assignee}" if action.assignee else "担当: 未割当"
+                due = f"期限: {action.due_date}" if action.due_date else "期限: 未設定"
+                lines.append(f"  {i}. {action.description}")
+                lines.append(f"      ({assignee}, {due}, 優先度: {action.priority})")
 
         if self.next_meeting:
             lines.extend(["", f"【次回会議】{self.next_meeting}"])
@@ -122,7 +126,7 @@ class MeetingMinutes:
         lines.extend(["", "=" * 60, "End of Minutes"])
         return "\n".join(lines)
 
-    def to_markdown(self) -> str:
+    def to_markdown(self) -> str:  # noqa: C901
         """Markdown形式で出力"""
         lines = [
             f"# 議事録: {self.title}",
@@ -167,10 +171,10 @@ class MeetingMinutes:
 
         if self.action_items:
             lines.extend(["", "## アクションアイテム"])
-            for item in self.action_items:
-                assignee = item.assignee if item.assignee else "未割当"
-                due = item.due_date if item.due_date else "未設定"
-                lines.append(f"- [ ] {item.description} (@{assignee}, 期限: {due}, 優先度: {item.priority})")
+            for action in self.action_items:
+                assignee = action.assignee if action.assignee else "未割当"
+                due = action.due_date if action.due_date else "未設定"
+                lines.append(f"- [ ] {action.description} (@{assignee}, 期限: {due}, 優先度: {action.priority})")
 
         if self.next_meeting:
             lines.extend(["", f"## 次回会議\n{self.next_meeting}"])
@@ -277,10 +281,7 @@ class MeetingMinutesGenerator:
         self.action_regex = [re.compile(p) for p in self.ACTION_ITEM_PATTERNS]
         self.date_regex = [re.compile(p) for p in self.DATE_PATTERNS]
         self.report_regex = [re.compile(p) for p in self.REPORT_PATTERNS]
-        self.priority_regex = {
-            level: [re.compile(p) for p in patterns]
-            for level, patterns in self.PRIORITY_PATTERNS.items()
-        }
+        self.priority_regex = {level: [re.compile(p) for p in patterns] for level, patterns in self.PRIORITY_PATTERNS.items()}
 
     def generate_minutes(
         self,
@@ -412,7 +413,7 @@ class MeetingMinutesGenerator:
             cleaned = re.sub(pattern, "", cleaned)
 
         # 余分な文字を除去
-        cleaned = cleaned.strip(" 　、。") 
+        cleaned = cleaned.strip(" 　、。")
         return cleaned if cleaned else text
 
     def extract_confirmation_text(self, text: str) -> str:
@@ -497,12 +498,17 @@ class MeetingMinutesGenerator:
             議題リスト
         """
         agenda_keywords = [
-            "議題", "アジェンダ", "今日のテーマ", "本日のテーマ",
-            "話し合いたい", "検討したい", "相談したい",
+            "議題",
+            "アジェンダ",
+            "今日のテーマ",
+            "本日のテーマ",
+            "話し合いたい",
+            "検討したい",
+            "相談したい",
         ]
 
         agendas = []
-        for stmt in statements[:self.AGENDA_SEARCH_LIMIT]:
+        for stmt in statements[: self.AGENDA_SEARCH_LIMIT]:
             for keyword in agenda_keywords:
                 if keyword in stmt.text:
                     # キーワード以降を抽出
@@ -530,7 +536,7 @@ class MeetingMinutesGenerator:
             r"再来週(?:の)?(.{2,15})(?:に|で)",
         ]
 
-        for stmt in statements[-self.CLOSING_SEARCH_LIMIT:]:
+        for stmt in statements[-self.CLOSING_SEARCH_LIMIT :]:
             for pattern in next_patterns:
                 match = re.search(pattern, stmt.text)
                 if match:
@@ -570,8 +576,11 @@ class MeetingMinutesGenerator:
             議事録データ（辞書形式）
         """
         minutes = self.generate_minutes(
-            segments=segments, title=title, date=date,
-            location=location, attendees=attendees,
+            segments=segments,
+            title=title,
+            date=date,
+            location=location,
+            attendees=attendees,
         )
         return {
             "title": minutes.title,
@@ -606,12 +615,7 @@ class MeetingMinutesGenerator:
             "markdown_format": minutes.to_markdown(),
         }
 
-    def generate_from_file(
-        self,
-        transcription_file: str,
-        title: str = "会議",
-        **kwargs
-    ) -> Dict[str, Any]:
+    def generate_from_file(self, transcription_file: str, title: str = "会議", **kwargs) -> Dict[str, Any]:
         """
         書き起こしファイルから議事録を生成
 
@@ -634,18 +638,13 @@ class MeetingMinutesGenerator:
         if file_size > MAX_FILE_SIZE:
             raise ValueError(f"Transcription file too large: {file_size} bytes (max: {MAX_FILE_SIZE})")
 
-        with open(transcription_file, 'r', encoding='utf-8') as f:
+        with open(transcription_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        segments = data.get('segments', [])
+        segments = data.get("segments", [])
         return self.generate_dict(segments, title=title, **kwargs)
 
-    def save_minutes(
-        self,
-        minutes_data: Dict[str, Any],
-        output_path: str,
-        format_type: str = "markdown"
-    ) -> bool:
+    def save_minutes(self, minutes_data: Dict[str, Any], output_path: str, format_type: str = "markdown") -> bool:
         """
         議事録をファイルに保存
 
@@ -658,6 +657,7 @@ class MeetingMinutesGenerator:
             成功したかどうか
         """
         from export.common import atomic_write_text
+
         try:
             if format_type == "text":
                 content = minutes_data.get("text_format", "")
@@ -665,6 +665,7 @@ class MeetingMinutesGenerator:
                 content = minutes_data.get("markdown_format", "")
             elif format_type == "json":
                 import json
+
                 content = json.dumps(minutes_data, ensure_ascii=False, indent=2)
             else:
                 logger.error(f"Unknown format: {format_type}")
@@ -689,25 +690,18 @@ class MeetingMinutesGenerator:
             アクションアイテムリスト
         """
         action_items = []
-        lines = text.split('\n')
+        lines = text.split("\n")
 
         for line in lines:
             line = line.strip()
             if not line:
                 continue
 
-            action_keywords = ['する', '確認', '準備', '調整', '連絡', '報告', '依頼']
+            action_keywords = ["する", "確認", "準備", "調整", "連絡", "報告", "依頼"]
             if any(kw in line for kw in action_keywords):
-                assignee_match = re.search(
-                    r'([一-龠々〆ヵヶぁ-んァ-ンーa-zA-Z・]+)(?:さん|様|殿|くん|君)', line
-                )
+                assignee_match = re.search(r"([一-龠々〆ヵヶぁ-んァ-ンーa-zA-Z・]+)(?:さん|様|殿|くん|君)", line)
                 assignee = assignee_match.group(1) if assignee_match else None
-                action_items.append({
-                    "description": line,
-                    "assignee": assignee,
-                    "due_date": None,
-                    "priority": "中"
-                })
+                action_items.append({"description": line, "assignee": assignee, "due_date": None, "priority": "中"})
 
         return action_items
 
@@ -721,12 +715,7 @@ class MeetingMinutesGenerator:
         Returns:
             分類された発言辞書
         """
-        classified = {
-            "decisions": [],
-            "confirmations": [],
-            "action_items": [],
-            "general": []
-        }
+        classified: Dict[str, List[str]] = {"decisions": [], "confirmations": [], "action_items": [], "general": []}
 
         for stmt in statements:
             stmt_type = self.classify_statement(stmt)
@@ -762,11 +751,7 @@ def get_minutes_generator() -> MeetingMinutesGenerator:
     return _minutes_generator
 
 
-def quick_generate(
-    segments: List[Dict],
-    title: str = "会議",
-    **kwargs
-) -> Dict[str, Any]:
+def quick_generate(segments: List[Dict], title: str = "会議", **kwargs) -> Dict[str, Any]:
     """
     簡易議事録生成関数
 

@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from app_settings import AppSettings
-from config_manager import get_config, ConfigManager
+from config_manager import ConfigManager, get_config
 
 logger = logging.getLogger(__name__)
 

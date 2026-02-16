@@ -4,26 +4,40 @@ KotobaTranscriber - フォルダ監視アプリケーション
 ファイル文字起こし機能は main.py を参照
 """
 
-import sys
-import os
-from datetime import datetime
-from pathlib import Path
 import ctypes
 import ctypes.wintypes
+import logging
+import os
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QFileDialog, QLabel, QProgressBar, QMessageBox,
-    QCheckBox, QGroupBox, QSystemTrayIcon, QMenu, QSpinBox, QFrame
-)
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QAction
-import logging
+from datetime import datetime
+from pathlib import Path
 
-from text_formatter import TextFormatter
-from folder_monitor import FolderMonitor
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QFileDialog,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QSystemTrayIcon,
+    QVBoxLayout,
+    QWidget,
+)
+
 from app_settings import AppSettings
+from folder_monitor import FolderMonitor
+from text_formatter import TextFormatter
 from workers import (
     BatchTranscriptionWorker,
     SharedConstants,
@@ -31,15 +45,13 @@ from workers import (
 )
 
 # ロギング設定
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 class MonitorUIConstants(SharedConstants):
     """モニターアプリ固有のUI定数"""
+
     # 監視間隔範囲
     MONITOR_INTERVAL_MIN = 5
     MONITOR_INTERVAL_MAX = 9999  # 上限なし（実質無制限）
@@ -89,7 +101,7 @@ class MonitorWindow(QMainWindow):
         self.setWindowTitle("KotobaTranscriber - フォルダ監視")
 
         # アイコン設定
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'icon.ico')
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon.ico")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
@@ -114,7 +126,9 @@ class MonitorWindow(QMainWindow):
 
         self.monitor_folder_button = QPushButton("監視開始")
         self.monitor_folder_button.setStyleSheet(SharedConstants.BUTTON_STYLE_MONITOR)
-        self.monitor_folder_button.setToolTip("フォルダ監視を開始/停止します。監視中は新しいファイルを自動的に文字起こしします")
+        self.monitor_folder_button.setToolTip(
+            "フォルダ監視を開始/停止します。監視中は新しいファイルを自動的に文字起こしします"
+        )
         self.monitor_folder_button.clicked.connect(self.toggle_folder_monitor)
         monitor_button_layout.addWidget(self.monitor_folder_button)
 
@@ -139,8 +153,7 @@ class MonitorWindow(QMainWindow):
 
         self.monitor_interval_spinbox = QSpinBox()
         self.monitor_interval_spinbox.setRange(
-            MonitorUIConstants.MONITOR_INTERVAL_MIN,
-            MonitorUIConstants.MONITOR_INTERVAL_MAX
+            MonitorUIConstants.MONITOR_INTERVAL_MIN, MonitorUIConstants.MONITOR_INTERVAL_MAX
         )
         self.monitor_interval_spinbox.setValue(MonitorUIConstants.MONITOR_INTERVAL_DEFAULT)
         self.monitor_interval_spinbox.setSuffix(" 秒")
@@ -166,7 +179,9 @@ class MonitorWindow(QMainWindow):
         self.enable_diarization_check = QCheckBox("話者分離")
         self.enable_diarization_check.setStyleSheet("font-size: 12px;")
         self.enable_diarization_check.setChecked(False)
-        self.enable_diarization_check.setToolTip("複数の話者を識別します。speechbrainまたはresemblyzerを使用。完全無料、トークン不要。")
+        self.enable_diarization_check.setToolTip(
+            "複数の話者を識別します。speechbrainまたはresemblyzerを使用。完全無料、トークン不要。"
+        )
         format_layout.addWidget(self.enable_diarization_check)
 
         format_group.setLayout(format_layout)
@@ -244,7 +259,7 @@ class MonitorWindow(QMainWindow):
         """システムトレイアイコン初期化"""
         self.tray_icon = QSystemTrayIcon(self)
 
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'icon.ico')
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon.ico")
         if os.path.exists(icon_path):
             self.tray_icon.setIcon(QIcon(icon_path))
         else:
@@ -345,7 +360,7 @@ class MonitorWindow(QMainWindow):
             "KotobaTranscriber Monitor",
             "アプリはトレイで実行中です。完全に終了するには右クリックメニューから「終了」を選択してください。",
             QSystemTrayIcon.Information,
-            SharedConstants.TRAY_NOTIFICATION_TIMEOUT
+            SharedConstants.TRAY_NOTIFICATION_TIMEOUT,
         )
         logger.info("Window closed to tray")
 
@@ -356,10 +371,7 @@ class MonitorWindow(QMainWindow):
     def select_monitor_folder(self):
         """監視フォルダ選択"""
         folder_path = QFileDialog.getExistingDirectory(
-            self,
-            "監視するフォルダを選択",
-            "",
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+            self, "監視するフォルダを選択", "", QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
         )
 
         if folder_path:
@@ -369,7 +381,7 @@ class MonitorWindow(QMainWindow):
             self.statusBar().showMessage(f"監視フォルダ設定: {folder_name}")
             logger.info(f"Monitor folder selected: {folder_path}")
 
-            self.settings.set('monitored_folder', folder_path)
+            self.settings.set("monitored_folder", folder_path)
             self.settings.save_debounced()
 
     def toggle_folder_monitor(self):
@@ -415,7 +427,7 @@ class MonitorWindow(QMainWindow):
                 "監視フォルダ未設定",
                 "監視フォルダが設定されていません。\n今すぐフォルダを選択しますか？",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
+                QMessageBox.Yes,
             )
 
             if reply == QMessageBox.Yes:
@@ -427,10 +439,7 @@ class MonitorWindow(QMainWindow):
 
         # 監視開始
         try:
-            self.folder_monitor = FolderMonitor(
-                self.monitored_folder,
-                check_interval=self.monitor_interval_spinbox.value()
-            )
+            self.folder_monitor = FolderMonitor(self.monitored_folder, check_interval=self.monitor_interval_spinbox.value())
 
             self.folder_monitor.new_files_detected.connect(self.on_monitor_new_files)
             self.folder_monitor.status_update.connect(self.on_monitor_status)
@@ -448,7 +457,7 @@ class MonitorWindow(QMainWindow):
                 "フォルダ監視開始",
                 f"{os.path.basename(self.monitored_folder)} を監視中...",
                 QSystemTrayIcon.Information,
-                SharedConstants.TRAY_NOTIFICATION_TIMEOUT
+                SharedConstants.TRAY_NOTIFICATION_TIMEOUT,
             )
 
         except Exception as e:
@@ -461,7 +470,8 @@ class MonitorWindow(QMainWindow):
         current_time = datetime.now().timestamp()
         with self.processing_files_lock:
             expired_files = [
-                file_path for file_path, added_time in self.processing_files.items()
+                file_path
+                for file_path, added_time in self.processing_files.items()
                 if current_time - added_time > self.processing_files_ttl
             ]
             for file_path in expired_files:
@@ -498,7 +508,7 @@ class MonitorWindow(QMainWindow):
             "新規ファイル検出",
             f"{len(new_files)}個のファイルを自動文字起こし中...",
             QSystemTrayIcon.Information,
-            SharedConstants.TRAY_NOTIFICATION_TIMEOUT
+            SharedConstants.TRAY_NOTIFICATION_TIMEOUT,
         )
 
         enable_diarization = self.enable_diarization_check.isChecked()
@@ -508,7 +518,7 @@ class MonitorWindow(QMainWindow):
             enable_diarization=enable_diarization,
             max_workers=SharedConstants.MONITOR_BATCH_WORKERS,
             formatter=self.formatter,
-            use_llm_correction=False
+            use_llm_correction=False,
         )
 
         self.batch_worker.progress.connect(self.on_monitor_progress)
@@ -549,6 +559,7 @@ class MonitorWindow(QMainWindow):
             if self.auto_move_completed and self.completed_folder:
                 try:
                     from advanced_features import FileOrganizer
+
                     if FileOrganizer.move_completed_file(file_path, self.completed_folder):
                         logger.info(f"File moved to completed folder: {filename}")
                         if self.folder_monitor:
@@ -565,7 +576,7 @@ class MonitorWindow(QMainWindow):
                 "文字起こし失敗",
                 f"{filename}\nエラー: {result[:100]}",
                 QSystemTrayIcon.Critical,
-                SharedConstants.ERROR_NOTIFICATION_TIMEOUT
+                SharedConstants.ERROR_NOTIFICATION_TIMEOUT,
             )
 
     def on_monitor_all_finished(self, success_count: int, failed_count: int):
@@ -582,7 +593,7 @@ class MonitorWindow(QMainWindow):
             "自動文字起こし完了",
             f"成功: {success_count}件, 失敗: {failed_count}件",
             QSystemTrayIcon.Information,
-            SharedConstants.TRAY_NOTIFICATION_TIMEOUT
+            SharedConstants.TRAY_NOTIFICATION_TIMEOUT,
         )
 
         self.statusBar().showMessage(f"自動処理完了: {success_count}成功, {failed_count}失敗")
@@ -599,10 +610,7 @@ class MonitorWindow(QMainWindow):
         logger.error(f"Monitor batch error: {error_msg}")
 
         self.tray_icon.showMessage(
-            "バッチ処理エラー",
-            error_msg[:200],
-            QSystemTrayIcon.Critical,
-            SharedConstants.ERROR_NOTIFICATION_TIMEOUT
+            "バッチ処理エラー", error_msg[:200], QSystemTrayIcon.Critical, SharedConstants.ERROR_NOTIFICATION_TIMEOUT
         )
 
     def update_stats_display(self):
@@ -618,7 +626,7 @@ class MonitorWindow(QMainWindow):
         self.monitor_check_interval = value
         logger.info(f"Monitor interval changed to: {value}s")
 
-        self.settings.set('monitor_interval', value)
+        self.settings.set("monitor_interval", value)
         self.settings.save_debounced()
 
         # 監視中の場合は再起動
@@ -632,10 +640,7 @@ class MonitorWindow(QMainWindow):
             self.folder_monitor.wait()
 
             try:
-                self.folder_monitor = FolderMonitor(
-                    self.monitored_folder,
-                    check_interval=value
-                )
+                self.folder_monitor = FolderMonitor(self.monitored_folder, check_interval=value)
 
                 self.folder_monitor.new_files_detected.connect(self.on_monitor_new_files)
                 self.folder_monitor.status_update.connect(self.on_monitor_status)
@@ -659,7 +664,7 @@ class MonitorWindow(QMainWindow):
         try:
             from advanced_features import StartupManager
 
-            if StartupManager.is_startup_enabled(app_name='KotobaTranscriberMonitor'):
+            if StartupManager.is_startup_enabled(app_name="KotobaTranscriberMonitor"):
                 self.startup_check.setChecked(True)
                 logger.info("Startup is enabled")
             else:
@@ -675,17 +680,14 @@ class MonitorWindow(QMainWindow):
             from advanced_features import StartupManager
 
             if checked:
-                if StartupManager.enable_startup(
-                    app_name='KotobaTranscriberMonitor',
-                    entry_script='monitor_app.py'
-                ):
+                if StartupManager.enable_startup(app_name="KotobaTranscriberMonitor", entry_script="monitor_app.py"):
                     logger.info("Startup enabled")
                     self.statusBar().showMessage("Windows起動時に自動起動するように設定しました")
                 else:
                     self.startup_check.setChecked(False)
                     QMessageBox.warning(self, "警告", "スタートアップの設定に失敗しました")
             else:
-                if StartupManager.disable_startup(app_name='KotobaTranscriberMonitor'):
+                if StartupManager.disable_startup(app_name="KotobaTranscriberMonitor"):
                     logger.info("Startup disabled")
                     self.statusBar().showMessage("自動起動を無効にしました")
                 else:
@@ -706,7 +708,7 @@ class MonitorWindow(QMainWindow):
         self.auto_move_completed = checked
         self.select_completed_folder_button.setEnabled(checked)
 
-        self.settings.set('auto_move_completed', checked)
+        self.settings.set("auto_move_completed", checked)
         self.settings.save_debounced()
 
         if checked:
@@ -719,10 +721,7 @@ class MonitorWindow(QMainWindow):
     def select_completed_folder(self):
         """完了ファイル移動先フォルダ選択"""
         folder_path = QFileDialog.getExistingDirectory(
-            self,
-            "完了ファイルの移動先フォルダを選択",
-            "",
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+            self, "完了ファイルの移動先フォルダを選択", "", QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
         )
 
         if folder_path:
@@ -732,7 +731,7 @@ class MonitorWindow(QMainWindow):
             self.statusBar().showMessage(f"移動先フォルダ設定: {folder_name}")
             logger.info(f"Completed folder selected: {folder_path}")
 
-            self.settings.set('completed_folder', folder_path)
+            self.settings.set("completed_folder", folder_path)
             self.settings.save_debounced()
 
     # ---------------------------------------------------------------
@@ -743,10 +742,10 @@ class MonitorWindow(QMainWindow):
         """UI設定を復元（検証付き）"""
         try:
             # ウィンドウジオメトリ
-            width = self.settings.get('window.width', 350)
-            height = self.settings.get('window.height', 500)
-            x = self.settings.get('window.x', 100)
-            y = self.settings.get('window.y', 100)
+            width = self.settings.get("window.width", 350)
+            height = self.settings.get("window.height", 500)
+            x = self.settings.get("window.x", 100)
+            y = self.settings.get("window.y", 100)
 
             width = max(MonitorUIConstants.WINDOW_MIN_WIDTH, min(MonitorUIConstants.WINDOW_MAX_WIDTH, width))
             height = max(MonitorUIConstants.WINDOW_MIN_HEIGHT, min(MonitorUIConstants.WINDOW_MAX_HEIGHT, height))
@@ -765,7 +764,7 @@ class MonitorWindow(QMainWindow):
             logger.info(f"Window geometry restored: {width}x{height} at ({x}, {y})")
 
             # フォルダ設定を復元
-            monitored_folder = self.settings.get('monitored_folder')
+            monitored_folder = self.settings.get("monitored_folder")
             if monitored_folder:
                 if Path(monitored_folder).exists() and Path(monitored_folder).is_dir():
                     self.monitored_folder = monitored_folder
@@ -775,7 +774,7 @@ class MonitorWindow(QMainWindow):
                 else:
                     logger.warning(f"Monitored folder no longer exists: {monitored_folder}")
 
-            completed_folder = self.settings.get('completed_folder')
+            completed_folder = self.settings.get("completed_folder")
             if completed_folder:
                 if Path(completed_folder).exists() and Path(completed_folder).is_dir():
                     self.completed_folder = completed_folder
@@ -786,22 +785,21 @@ class MonitorWindow(QMainWindow):
                     logger.warning(f"Completed folder no longer exists: {completed_folder}")
 
             # 監視間隔を復元
-            monitor_interval = self.settings.get('monitor_interval', MonitorUIConstants.MONITOR_INTERVAL_DEFAULT)
-            monitor_interval = max(MonitorUIConstants.MONITOR_INTERVAL_MIN,
-                                   min(MonitorUIConstants.MONITOR_INTERVAL_MAX, monitor_interval))
+            monitor_interval = self.settings.get("monitor_interval", MonitorUIConstants.MONITOR_INTERVAL_DEFAULT)
+            monitor_interval = max(
+                MonitorUIConstants.MONITOR_INTERVAL_MIN, min(MonitorUIConstants.MONITOR_INTERVAL_MAX, monitor_interval)
+            )
             self.monitor_interval_spinbox.setValue(monitor_interval)
 
             # 自動移動設定を復元
-            auto_move = self.settings.get('auto_move_completed', False)
+            auto_move = self.settings.get("auto_move_completed", False)
             if isinstance(auto_move, bool):
                 self.auto_move_check.setChecked(auto_move)
                 self.auto_move_completed = auto_move
                 self.select_completed_folder_button.setEnabled(auto_move)
 
             # 話者分離設定を復元
-            self.enable_diarization_check.setChecked(
-                bool(self.settings.get('enable_diarization', False))
-            )
+            self.enable_diarization_check.setChecked(bool(self.settings.get("enable_diarization", False)))
 
             logger.info("UI settings restored successfully")
 
@@ -827,8 +825,8 @@ class MonitorWindow(QMainWindow):
             # 未処理ファイルの確認
             all_files = []
             for ext in SharedConstants.SUPPORTED_EXTENSIONS:
-                all_files.extend(list(folder_path.glob(f'*{ext}')))
-                all_files.extend(list(folder_path.glob(f'*{ext.upper()}')))
+                all_files.extend(list(folder_path.glob(f"*{ext}")))
+                all_files.extend(list(folder_path.glob(f"*{ext.upper()}")))
 
             processed_files_path = folder_path / ".processed_files.txt"
             processed_files = set()
@@ -839,7 +837,7 @@ class MonitorWindow(QMainWindow):
                     if file_size > MAX_PROCESSED_SIZE:
                         logger.error(f"Processed files list too large: {file_size} bytes, skipping")
                     else:
-                        with open(processed_files_path, 'r', encoding='utf-8') as f:
+                        with open(processed_files_path, "r", encoding="utf-8") as f:
                             processed_files = set(line.strip() for line in f if line.strip())
                 except Exception as e:
                     logger.warning(f"Failed to load processed files list: {e}")
@@ -852,10 +850,7 @@ class MonitorWindow(QMainWindow):
 
             logger.info(f"Auto-starting monitoring: {len(unprocessed_files)} unprocessed files found")
 
-            self.folder_monitor = FolderMonitor(
-                self.monitored_folder,
-                check_interval=self.monitor_interval_spinbox.value()
-            )
+            self.folder_monitor = FolderMonitor(self.monitored_folder, check_interval=self.monitor_interval_spinbox.value())
 
             self.folder_monitor.new_files_detected.connect(self.on_monitor_new_files)
             self.folder_monitor.status_update.connect(self.on_monitor_status)
@@ -874,7 +869,7 @@ class MonitorWindow(QMainWindow):
                 "自動監視開始",
                 f"{os.path.basename(self.monitored_folder)}\n{len(unprocessed_files)}個の未処理ファイルを検出",
                 QSystemTrayIcon.Information,
-                SharedConstants.TRAY_NOTIFICATION_TIMEOUT
+                SharedConstants.TRAY_NOTIFICATION_TIMEOUT,
             )
 
         except Exception as e:
@@ -883,16 +878,16 @@ class MonitorWindow(QMainWindow):
     def save_ui_settings(self):
         """UI設定を保存"""
         try:
-            self.settings.set('monitored_folder', self.monitored_folder)
-            self.settings.set('completed_folder', self.completed_folder)
-            self.settings.set('monitor_interval', self.monitor_interval_spinbox.value())
-            self.settings.set('auto_move_completed', self.auto_move_completed)
-            self.settings.set('enable_diarization', self.enable_diarization_check.isChecked())
+            self.settings.set("monitored_folder", self.monitored_folder)
+            self.settings.set("completed_folder", self.completed_folder)
+            self.settings.set("monitor_interval", self.monitor_interval_spinbox.value())
+            self.settings.set("auto_move_completed", self.auto_move_completed)
+            self.settings.set("enable_diarization", self.enable_diarization_check.isChecked())
 
-            self.settings.set('window.width', self.width())
-            self.settings.set('window.height', self.height())
-            self.settings.set('window.x', self.x())
-            self.settings.set('window.y', self.y())
+            self.settings.set("window.width", self.width())
+            self.settings.set("window.height", self.height())
+            self.settings.set("window.x", self.x())
+            self.settings.set("window.y", self.y())
 
             self.settings.save_immediate()
             logger.info("UI settings saved successfully")
@@ -908,10 +903,8 @@ class MonitorWindow(QMainWindow):
         """アプリケーション終了"""
         self.save_ui_settings()
 
-        stop_worker(self.batch_worker, "batch worker",
-                    timeout=SharedConstants.BATCH_WAIT_TIMEOUT, cancel=True)
-        stop_worker(self.folder_monitor, "folder monitor",
-                    timeout=SharedConstants.MONITOR_WAIT_TIMEOUT, stop=True)
+        stop_worker(self.batch_worker, "batch worker", timeout=SharedConstants.BATCH_WAIT_TIMEOUT, cancel=True)
+        stop_worker(self.folder_monitor, "folder monitor", timeout=SharedConstants.MONITOR_WAIT_TIMEOUT, stop=True)
 
         self.tray_icon.hide()
 
@@ -923,7 +916,7 @@ def main():
     """メイン関数"""
     # 多重起動防止
     ERROR_ALREADY_EXISTS = 183
-    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     mutex_name = "Local\\KotobaTranscriber_Monitor_Mutex"
     mutex = kernel32.CreateMutexW(None, False, mutex_name)
     last_error = ctypes.get_last_error()
@@ -934,13 +927,13 @@ def main():
         QMessageBox.warning(
             None,
             "多重起動エラー",
-            "KotobaTranscriber Monitorは既に起動しています。\n\nシステムトレイにアイコンがある場合は、そちらをクリックしてウィンドウを表示してください。"
+            "KotobaTranscriber Monitorは既に起動しています。\n\nシステムトレイにアイコンがある場合は、そちらをクリックしてウィンドウを表示してください。",
         )
         kernel32.CloseHandle(mutex)
         return
 
     app = QApplication(sys.argv)
-    app.setStyle('Fusion')
+    app.setStyle("Fusion")
 
     # トレイに最小化できるよう、最後のウィンドウが閉じてもアプリを終了しない
     app.setQuitOnLastWindowClosed(False)

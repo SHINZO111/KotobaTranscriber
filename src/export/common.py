@@ -8,7 +8,7 @@ import re
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ExportOptions:
     """エクスポートオプション"""
+
     include_timestamps: bool = True
     include_speaker_labels: bool = True
     merge_short_segments: bool = False
@@ -35,7 +36,7 @@ def atomic_save(output_path: str):
         with atomic_save(output_path) as tmp_path:
             doc.save(tmp_path)  # or wb.save(tmp_path)
     """
-    output_dir = os.path.dirname(output_path) or '.'
+    output_dir = os.path.dirname(output_path) or "."
     tmp_fd, tmp_path = tempfile.mkstemp(dir=output_dir)
     os.close(tmp_fd)
     try:
@@ -49,7 +50,7 @@ def atomic_save(output_path: str):
         raise
 
 
-def atomic_write_text(output_path: str, content: str, encoding: str = 'utf-8') -> None:
+def atomic_write_text(output_path: str, content: str, encoding: str = "utf-8") -> None:
     """
     テキストコンテンツをアトミックに書き込む
 
@@ -58,10 +59,10 @@ def atomic_write_text(output_path: str, content: str, encoding: str = 'utf-8') -
         content: 書き込む文字列
         encoding: エンコーディング
     """
-    output_dir = os.path.dirname(output_path) or '.'
+    output_dir = os.path.dirname(output_path) or "."
     tmp_fd, tmp_path = tempfile.mkstemp(dir=output_dir)
     try:
-        with os.fdopen(tmp_fd, 'w', encoding=encoding) as f:
+        with os.fdopen(tmp_fd, "w", encoding=encoding) as f:
             f.write(content)
         os.replace(tmp_path, output_path)
     except BaseException:
@@ -90,8 +91,8 @@ def validate_export_path(output_path: str) -> None:
     if not output_path:
         raise ValueError("Output path cannot be empty")
     # パストラバーサル検出
-    parts = str(output_path).replace('/', os.sep).split(os.sep)
-    if '..' in parts:
+    parts = str(output_path).replace("/", os.sep).split(os.sep)
+    if ".." in parts:
         raise ValueError(f"Path traversal detected: {output_path}")
     parent = os.path.dirname(output_path)
     if parent and not os.path.isdir(parent):
@@ -159,11 +160,7 @@ def merge_short_segments(
         combined_text = current["text"] + " " + seg_text
 
         same_speaker = segment.get("speaker") == current.get("speaker")
-        can_merge = (
-            duration < min_duration
-            and len(combined_text) <= max_chars
-            and same_speaker
-        )
+        can_merge = duration < min_duration and len(combined_text) <= max_chars and same_speaker
 
         if can_merge:
             current["end"] = seg_end
@@ -212,7 +209,7 @@ def split_long_segments(
             continue
 
         # 文で分割
-        sentences = re.split(r'([。！？\.!?])', text)
+        sentences = re.split(r"([。！？\.!?])", text)
         sentences = [s for s in sentences if s]
 
         current_text = ""
@@ -226,21 +223,25 @@ def split_long_segments(
                 current_text += sentence
             else:
                 current_end = current_start + (len(current_text) * time_per_char)
-                result.append({
-                    "start": current_start,
-                    "end": min(current_end, end),
-                    "text": current_text,
-                    "speaker": segment.get("speaker"),
-                })
+                result.append(
+                    {
+                        "start": current_start,
+                        "end": min(current_end, end),
+                        "text": current_text,
+                        "speaker": segment.get("speaker"),
+                    }
+                )
                 current_text = sentence
                 current_start = current_end
 
         if current_text:
-            result.append({
-                "start": current_start,
-                "end": end,
-                "text": current_text,
-                "speaker": segment.get("speaker"),
-            })
+            result.append(
+                {
+                    "start": current_start,
+                    "end": end,
+                    "text": current_text,
+                    "speaker": segment.get("speaker"),
+                }
+            )
 
     return result

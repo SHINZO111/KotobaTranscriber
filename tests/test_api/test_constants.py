@@ -1,7 +1,8 @@
 """constants.py テスト — SharedConstants が workers.py と一致することを確認"""
 
-import sys
 import os
+import sys
+
 import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
@@ -24,10 +25,10 @@ class TestSharedConstants:
 
     def test_supported_extensions(self):
         """サポートする拡張子"""
-        assert '.mp3' in SharedConstants.SUPPORTED_EXTENSIONS
-        assert '.wav' in SharedConstants.SUPPORTED_EXTENSIONS
-        assert '.m4a' in SharedConstants.SUPPORTED_EXTENSIONS
-        assert '.mp4' in SharedConstants.SUPPORTED_EXTENSIONS
+        assert ".mp3" in SharedConstants.SUPPORTED_EXTENSIONS
+        assert ".wav" in SharedConstants.SUPPORTED_EXTENSIONS
+        assert ".m4a" in SharedConstants.SUPPORTED_EXTENSIONS
+        assert ".mp4" in SharedConstants.SUPPORTED_EXTENSIONS
 
     def test_audio_extensions_is_set(self):
         """AUDIO_EXTENSIONS が set であること"""
@@ -52,8 +53,10 @@ class TestSharedConstants:
 
     def test_backward_compat_with_workers(self):
         """workers.py からの SharedConstants インポートが動作すること"""
+        pytest.importorskip("PySide6")
         # workers.py は from constants import SharedConstants を使う
         # 両方のインポートパスで同じクラスが取得できること
         from workers import SharedConstants as WorkersSharedConstants
+
         assert WorkersSharedConstants.PROGRESS_COMPLETE == SharedConstants.PROGRESS_COMPLETE
         assert WorkersSharedConstants.AUDIO_EXTENSIONS == SharedConstants.AUDIO_EXTENSIONS

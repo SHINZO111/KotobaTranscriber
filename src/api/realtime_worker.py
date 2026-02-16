@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # faster-whisper インポート
 try:
     from faster_whisper_engine import FasterWhisperEngine
+
     FASTER_WHISPER_AVAILABLE = True
 except ImportError:
     FASTER_WHISPER_AVAILABLE = False
@@ -26,6 +27,7 @@ except ImportError:
 try:
     import pyaudio
     import webrtcvad
+
     PYAUDIO_AVAILABLE = True
 except ImportError:
     PYAUDIO_AVAILABLE = False
@@ -38,13 +40,15 @@ class RealtimeWorker(threading.Thread):
     EventBus 経由で text_ready / volume_changed / status_changed / error イベントを発行。
     """
 
-    def __init__(self,
-                 model_size: str = "base",
-                 device: str = "auto",
-                 sample_rate: int = 16000,
-                 buffer_duration: float = 3.0,
-                 vad_threshold: float = 0.5,
-                 event_bus: Optional[EventBus] = None):
+    def __init__(
+        self,
+        model_size: str = "base",
+        device: str = "auto",
+        sample_rate: int = 16000,
+        buffer_duration: float = 3.0,
+        vad_threshold: float = 0.5,
+        event_bus: Optional[EventBus] = None,
+    ):
         super().__init__(daemon=True)
 
         self.model_size = model_size
@@ -75,11 +79,7 @@ class RealtimeWorker(threading.Thread):
         """エンジンとオーディオを初期化"""
         try:
             if FASTER_WHISPER_AVAILABLE:
-                self.engine = FasterWhisperEngine(
-                    model_size=self.model_size,
-                    device=self.device,
-                    language="ja"
-                )
+                self.engine = FasterWhisperEngine(model_size=self.model_size, device=self.device, language="ja")
                 self._bus.emit("status_changed", {"status": "モデルをロード中..."})
                 if not self.engine.load_model():
                     self._bus.emit("error", {"message": "モデルのロードに失敗しました"})
@@ -102,13 +102,13 @@ class RealtimeWorker(threading.Thread):
                 try:
                     self.engine.unload_model()
                 except Exception:
-                    pass
+                    pass  # nosec B110 - cleanup in error handler, safe to ignore
                 self.engine = None
             if self.audio is not None:
                 try:
                     self.audio.terminate()
                 except Exception:
-                    pass
+                    pass  # nosec B110 - cleanup in error handler, safe to ignore
                 self.audio = None
             logger.error(f"初期化エラー: {e}", exc_info=True)
             self._bus.emit("error", {"message": "初期化エラーが発生しました"})
@@ -129,7 +129,7 @@ class RealtimeWorker(threading.Thread):
                 channels=1,
                 rate=self.sample_rate,
                 input=True,
-                frames_per_buffer=int(self.sample_rate * 0.03)  # 30ms chunks
+                frames_per_buffer=int(self.sample_rate * 0.03),  # 30ms chunks
             )
 
             while self._running_event.is_set():
@@ -138,10 +138,7 @@ class RealtimeWorker(threading.Thread):
                     continue
 
                 try:
-                    data = self.stream.read(
-                        int(self.sample_rate * 0.03),
-                        exception_on_overflow=False
-                    )
+                    data = self.stream.read(int(self.sample_rate * 0.03), exception_on_overflow=False)
 
                     audio_chunk = np.frombuffer(data, dtype=np.int16)
                     audio_float = audio_chunk.astype(np.float32) / 32768.0
@@ -157,19 +154,19 @@ class RealtimeWorker(threading.Thread):
                         n = len(audio_float)
                         space = self._max_buffer_samples - self._write_pos
                         if n <= space:
-                            self._ring_buffer[self._write_pos:self._write_pos + n] = audio_float
+                            self._ring_buffer[self._write_pos : self._write_pos + n] = audio_float
                             self._write_pos += n
                         else:
                             # バッファが溢れる場合: 古いデータを捨てて末尾のみ保持
                             if n >= self._max_buffer_samples:
                                 # 新データだけでバッファ全体を超える場合
-                                self._ring_buffer[:] = audio_float[-self._max_buffer_samples:]
+                                self._ring_buffer[:] = audio_float[-self._max_buffer_samples :]
                                 self._write_pos = self._max_buffer_samples
                             else:
                                 # 既存データをシフトして新データを追加
                                 keep = self._max_buffer_samples - n
-                                self._ring_buffer[:keep] = self._ring_buffer[self._write_pos - keep:self._write_pos]
-                                self._ring_buffer[keep:keep + n] = audio_float
+                                self._ring_buffer[:keep] = self._ring_buffer[self._write_pos - keep : self._write_pos]
+                                self._ring_buffer[keep : keep + n] = audio_float
                                 self._write_pos = self._max_buffer_samples
 
                     is_speech = self._check_vad(data)
@@ -226,16 +223,11 @@ class RealtimeWorker(threading.Thread):
         with self._buffer_lock:
             if self._write_pos == 0:
                 return
-            audio_data = self._ring_buffer[:self._write_pos].copy()
+            audio_data = self._ring_buffer[: self._write_pos].copy()
             self._write_pos = 0
 
         try:
-            result = self.engine.transcribe(
-                audio_data,
-                sample_rate=self.sample_rate,
-                beam_size=1,
-                temperature=0.0
-            )
+            result = self.engine.transcribe(audio_data, sample_rate=self.sample_rate, beam_size=1, temperature=0.0)
             text = result.get("text", "").strip()
             if text:
                 self._bus.emit("text_ready", {"text": text})

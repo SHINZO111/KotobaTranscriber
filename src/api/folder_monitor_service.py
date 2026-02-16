@@ -3,15 +3,15 @@ Qt-free フォルダ監視サービス
 threading.Thread + EventBus によるフォルダ監視。
 """
 
-import os
-import time
 import logging
+import os
 import tempfile
 import threading
-from typing import List, Set, Optional
+import time
+from typing import List, Optional, Set
 
-from constants import SharedConstants
 from api.event_bus import EventBus, get_event_bus
+from constants import SharedConstants
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +25,7 @@ class FolderMonitorService(threading.Thread):
     AUDIO_EXTENSIONS = SharedConstants.AUDIO_EXTENSIONS
     MAX_PROCESSED_ENTRIES = 50_000
 
-    def __init__(self, folder_path: str, check_interval: int = 10,
-                 event_bus: Optional[EventBus] = None):
+    def __init__(self, folder_path: str, check_interval: int = 10, event_bus: Optional[EventBus] = None):
         super().__init__(daemon=True)
         self.folder_path = folder_path
         self.check_interval = check_interval
@@ -41,7 +40,7 @@ class FolderMonitorService(threading.Thread):
     def load_processed_files(self):
         """処理済みファイルリストを読み込み"""
         try:
-            processed_file_path = os.path.join(self.folder_path, '.processed_files.txt')
+            processed_file_path = os.path.join(self.folder_path, ".processed_files.txt")
             if os.path.exists(processed_file_path):
                 MAX_PROCESSED_SIZE = 50 * 1024 * 1024
                 file_size = os.path.getsize(processed_file_path)
@@ -49,7 +48,7 @@ class FolderMonitorService(threading.Thread):
                     logger.error(f"Processed files list too large: {file_size} bytes")
                     self.processed_files = set()
                     return
-                with open(processed_file_path, 'r', encoding='utf-8') as f:
+                with open(processed_file_path, "r", encoding="utf-8") as f:
                     self.processed_files = set(line.strip() for line in f if line.strip())
                 logger.info(f"Loaded {len(self.processed_files)} processed files")
         except (IOError, OSError, UnicodeDecodeError) as e:
@@ -64,10 +63,10 @@ class FolderMonitorService(threading.Thread):
         try:
             with self._processed_lock:
                 files_copy = sorted(self.processed_files)
-            processed_file_path = os.path.join(self.folder_path, '.processed_files.txt')
-            fd, tmp_path = tempfile.mkstemp(dir=self.folder_path, suffix='.tmp')
+            processed_file_path = os.path.join(self.folder_path, ".processed_files.txt")
+            fd, tmp_path = tempfile.mkstemp(dir=self.folder_path, suffix=".tmp")
             try:
-                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     for file_path in files_copy:
                         f.write(f"{file_path}\n")
                 os.replace(tmp_path, processed_file_path)
@@ -124,16 +123,18 @@ class FolderMonitorService(threading.Thread):
             if os.path.getsize(file_path) == 0:
                 return False
             try:
-                with open(file_path, 'r+b') as f:
-                    if os.name == 'nt':
+                with open(file_path, "r+b") as f:
+                    if os.name == "nt":
                         import msvcrt
+
                         try:
-                            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-                            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+                            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
+                            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
                         except IOError:
                             return False
                     else:
                         import fcntl
+
                         try:
                             fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
@@ -204,9 +205,7 @@ class FolderMonitorService(threading.Thread):
 
             if unprocessed_files:
                 logger.info(f"Initial scan: found {len(unprocessed_files)} unprocessed files")
-                self._bus.emit("status_update", {
-                    "status": f"初回スキャン: {len(unprocessed_files)}個の未処理ファイルを検出"
-                })
+                self._bus.emit("status_update", {"status": f"初回スキャン: {len(unprocessed_files)}個の未処理ファイルを検出"})
                 self._bus.emit("new_files_detected", {"files": unprocessed_files})
             else:
                 logger.info("Initial scan: no unprocessed files found")
@@ -219,9 +218,7 @@ class FolderMonitorService(threading.Thread):
                 unprocessed_files = self.get_unprocessed_files()
                 if unprocessed_files:
                     logger.info(f"Found {len(unprocessed_files)} unprocessed files")
-                    self._bus.emit("status_update", {
-                        "status": f"{len(unprocessed_files)}個の未処理ファイルを検出"
-                    })
+                    self._bus.emit("status_update", {"status": f"{len(unprocessed_files)}個の未処理ファイルを検出"})
                     self._bus.emit("new_files_detected", {"files": unprocessed_files})
 
                 if self._stop_event.wait(timeout=self.check_interval):

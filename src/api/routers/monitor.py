@@ -4,13 +4,13 @@ import asyncio
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, Body, HTTPException
 
-from api.schemas import MonitorRequest, MonitorStatusResponse, MessageResponse
 from api.dependencies import get_worker_state
 from api.event_bus import get_event_bus
 from api.folder_monitor_service import FolderMonitorService
-from validators import Validator, ValidationError
+from api.schemas import MessageResponse, MonitorRequest, MonitorStatusResponse
+from validators import ValidationError, Validator
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -25,7 +25,7 @@ async def start_monitor(req: MonitorRequest):
     # フォルダパスバリデーション
     try:
         Validator.validate_file_path(req.folder_path, must_exist=True)
-    except ValidationError as e:
+    except ValidationError:
         raise HTTPException(status_code=400, detail="フォルダパスが不正です")
 
     state = get_worker_state()
@@ -81,7 +81,7 @@ async def mark_processed(file_path: str = Body(..., embed=True)):
     # パスバリデーション（パストラバーサル防止）
     try:
         Validator.validate_file_path(file_path, must_exist=False)
-    except ValidationError as e:
+    except ValidationError:
         raise HTTPException(status_code=400, detail="ファイルパスが不正です")
 
     state = get_worker_state()

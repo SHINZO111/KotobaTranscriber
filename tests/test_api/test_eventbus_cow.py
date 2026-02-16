@@ -1,8 +1,9 @@
 """EventBus CoWスナップショットのテスト"""
 
 import asyncio
-import sys
 import os
+import sys
+
 import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")

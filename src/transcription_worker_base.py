@@ -7,21 +7,21 @@ Qt版（workers.py）とAPI版（api/workers.py）で共有する文字起こし
 
 import logging
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any
+from typing import Any, Callable, Dict, Optional
 
-from transcription_engine import TranscriptionEngine
-from validators import Validator, ValidationError
 from exceptions import (
+    AudioFormatError,
+    FileProcessingError,
+    InsufficientMemoryError,
     ModelLoadError,
     TranscriptionFailedError,
-    FileProcessingError,
-    AudioFormatError,
-    InsufficientMemoryError,
 )
+from transcription_engine import TranscriptionEngine
+from validators import ValidationError, Validator
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['TranscriptionLogic']
+__all__ = ["TranscriptionLogic"]
 
 
 class TranscriptionLogic:
@@ -99,10 +99,7 @@ class TranscriptionLogic:
             self._notify_progress(100)
 
             # テキストと完全な結果を返す（話者分離用にセグメント情報を保持）
-            return {
-                "text": text,
-                "result": result
-            }
+            return {"text": text, "result": result}
 
         except ValidationError as e:
             logger.error(f"Validation error: {e}", exc_info=True)
@@ -116,15 +113,15 @@ class TranscriptionLogic:
             logger.error(f"Transcription error: {e}", exc_info=True)
             self._notify_error("文字起こし処理中にエラーが発生しました")
             return None
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             logger.error(f"File not found: {self.audio_path}", exc_info=True)
             self._notify_error("ファイルが見つかりません")
             return None
-        except PermissionError as e:
+        except PermissionError:
             logger.error(f"Permission error: {self.audio_path}", exc_info=True)
             self._notify_error("ファイルへのアクセス権限がありません")
             return None
-        except MemoryError as e:
+        except MemoryError:
             logger.error(f"Memory error: {self.audio_path}", exc_info=True)
             self._notify_error("メモリ不足です")
             return None
@@ -151,10 +148,7 @@ class TranscriptionLogic:
         Raises:
             ValidationError: パスが不正な場合
         """
-        return Validator.validate_file_path(
-            self.audio_path,
-            must_exist=True
-        )
+        return Path(Validator.validate_file_path(self.audio_path, must_exist=True))
 
     def _load_model(self, engine: TranscriptionEngine) -> None:
         """
@@ -179,11 +173,7 @@ class TranscriptionLogic:
             logger.error(f"Unexpected model load error: {type(e).__name__} - {e}", exc_info=True)
             raise ModelLoadError(f"予期しないモデルロードエラー: {e}") from e
 
-    def _transcribe_audio(
-        self,
-        engine: TranscriptionEngine,
-        validated_path: Path
-    ) -> Dict[str, Any]:
+    def _transcribe_audio(self, engine: TranscriptionEngine, validated_path: Path) -> Dict[str, Any]:
         """
         音声ファイルを文字起こし
 
@@ -202,10 +192,7 @@ class TranscriptionLogic:
             IOError, OSError: I/Oエラー
             ValueError: 音声フォーマットエラー
         """
-        return engine.transcribe(
-            str(validated_path),
-            return_timestamps=True
-        )
+        return dict(engine.transcribe(str(validated_path), return_timestamps=True))
 
     def _apply_llm_correction(self, text: str) -> str:
         """

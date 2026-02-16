@@ -6,7 +6,7 @@
 import logging
 import threading
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from construction_vocabulary import ConstructionVocabulary, get_construction_vocabulary
 from custom_vocabulary import CustomVocabulary
@@ -44,9 +44,9 @@ class CustomDictionary:
     def _load_from_config(self):
         """設定ファイルから辞書を読み込み"""
         # 建設業用語辞書
-        construction_config = self.config.get('construction_vocabulary', {})
-        if construction_config.get('enabled', True):
-            vocab_file = construction_config.get('file', 'data/construction_dictionary.json')
+        construction_config = self.config.get("construction_vocabulary", {})
+        if construction_config.get("enabled", True):
+            vocab_file = construction_config.get("file", "data/construction_dictionary.json")
             try:
                 self._construction_vocab = get_construction_vocabulary(vocab_file)
                 self._merge_construction_vocabulary(construction_config)
@@ -55,9 +55,9 @@ class CustomDictionary:
                 logger.error(f"Failed to load construction vocabulary: {e}")
 
         # カスタム語彙
-        vocab_config = self.config.get('vocabulary', {})
-        if vocab_config.get('enabled', False):
-            vocab_file = vocab_config.get('file', 'custom_vocabulary.json')
+        vocab_config = self.config.get("vocabulary", {})
+        if vocab_config.get("enabled", False):
+            vocab_file = vocab_config.get("file", "custom_vocabulary.json")
             try:
                 self._custom_vocab = CustomVocabulary(vocab_file)
                 self._merge_custom_vocabulary()
@@ -76,7 +76,7 @@ class CustomDictionary:
             return
 
         # 指定されたカテゴリの用語をマージ
-        enabled_categories = config.get('categories', [])
+        enabled_categories = config.get("categories", [])
 
         if enabled_categories:
             # 特定カテゴリのみ
@@ -142,7 +142,7 @@ class CustomDictionary:
         Returns:
             置換後のテキスト
         """
-        return ConstructionVocabulary.apply_replacements_to_text(text, self.replacements)
+        return str(ConstructionVocabulary.apply_replacements_to_text(text, self.replacements))
 
     def add_term(self, term: str, category: str = "custom"):
         """
@@ -277,10 +277,11 @@ def load_config_from_yaml(yaml_path: str = "config/config.yaml") -> Dict[str, An
         設定辞書
     """
     try:
-        import yaml
-        with open(yaml_path, 'r', encoding='utf-8') as f:
+        import yaml  # type: ignore[import-untyped]
+
+        with open(yaml_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
-        return config
+        return dict(config) if isinstance(config, dict) else {}
     except Exception as e:
         logger.error(f"Failed to load config from {yaml_path}: {e}")
         return {}

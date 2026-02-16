@@ -50,66 +50,57 @@ from typing import Optional
 
 __all__ = [
     # Base exception
-    'KotobaTranscriberError',
-
+    "KotobaTranscriberError",
     # File processing exceptions
-    'FileProcessingError',
-    'AudioFormatError',
-    'AudioTooShortError',
-    'AudioTooLongError',
-
+    "FileProcessingError",
+    "AudioFormatError",
+    "AudioTooShortError",
+    "AudioTooLongError",
     # Transcription exceptions
-    'TranscriptionError',
-    'TranscriptionFailedError',
-    'ModelLoadError',
-    'ModelNotLoadedError',
-
+    "TranscriptionError",
+    "TranscriptionFailedError",
+    "ModelLoadError",
+    "ModelNotLoadedError",
     # Configuration exceptions
-    'ConfigurationError',
-    'InvalidConfigValueError',
-
+    "ConfigurationError",
+    "InvalidConfigValueError",
     # Batch processing exceptions
-    'BatchProcessingError',
-    'BatchCancelledError',
-
+    "BatchProcessingError",
+    "BatchCancelledError",
     # Resource exceptions
-    'ResourceError',
-    'InsufficientMemoryError',
-    'InsufficientDiskSpaceError',
-
+    "ResourceError",
+    "InsufficientMemoryError",
+    "InsufficientDiskSpaceError",
     # Real-time processing exceptions
-    'RealtimeProcessingError',
-    'AudioDeviceError',
-    'AudioCaptureError',
-    'AudioStreamError',
-    'PyAudioInitializationError',
-    'VADError',
-    'InvalidVADThresholdError',
-
+    "RealtimeProcessingError",
+    "AudioDeviceError",
+    "AudioCaptureError",
+    "AudioStreamError",
+    "PyAudioInitializationError",
+    "VADError",
+    "InvalidVADThresholdError",
     # API exceptions
-    'APIError',
-    'APIConnectionError',
-    'APIAuthenticationError',
-    'APIRateLimitError',
-
+    "APIError",
+    "APIConnectionError",
+    "APIAuthenticationError",
+    "APIRateLimitError",
     # Export exceptions
-    'ExportError',
-    'SubtitleExportError',
-
+    "ExportError",
+    "SubtitleExportError",
     # Security exceptions
-    'SecurityError',
-    'PathTraversalError',
-    'UnsafePathError',
-
+    "SecurityError",
+    "PathTraversalError",
+    "UnsafePathError",
     # Utility functions
-    'is_kotoba_error',
-    'get_error_category',
+    "is_kotoba_error",
+    "get_error_category",
 ]
 
 
 # ============================================================================
 # Base Exception
 # ============================================================================
+
 
 class KotobaTranscriberError(Exception):
     """
@@ -130,12 +121,14 @@ class KotobaTranscriberError(Exception):
             # Handle any KotobaTranscriber-specific error
             print(f"Application error: {e}")
     """
+
     pass
 
 
 # ============================================================================
 # ファイル処理関連エラー - File Processing Errors
 # ============================================================================
+
 
 class FileProcessingError(KotobaTranscriberError):
     """
@@ -148,6 +141,7 @@ class FileProcessingError(KotobaTranscriberError):
     Example:
         raise FileProcessingError("Failed to process audio file: corrupted data")
     """
+
     pass
 
 
@@ -165,6 +159,7 @@ class AudioFormatError(FileProcessingError):
     Example:
         raise AudioFormatError(f"Unsupported audio format: {format_name}")
     """
+
     pass
 
 
@@ -183,6 +178,7 @@ class AudioTooShortError(FileProcessingError):
     Example:
         raise AudioTooShortError("Audio too short", duration=1.5, minimum=3.0)
     """
+
     def __init__(self, message: str = "", duration: float = 0.0, minimum: float = 0.0, **kwargs):
         super().__init__(message, **kwargs)
         self.duration = duration
@@ -207,6 +203,7 @@ class AudioTooLongError(FileProcessingError):
     Example:
         raise AudioTooLongError("Audio too long", duration=7200, maximum=3600)
     """
+
     def __init__(self, message: str = "", duration: float = 0.0, maximum: float = 0.0, **kwargs):
         super().__init__(message, **kwargs)
         self.duration = duration
@@ -216,6 +213,7 @@ class AudioTooLongError(FileProcessingError):
 # ============================================================================
 # 文字起こし関連エラー - Transcription Errors
 # ============================================================================
+
 
 class TranscriptionError(KotobaTranscriberError):
     """
@@ -231,6 +229,7 @@ class TranscriptionError(KotobaTranscriberError):
     Example:
         raise TranscriptionError("Transcription process encountered an error")
     """
+
     pass
 
 
@@ -267,6 +266,7 @@ class ModelLoadError(TranscriptionError):
     Example:
         raise ModelLoadError(f"Failed to load model {model_name}: {error_message}")
     """
+
     pass
 
 
@@ -281,12 +281,14 @@ class ModelNotLoadedError(TranscriptionError):
     Example:
         raise ModelNotLoadedError("Model must be loaded before transcription. Call load_model() first.")
     """
+
     pass
 
 
 # ============================================================================
 # 設定関連エラー - Configuration Errors
 # ============================================================================
+
 
 class ConfigurationError(KotobaTranscriberError):
     """
@@ -299,6 +301,7 @@ class ConfigurationError(KotobaTranscriberError):
     Example:
         raise ConfigurationError("Failed to load configuration file")
     """
+
     pass
 
 
@@ -318,12 +321,14 @@ class InvalidConfigValueError(ConfigurationError):
     Example:
         raise InvalidConfigValueError(f"Invalid value for '{key}': {value}. Expected: {expected}")
     """
+
     pass
 
 
 # ============================================================================
 # バッチ処理関連エラー - Batch Processing Errors
 # ============================================================================
+
 
 class BatchProcessingError(KotobaTranscriberError):
     """
@@ -336,6 +341,7 @@ class BatchProcessingError(KotobaTranscriberError):
     Example:
         raise BatchProcessingError("Batch processing failed after 5 files")
     """
+
     pass
 
 
@@ -354,12 +360,14 @@ class BatchCancelledError(BatchProcessingError):
     Example:
         raise BatchCancelledError(f"Batch cancelled: {processed_count}/{total_count} files processed")
     """
+
     pass
 
 
 # ============================================================================
 # リソース関連エラー - Resource Errors
 # ============================================================================
+
 
 class ResourceError(KotobaTranscriberError):
     """
@@ -372,6 +380,7 @@ class ResourceError(KotobaTranscriberError):
     Example:
         raise ResourceError("Insufficient system resources")
     """
+
     pass
 
 
@@ -415,12 +424,14 @@ class InsufficientDiskSpaceError(ResourceError):
     Example:
         raise InsufficientDiskSpaceError(f"Need {required_mb}MB but only {available_mb}MB free on {path}")
     """
+
     pass
 
 
 # ============================================================================
 # リアルタイム処理関連エラー - Real-time Processing Errors
 # ============================================================================
+
 
 class RealtimeProcessingError(KotobaTranscriberError):
     """
@@ -433,6 +444,7 @@ class RealtimeProcessingError(KotobaTranscriberError):
     Example:
         raise RealtimeProcessingError("Real-time processing interrupted")
     """
+
     pass
 
 
@@ -474,6 +486,7 @@ class AudioCaptureError(RealtimeProcessingError):
     Example:
         raise AudioCaptureError("Failed to capture audio: permission denied")
     """
+
     pass
 
 
@@ -536,6 +549,7 @@ class VADError(RealtimeProcessingError):
     Example:
         raise VADError("VAD processing failed")
     """
+
     pass
 
 
@@ -558,15 +572,13 @@ class InvalidVADThresholdError(VADError):
     def __init__(self, threshold: float, valid_range: tuple):
         self.threshold = threshold
         self.valid_range = valid_range
-        super().__init__(
-            f"Invalid VAD threshold: {threshold} "
-            f"(valid range: {valid_range[0]} ~ {valid_range[1]})"
-        )
+        super().__init__(f"Invalid VAD threshold: {threshold} " f"(valid range: {valid_range[0]} ~ {valid_range[1]})")
 
 
 # ============================================================================
 # API関連エラー - API Errors
 # ============================================================================
+
 
 class APIError(KotobaTranscriberError):
     """
@@ -580,6 +592,7 @@ class APIError(KotobaTranscriberError):
     Example:
         raise APIError("API call failed: unexpected response")
     """
+
     pass
 
 
@@ -597,6 +610,7 @@ class APIConnectionError(APIError):
     Example:
         raise APIConnectionError("Connection to Claude API timed out")
     """
+
     pass
 
 
@@ -611,6 +625,7 @@ class APIAuthenticationError(APIError):
     Example:
         raise APIAuthenticationError("Invalid API key for OpenAI")
     """
+
     pass
 
 
@@ -625,12 +640,14 @@ class APIRateLimitError(APIError):
     Example:
         raise APIRateLimitError("Rate limit exceeded, retry after 60 seconds")
     """
+
     pass
 
 
 # ============================================================================
 # エクスポート関連エラー - Export Errors
 # ============================================================================
+
 
 class ExportError(KotobaTranscriberError):
     """
@@ -643,6 +660,7 @@ class ExportError(KotobaTranscriberError):
     Example:
         raise ExportError("Failed to export file")
     """
+
     pass
 
 
@@ -657,12 +675,14 @@ class SubtitleExportError(ExportError):
     Example:
         raise SubtitleExportError("Failed to export SRT file: permission denied")
     """
+
     pass
 
 
 # ============================================================================
 # セキュリティ関連エラー - Security Errors
 # ============================================================================
+
 
 class SecurityError(KotobaTranscriberError):
     """
@@ -675,6 +695,7 @@ class SecurityError(KotobaTranscriberError):
     Example:
         raise SecurityError("Security violation detected")
     """
+
     pass
 
 
@@ -692,6 +713,7 @@ class PathTraversalError(SecurityError):
     Example:
         raise PathTraversalError(f"Path traversal detected: {attempted_path}")
     """
+
     pass
 
 
@@ -710,12 +732,14 @@ class UnsafePathError(SecurityError):
     Example:
         raise UnsafePathError(f"Unsafe path '{path}': {reason}")
     """
+
     pass
 
 
 # ============================================================================
 # Utility Functions for Exception Handling
 # ============================================================================
+
 
 def is_kotoba_error(exception: Exception) -> bool:
     """
@@ -784,7 +808,7 @@ def get_error_category(exception: Exception) -> str:
 # Test Code
 # ============================================================================
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # noqa: C901
     """例外クラスのテストコード - Test code for exception classes"""
 
     print("=" * 70)

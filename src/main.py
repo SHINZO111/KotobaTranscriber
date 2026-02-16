@@ -4,43 +4,55 @@ KotobaTranscriber - メインアプリケーション
 フォルダ監視機能は monitor_app.py を参照
 """
 
-import sys
-import os
 import ctypes
 import ctypes.wintypes
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QPushButton, QFileDialog, QLabel, QProgressBar, QMessageBox,
-    QCheckBox, QGroupBox, QListWidget, QDialog, QSizePolicy
-)
-from PySide6.QtCore import Qt, QSize, Slot
-from PySide6.QtGui import QIcon, QFont
 import logging
+import os
+import sys
 import threading
 
-from text_formatter import TextFormatter
-from llm_corrector_standalone import StandaloneLLMCorrector
+from PySide6.QtCore import QSize, Qt, Slot
+from PySide6.QtGui import QFont, QIcon
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
 from app_settings import AppSettings
 from config_manager import get_config
 from dark_theme import set_theme
-from validators import Validator, ValidationError
+from llm_corrector_standalone import StandaloneLLMCorrector
+from text_formatter import TextFormatter
+from validators import ValidationError, Validator
 from workers import (
-    TranscriptionWorker,
     BatchTranscriptionWorker,
     SharedConstants,
+    TranscriptionWorker,
     stop_worker,
 )
 
 # ロギング設定（インポートの前に初期化）
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # オプション: カスタム語彙管理
 try:
     from vocabulary_dialog import VocabularyDialog
+
     VOCABULARY_DIALOG_AVAILABLE = True
 except ImportError:
     VOCABULARY_DIALOG_AVAILABLE = False
@@ -50,6 +62,7 @@ except ImportError:
 # UI定数の定義（メインアプリ固有）
 class UIConstants(SharedConstants):
     """メインアプリ固有のUI定数"""
+
     # スライダー範囲
     VAD_SLIDER_MIN = 5
     VAD_SLIDER_MAX = 50
@@ -101,6 +114,7 @@ class MainWindow(QMainWindow):
         """
         try:
             import torch
+
             if torch.cuda.is_available():
                 return f"GPU: {torch.cuda.get_device_name(0)}"
             return "CPU"
@@ -113,7 +127,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"KotobaTranscriber [{device_label}]")
 
         # アイコン設定
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'icon.ico')
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon.ico")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
@@ -207,7 +221,9 @@ class MainWindow(QMainWindow):
         # AI補正（フルスパン）
         self.enable_llm_correction_check = QCheckBox("高度AI補正（句読点・段落・誤字を自動補正）")
         self.enable_llm_correction_check.setChecked(True)
-        self.enable_llm_correction_check.setToolTip("rinna/japanese-gpt2-mediumによる高度な文章補正（初回のみ310MBダウンロード）")
+        self.enable_llm_correction_check.setToolTip(
+            "rinna/japanese-gpt2-mediumによる高度な文章補正（初回のみ310MBダウンロード）"
+        )
         format_layout.addWidget(self.enable_llm_correction_check, 2, 0, 1, 2)
 
         # 語彙管理ボタン
@@ -252,12 +268,7 @@ class MainWindow(QMainWindow):
 
     def select_file(self):
         """音声ファイル選択"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "音声ファイルを選択",
-            "",
-            UIConstants.AUDIO_FILE_FILTER
-        )
+        file_path, _ = QFileDialog.getOpenFileName(self, "音声ファイルを選択", "", UIConstants.AUDIO_FILE_FILTER)
 
         if file_path:
             self.selected_file = file_path
@@ -276,7 +287,7 @@ class MainWindow(QMainWindow):
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
         else:
-            has_file = bool(self.selected_file) or bool(getattr(self, 'batch_files', None))
+            has_file = bool(self.selected_file) or bool(getattr(self, "batch_files", None))
             self.transcribe_button.setEnabled(has_file)
             self.file_button.setEnabled(True)
             self.batch_file_button.setEnabled(True)
@@ -324,7 +335,7 @@ class MainWindow(QMainWindow):
                 remove_fillers=self.remove_fillers_check.isChecked(),
                 add_punctuation=not use_llm,
                 format_paragraphs=not use_llm,
-                clean_repeated=True
+                clean_repeated=True,
             )
         except Exception as e:
             logger.warning(f"Text formatting failed, using raw text: {e}")
@@ -353,20 +364,16 @@ class MainWindow(QMainWindow):
                 corrected = self.advanced_corrector.correct_text(text)
                 logger.info("Advanced LLM correction completed")
                 # メインスレッドでUI更新
-                from PySide6.QtCore import QMetaObject, Q_ARG
+                from PySide6.QtCore import Q_ARG, QMetaObject
+
                 QMetaObject.invokeMethod(
-                    self, "_on_correction_done",
-                    Qt.ConnectionType.QueuedConnection,
-                    Q_ARG(str, corrected)
+                    self, "_on_correction_done", Qt.ConnectionType.QueuedConnection, Q_ARG(str, corrected)
                 )
             except Exception as e:
                 logger.error(f"LLM correction failed: {e}")
-                from PySide6.QtCore import QMetaObject, Q_ARG
-                QMetaObject.invokeMethod(
-                    self, "_on_correction_failed",
-                    Qt.ConnectionType.QueuedConnection,
-                    Q_ARG(str, str(e))
-                )
+                from PySide6.QtCore import Q_ARG, QMetaObject
+
+                QMetaObject.invokeMethod(self, "_on_correction_failed", Qt.ConnectionType.QueuedConnection, Q_ARG(str, str(e)))
 
         threading.Thread(target=_correct, daemon=True).start()
 
@@ -378,12 +385,8 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _on_correction_failed(self, error_msg):
         """LLM補正失敗 — フォールバックテキストで完了"""
-        QMessageBox.warning(
-            self,
-            "警告",
-            f"AI補正に失敗しました: {error_msg}\n元のテキストを使用します。"
-        )
-        fallback = getattr(self, '_llm_fallback_text', '')
+        QMessageBox.warning(self, "警告", f"AI補正に失敗しました: {error_msg}\n元のテキストを使用します。")
+        fallback = getattr(self, "_llm_fallback_text", "")
         self._finalize_transcription(fallback)
 
     def _finalize_transcription(self, formatted_text):
@@ -414,11 +417,7 @@ class MainWindow(QMainWindow):
                 output_file = f"{base_name}_文字起こし.txt"
 
                 try:
-                    validated_path = Validator.validate_file_path(
-                        output_file,
-                        allowed_extensions=[".txt"],
-                        must_exist=False
-                    )
+                    validated_path = Validator.validate_file_path(output_file, allowed_extensions=[".txt"], must_exist=False)
 
                     original_dir = os.path.realpath(os.path.dirname(self.selected_file))
                     real_save_path = os.path.realpath(str(validated_path))
@@ -427,7 +426,7 @@ class MainWindow(QMainWindow):
                     if not (real_save_dir + os.sep).startswith(original_dir + os.sep):
                         raise ValidationError(f"Path traversal detected: {output_file}")
 
-                    with open(str(validated_path), 'w', encoding='utf-8') as f:
+                    with open(str(validated_path), "w", encoding="utf-8") as f:
                         f.write(text)
 
                     logger.info(f"Auto-saved transcription to: {validated_path}")
@@ -443,12 +442,7 @@ class MainWindow(QMainWindow):
 
     def select_batch_files(self):
         """複数ファイル選択"""
-        file_paths, _ = QFileDialog.getOpenFileNames(
-            self,
-            "複数の音声ファイルを選択",
-            "",
-            UIConstants.AUDIO_FILE_FILTER
-        )
+        file_paths, _ = QFileDialog.getOpenFileNames(self, "複数の音声ファイルを選択", "", UIConstants.AUDIO_FILE_FILTER)
 
         if file_paths:
             self.batch_files = file_paths
@@ -489,10 +483,7 @@ class MainWindow(QMainWindow):
         enable_diarization = self.enable_diarization_check.isChecked()
 
         self.batch_worker = BatchTranscriptionWorker(
-            self.batch_files,
-            enable_diarization=enable_diarization,
-            formatter=self.formatter,
-            use_llm_correction=False
+            self.batch_files, enable_diarization=enable_diarization, formatter=self.formatter, use_llm_correction=False
         )
 
         self.batch_worker.progress.connect(self.update_batch_progress)
@@ -523,11 +514,11 @@ class MainWindow(QMainWindow):
 
         self._set_processing_ui(False)
 
-        result_message = f"バッチ処理完了!\n\n"
+        result_message = "バッチ処理完了!\n\n"
         result_message += f"総ファイル数: {total}\n"
         result_message += f"成功: {success_count}\n"
         result_message += f"失敗: {failed_count}\n\n"
-        result_message += f"各ファイルは元のファイルと同じフォルダに保存されています。"
+        result_message += "各ファイルは元のファイルと同じフォルダに保存されています。"
 
         self.statusBar().showMessage(f"バッチ処理完了: {success_count}成功, {failed_count}失敗")
         QMessageBox.information(self, "完了", result_message)
@@ -538,10 +529,8 @@ class MainWindow(QMainWindow):
         """アプリケーション終了"""
         self.save_ui_settings()
 
-        stop_worker(self.worker, "transcription worker",
-                    timeout=UIConstants.THREAD_WAIT_TIMEOUT, cancel=True)
-        stop_worker(self.batch_worker, "batch worker",
-                    timeout=UIConstants.BATCH_WAIT_TIMEOUT, cancel=True)
+        stop_worker(self.worker, "transcription worker", timeout=UIConstants.THREAD_WAIT_TIMEOUT, cancel=True)
+        stop_worker(self.batch_worker, "batch worker", timeout=UIConstants.BATCH_WAIT_TIMEOUT, cancel=True)
 
         # LLMモデルの解放
         if self.advanced_corrector is not None:
@@ -563,9 +552,7 @@ class MainWindow(QMainWindow):
         """カスタム語彙管理ダイアログを開く"""
         if not VOCABULARY_DIALOG_AVAILABLE:
             QMessageBox.warning(
-                self,
-                "利用不可",
-                "カスタム語彙管理機能が利用できません。\nvocabulary_dialog.pyを確認してください。"
+                self, "利用不可", "カスタム語彙管理機能が利用できません。\nvocabulary_dialog.pyを確認してください。"
             )
             return
 
@@ -578,11 +565,7 @@ class MainWindow(QMainWindow):
                 logger.info("Vocabulary dialog: cancelled")
         except Exception as e:
             logger.error(f"Failed to open vocabulary dialog: {e}")
-            QMessageBox.critical(
-                self,
-                "エラー",
-                f"語彙管理ダイアログを開けませんでした:\n{str(e)}"
-            )
+            QMessageBox.critical(self, "エラー", f"語彙管理ダイアログを開けませんでした:\n{str(e)}")
 
     def connect_config_sync(self):
         """チェックボックスとconfig_managerの同期を設定"""
@@ -600,10 +583,10 @@ class MainWindow(QMainWindow):
         """UI設定を復元（検証付き）"""
         try:
             # ウィンドウジオメトリを検証して復元
-            width = self.settings.get('window.width', 480)
-            height = self.settings.get('window.height', 520)
-            x = self.settings.get('window.x', 100)
-            y = self.settings.get('window.y', 100)
+            width = self.settings.get("window.width", 480)
+            height = self.settings.get("window.height", 520)
+            x = self.settings.get("window.x", 100)
+            y = self.settings.get("window.y", 100)
 
             # 範囲検証
             width = max(UIConstants.WINDOW_MIN_WIDTH, min(UIConstants.WINDOW_MAX_WIDTH, width))
@@ -624,23 +607,13 @@ class MainWindow(QMainWindow):
             logger.info(f"Window geometry restored: {width}x{height} at ({x}, {y})")
 
             # テキスト整形オプションを復元
-            self.remove_fillers_check.setChecked(
-                bool(self.settings.get('remove_fillers', True))
-            )
-            self.enable_diarization_check.setChecked(
-                bool(self.settings.get('enable_diarization', False))
-            )
-            self.enable_llm_correction_check.setChecked(
-                bool(self.settings.get('enable_llm_correction', True))
-            )
+            self.remove_fillers_check.setChecked(bool(self.settings.get("remove_fillers", True)))
+            self.enable_diarization_check.setChecked(bool(self.settings.get("enable_diarization", False)))
+            self.enable_llm_correction_check.setChecked(bool(self.settings.get("enable_llm_correction", True)))
 
             # 精度向上設定を復元
-            self.enable_preprocessing_check.setChecked(
-                bool(self.settings.get('enable_preprocessing', False))
-            )
-            self.enable_vocabulary_check.setChecked(
-                bool(self.settings.get('enable_vocabulary', False))
-            )
+            self.enable_preprocessing_check.setChecked(bool(self.settings.get("enable_preprocessing", False)))
+            self.enable_vocabulary_check.setChecked(bool(self.settings.get("enable_vocabulary", False)))
 
             logger.info("UI settings restored successfully")
 
@@ -652,19 +625,19 @@ class MainWindow(QMainWindow):
         """UI設定を保存"""
         try:
             # テキスト整形オプションを保存
-            self.settings.set('remove_fillers', self.remove_fillers_check.isChecked())
-            self.settings.set('enable_diarization', self.enable_diarization_check.isChecked())
-            self.settings.set('enable_llm_correction', self.enable_llm_correction_check.isChecked())
+            self.settings.set("remove_fillers", self.remove_fillers_check.isChecked())
+            self.settings.set("enable_diarization", self.enable_diarization_check.isChecked())
+            self.settings.set("enable_llm_correction", self.enable_llm_correction_check.isChecked())
 
             # 精度向上設定を保存
-            self.settings.set('enable_preprocessing', self.enable_preprocessing_check.isChecked())
-            self.settings.set('enable_vocabulary', self.enable_vocabulary_check.isChecked())
+            self.settings.set("enable_preprocessing", self.enable_preprocessing_check.isChecked())
+            self.settings.set("enable_vocabulary", self.enable_vocabulary_check.isChecked())
 
             # ウィンドウサイズ・位置を保存
-            self.settings.set('window.width', self.width())
-            self.settings.set('window.height', self.height())
-            self.settings.set('window.x', self.x())
-            self.settings.set('window.y', self.y())
+            self.settings.set("window.width", self.width())
+            self.settings.set("window.height", self.height())
+            self.settings.set("window.x", self.x())
+            self.settings.set("window.y", self.y())
 
             # 即座にファイルに保存（アプリ終了時なので）
             self.settings.save_immediate()
@@ -678,7 +651,7 @@ def main():
     """メイン関数"""
     # 多重起動防止（ctypesで確実にGetLastErrorを取得）
     ERROR_ALREADY_EXISTS = 183
-    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     mutex_name = "Local\\KotobaTranscriber_Main_Mutex"
     mutex = kernel32.CreateMutexW(None, False, mutex_name)
     last_error = ctypes.get_last_error()
@@ -686,21 +659,17 @@ def main():
     if last_error == ERROR_ALREADY_EXISTS:
         logger.warning("Application is already running")
         QApplication(sys.argv)
-        QMessageBox.warning(
-            None,
-            "多重起動エラー",
-            "KotobaTranscriberは既に起動しています。"
-        )
+        QMessageBox.warning(None, "多重起動エラー", "KotobaTranscriberは既に起動しています。")
         kernel32.CloseHandle(mutex)
         return
 
     app = QApplication(sys.argv)
-    app.setStyle('Fusion')
+    app.setStyle("Fusion")
 
     # ダークモード設定を読み込み適用
     _settings = AppSettings()
     _settings.load()
-    dark_mode = bool(_settings.get('dark_mode', False))
+    dark_mode = bool(_settings.get("dark_mode", False))
     set_theme(app, dark_mode=dark_mode)
 
     window = MainWindow()

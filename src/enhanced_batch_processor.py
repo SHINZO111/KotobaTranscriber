@@ -3,20 +3,22 @@
 100ファイル以上対応・チェックポイント機能・動的ワーカー調整
 """
 
-import os
 import json
 import logging
+import os
 import time
+
 try:
     import psutil
+
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
-from typing import List, Dict, Any, Optional, Callable
-from pathlib import Path
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +42,14 @@ class CheckpointManager:
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoint_file = self.checkpoint_dir / self.CHECKPOINT_FILE
 
-    def save(self,
-             batch_id: str,
-             processed_files: List[str],
-             failed_files: List[Dict],
-             remaining_files: List[str],
-             stats: Dict[str, Any]) -> bool:
+    def save(
+        self,
+        batch_id: str,
+        processed_files: List[str],
+        failed_files: List[Dict],
+        remaining_files: List[str],
+        stats: Dict[str, Any],
+    ) -> bool:
         """
         チェックポイントを保存
 
@@ -66,12 +70,12 @@ class CheckpointManager:
                 "processed_files": processed_files,
                 "failed_files": failed_files,
                 "remaining_files": remaining_files,
-                "stats": stats
+                "stats": stats,
             }
 
             # 一時ファイルに書き込んでからリネーム（アトミック操作）
-            temp_file = self.checkpoint_file.with_suffix('.tmp')
-            with open(temp_file, 'w', encoding='utf-8') as f:
+            temp_file = self.checkpoint_file.with_suffix(".tmp")
+            with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(checkpoint, f, ensure_ascii=False, indent=2)
 
             temp_file.replace(self.checkpoint_file)
@@ -106,7 +110,7 @@ class CheckpointManager:
                 logger.error(f"Checkpoint file too large: {file_size} bytes (max: {self.MAX_CHECKPOINT_SIZE})")
                 return None
 
-            with open(self.checkpoint_file, 'r', encoding='utf-8') as f:
+            with open(self.checkpoint_file, "r", encoding="utf-8") as f:
                 checkpoint = json.load(f)
 
             # スキーマ検証
@@ -120,7 +124,7 @@ class CheckpointManager:
                 return None
 
             logger.info(f"Checkpoint loaded: {len(checkpoint.get('processed_files', []))} files processed")
-            return checkpoint
+            return dict(checkpoint)
 
         except Exception as e:
             logger.error(f"Failed to load checkpoint: {e}")
@@ -198,7 +202,7 @@ class CheckpointManager:
             "processed_count": len(checkpoint.get("processed_files", [])),
             "failed_count": len(checkpoint.get("failed_files", [])),
             "remaining_count": len(remaining),
-            "remaining_files": remaining
+            "remaining_files": remaining,
         }
 
 
@@ -214,12 +218,14 @@ class EnhancedBatchProcessor:
     # バッチサイズ計算用の乗数（ワーカー数 × この値）
     BATCH_SIZE_MULTIPLIER = 2
 
-    def __init__(self,
-                 max_workers: int = 1,  # FIXED: TranscriptionEngine is not thread-safe
-                 auto_adjust_workers: bool = False,  # FIXED: Disable auto-adjustment
-                 enable_checkpoint: bool = True,
-                 memory_limit_mb: int = 4096,
-                 checkpoint_interval: int = 10):
+    def __init__(
+        self,
+        max_workers: int = 1,  # FIXED: TranscriptionEngine is not thread-safe
+        auto_adjust_workers: bool = False,  # FIXED: Disable auto-adjustment
+        enable_checkpoint: bool = True,
+        memory_limit_mb: int = 4096,
+        checkpoint_interval: int = 10,
+    ):
         """
         初期化
 
@@ -246,7 +252,7 @@ class EnhancedBatchProcessor:
         self.remaining_files: List[str] = []
         self._remaining_set: set = set()  # O(1) membership test 用
         self.is_running = False
-        self._pause_event = threading.Event()   # スレッドセーフな一時停止フラグ
+        self._pause_event = threading.Event()  # スレッドセーフな一時停止フラグ
         self._cancel_event = threading.Event()  # スレッドセーフなキャンセルフラグ
 
         # ロック
@@ -261,16 +267,18 @@ class EnhancedBatchProcessor:
             "elapsed_time": 0,
             "estimated_remaining": 0,
             "current_workers": max_workers,
-            "memory_usage_mb": 0
+            "memory_usage_mb": 0,
         }
 
         logger.info(f"EnhancedBatchProcessor initialized: workers={max_workers}, checkpoint={enable_checkpoint}")
 
-    def process_files(self,
-                     file_paths: List[str],
-                     processor_func: Callable[[str], Dict[str, Any]],
-                     progress_callback: Optional[Callable[[Dict], None]] = None,
-                     batch_id: Optional[str] = None) -> Dict[str, Any]:
+    def process_files(
+        self,
+        file_paths: List[str],
+        processor_func: Callable[[str], Dict[str, Any]],
+        progress_callback: Optional[Callable[[Dict], None]] = None,
+        batch_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         ファイルをバッチ処理
 
@@ -287,7 +295,7 @@ class EnhancedBatchProcessor:
             self.is_running = True
             self._cancel_event.clear()
             self._pause_event.clear()
-            self.stats["start_time"] = time.time()
+            self.stats["start_time"] = int(time.time())
             self.stats["total_files"] = len(file_paths)
 
             # チェックポイントから再開
@@ -345,13 +353,13 @@ class EnhancedBatchProcessor:
                             self.enable_checkpoint = False
 
             # 完了
-            self.stats["elapsed_time"] = time.time() - self.stats["start_time"]
+            self.stats["elapsed_time"] = int(time.time() - self.stats["start_time"])
 
             return {
                 "success": not self._cancel_event.is_set(),
                 "processed_files": self.processed_files,
                 "failed_files": self.failed_files,
-                "stats": self.stats.copy()
+                "stats": self.stats.copy(),
             }
 
         except Exception as e:
@@ -364,11 +372,7 @@ class EnhancedBatchProcessor:
         finally:
             self.is_running = False
 
-    def _process_batch(self,
-                      batch: List[str],
-                      processor_func: Callable,
-                      progress_callback: Optional[Callable],
-                      batch_id: str):
+    def _process_batch(self, batch: List[str], processor_func: Callable, progress_callback: Optional[Callable], batch_id: str):
         """
         バッチを並列処理
 
@@ -380,8 +384,7 @@ class EnhancedBatchProcessor:
         """
         with ThreadPoolExecutor(max_workers=self.current_workers) as executor:
             future_to_file = {
-                executor.submit(self._process_single_file, file_path, processor_func): file_path
-                for file_path in batch
+                executor.submit(self._process_single_file, file_path, processor_func): file_path for file_path in batch
             }
 
             for future in as_completed(future_to_file):
@@ -391,7 +394,7 @@ class EnhancedBatchProcessor:
                 file_path = future_to_file[future]
 
                 try:
-                    result = future.result()
+                    future.result()
                     with self._lock:
                         self.processed_files.append(file_path)
                         if file_path in self._remaining_set:
@@ -401,11 +404,7 @@ class EnhancedBatchProcessor:
 
                 except Exception as e:
                     with self._lock:
-                        self.failed_files.append({
-                            "file": file_path,
-                            "error": str(e),
-                            "timestamp": datetime.now().isoformat()
-                        })
+                        self.failed_files.append({"file": file_path, "error": str(e), "timestamp": datetime.now().isoformat()})
                         if file_path in self._remaining_set:
                             self._remaining_set.discard(file_path)
                             self.remaining_files.remove(file_path)
@@ -416,9 +415,7 @@ class EnhancedBatchProcessor:
                     self._update_stats()
                     progress_callback(self.stats.copy())
 
-    def _process_single_file(self,
-                            file_path: str,
-                            processor_func: Callable) -> Dict[str, Any]:
+    def _process_single_file(self, file_path: str, processor_func: Callable) -> Dict[str, Any]:
         """
         単一ファイルを処理
 
@@ -434,12 +431,7 @@ class EnhancedBatchProcessor:
         try:
             result = processor_func(file_path)
 
-            return {
-                "file": file_path,
-                "result": result,
-                "processing_time": time.time() - start_time,
-                "success": True
-            }
+            return {"file": file_path, "result": result, "processing_time": time.time() - start_time, "success": True}
 
         except Exception as e:
             logger.error(f"Failed to process {file_path}: {e}")
@@ -455,13 +447,15 @@ class EnhancedBatchProcessor:
             self.stats["memory_usage_mb"] = int(memory_mb)
 
             cpu_percent = psutil.cpu_percent(interval=0.1)
-            cpu_count = psutil.cpu_count()
+            _cpu_count = psutil.cpu_count()  # noqa: F841
 
             # メモリが80%を超えたらワーカーを減らす
             if memory_mb > self.memory_limit_mb * 0.8:
                 new_workers = max(1, self.current_workers - 1)
                 if new_workers != self.current_workers:
-                    logger.warning(f"Memory high ({memory_mb:.0f}MB), reducing workers: {self.current_workers} -> {new_workers}")
+                    logger.warning(
+                        f"Memory high ({memory_mb:.0f}MB), reducing workers: {self.current_workers} -> {new_workers}"
+                    )
                     self.current_workers = new_workers
 
             # CPU使用率が低く、メモリに余裕があればワーカーを増やす
@@ -500,7 +494,7 @@ class EnhancedBatchProcessor:
             processed_files=self.processed_files.copy(),
             failed_files=self.failed_files.copy(),
             remaining_files=self.remaining_files.copy(),
-            stats=self.stats.copy()
+            stats=self.stats.copy(),
         )
 
     def cancel(self):
@@ -530,14 +524,14 @@ class EnhancedBatchProcessor:
 
             total = self.stats["total_files"]
             processed = self.stats["processed_count"]
-            failed = self.stats["failed_count"]
+            _failed = self.stats["failed_count"]  # noqa: F841
 
             return {
                 **self.stats,
                 "progress_percent": (processed / total * 100) if total > 0 else 0,
                 "remaining_files": len(self.remaining_files),
                 "is_running": self.is_running,
-                "is_paused": self._pause_event.is_set()
+                "is_paused": self._pause_event.is_set(),
             }
 
 
@@ -568,10 +562,10 @@ if __name__ == "__main__":
         "processed_files": ["file1.wav", "file2.wav"],
         "failed_files": [],
         "remaining_files": ["file3.wav", "file4.wav"],
-        "stats": {"total_files": 4}
+        "stats": {"total_files": 4},
     }
 
-    cp.save(**test_checkpoint)
+    cp.save(**test_checkpoint)  # type: ignore[arg-type]
     loaded = cp.load("test_batch")
     print(f"  Saved/Loaded: {loaded is not None}")
 
@@ -581,10 +575,7 @@ if __name__ == "__main__":
     # バッチプロセッサーテスト
     print("\n2. Batch Processor Test:")
 
-    processor = EnhancedBatchProcessor(
-        max_workers=2,
-        enable_checkpoint=True
-    )
+    processor = EnhancedBatchProcessor(max_workers=2, enable_checkpoint=True)
 
     test_files = [f"test_{i}.wav" for i in range(10)]
 
@@ -593,18 +584,14 @@ if __name__ == "__main__":
         return {"text": f"Processed {file_path}"}
 
     def progress_callback(stats: Dict):
-        print(f"  Progress: {stats['processed_count']}/{stats['total_files']} "
-              f"(workers: {stats['current_workers']}, memory: {stats['memory_usage_mb']}MB)")
+        print(
+            f"  Progress: {stats['processed_count']}/{stats['total_files']} "
+            f"(workers: {stats['current_workers']}, memory: {stats['memory_usage_mb']}MB)"
+        )
 
-    result = processor.process_files(
-        test_files,
-        dummy_processor,
-        progress_callback,
-        batch_id="test_batch"
-    )
+    result = processor.process_files(test_files, dummy_processor, progress_callback, batch_id="test_batch")
 
-    print(f"\n  Result: {result['stats']['processed_count']} processed, "
-          f"{result['stats']['failed_count']} failed")
+    print(f"\n  Result: {result['stats']['processed_count']} processed, " f"{result['stats']['failed_count']} failed")
 
     cp.clear()
     print("\nTest completed!")

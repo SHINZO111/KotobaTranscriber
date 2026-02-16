@@ -2,11 +2,14 @@
 TokenManager トークンローテーション機構のテスト
 """
 
-import time
-import threading
 import os
-import pytest
+import threading
+import time
 from unittest.mock import patch
+
+import pytest
+
+pytest.importorskip("fastapi")
 
 from api.auth import TokenManager, get_token_manager
 
@@ -118,6 +121,7 @@ class TestGetTokenManager:
         """get_token_manager() は同一インスタンスを返す"""
         # 既存のシングルトンをリセット（テスト分離のため）
         from api.auth import _reset_token_manager_for_test
+
         _reset_token_manager_for_test()
 
         manager1 = get_token_manager()
@@ -127,6 +131,7 @@ class TestGetTokenManager:
     def test_環境変数からTTL読み取り(self):
         """環境変数 KOTOBA_TOKEN_TTL_MINUTES を読み取る"""
         from api.auth import _reset_token_manager_for_test
+
         _reset_token_manager_for_test()
 
         with patch.dict(os.environ, {"KOTOBA_TOKEN_TTL_MINUTES": "45"}):
@@ -140,5 +145,6 @@ class TestBackwardCompatibility:
     def test_API_TOKEN_グローバル変数が存在する(self):
         """API_TOKEN グローバル変数が後方互換性のため残っている"""
         from api.auth import API_TOKEN
+
         assert API_TOKEN
         assert isinstance(API_TOKEN, str)

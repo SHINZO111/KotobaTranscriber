@@ -5,11 +5,12 @@ Excelエクスポートモジュール
 
 import logging
 import threading
-from pathlib import Path
-from typing import List, Dict, Optional, Any
 from datetime import datetime
-from time_utils import format_time_hms
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from export.common import ExportOptions, atomic_save
+from time_utils import format_time_hms
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class ExcelExporter:
         """openpyxlがインストールされているかチェック"""
         try:
             import openpyxl
+
             return True
         except ImportError:
             logger.warning("openpyxl not installed. Excel export unavailable.")
@@ -51,7 +53,7 @@ class ExcelExporter:
             return False
 
         import openpyxl
-        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
         try:
             wb = openpyxl.Workbook()
@@ -110,7 +112,7 @@ class ExcelExporter:
             logger.error(f"Failed to export Excel transcription: {e}", exc_info=True)
             return False
 
-    def export_meeting_minutes(
+    def export_meeting_minutes(  # noqa: C901
         self,
         minutes_data: Dict,
         output_path: str,
@@ -132,7 +134,7 @@ class ExcelExporter:
             return False
 
         import openpyxl
-        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
         try:
             wb = openpyxl.Workbook()
@@ -300,7 +302,7 @@ class ExcelExporter:
 
     def _format_time(self, seconds: float) -> str:
         """秒数を時:分:秒形式に変換"""
-        return format_time_hms(seconds)
+        return str(format_time_hms(seconds))
 
 
 # グローバルインスタンス

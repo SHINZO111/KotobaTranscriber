@@ -5,11 +5,12 @@ Wordエクスポートモジュール
 
 import logging
 import threading
-from pathlib import Path
-from typing import List, Dict, Optional, Any
 from datetime import datetime
-from time_utils import format_time_hms
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from export.common import ExportOptions, atomic_save
+from time_utils import format_time_hms
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class WordExporter:
         """python-docxがインストールされているかチェック"""
         try:
             from docx import Document
+
             return True
         except ImportError:
             logger.warning("python-docx not installed. Word export unavailable.")
@@ -51,8 +53,8 @@ class WordExporter:
             return False
 
         from docx import Document
-        from docx.shared import Inches, Pt, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Inches, Pt, RGBColor
 
         try:
             doc = Document()
@@ -97,7 +99,7 @@ class WordExporter:
             logger.error(f"Failed to export Word transcription: {e}", exc_info=True)
             return False
 
-    def export_meeting_minutes(
+    def export_meeting_minutes(  # noqa: C901
         self,
         minutes_data: Dict,
         output_path: str,
@@ -119,8 +121,8 @@ class WordExporter:
             return False
 
         from docx import Document
-        from docx.shared import Inches, Pt, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Inches, Pt, RGBColor
 
         try:
             doc = Document()
@@ -266,7 +268,7 @@ class WordExporter:
 
     def _format_time(self, seconds: float) -> str:
         """秒数を時:分:秒形式に変換"""
-        return format_time_hms(seconds)
+        return str(format_time_hms(seconds))
 
 
 # グローバルインスタンス

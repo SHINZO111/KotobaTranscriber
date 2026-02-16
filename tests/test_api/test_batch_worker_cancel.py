@@ -4,12 +4,15 @@ _executor へのアクセスがスレッドセーフであることを検証
 """
 
 import os
-import pytest
 import tempfile
 import threading
 import time
-from unittest.mock import Mock, patch
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import Mock, patch
+
+import pytest
+
+pytest.importorskip("torch")
 
 from api.workers import BatchTranscriptionWorker
 
@@ -59,10 +62,7 @@ def mock_atomic_write():
 
 def test_cancel_before_start(temp_audio_files, mock_engine, mock_atomic_write):
     """バッチ処理開始前にキャンセル"""
-    worker = BatchTranscriptionWorker(
-        audio_paths=temp_audio_files,
-        enable_diarization=False
-    )
+    worker = BatchTranscriptionWorker(audio_paths=temp_audio_files, enable_diarization=False)
 
     # 開始前にキャンセル
     worker.cancel()
@@ -78,6 +78,7 @@ def test_cancel_before_start(temp_audio_files, mock_engine, mock_atomic_write):
 
 def test_cancel_during_processing(temp_audio_files, mock_engine, mock_atomic_write):
     """バッチ処理中にキャンセル（複数ファイル処理途中）"""
+
     # transcribe に遅延を追加
     def slow_transcribe(*args, **kwargs):
         time.sleep(0.5)  # 500ms 遅延
@@ -85,10 +86,7 @@ def test_cancel_during_processing(temp_audio_files, mock_engine, mock_atomic_wri
 
     mock_engine.return_value.transcribe.side_effect = slow_transcribe
 
-    worker = BatchTranscriptionWorker(
-        audio_paths=temp_audio_files,
-        enable_diarization=False
-    )
+    worker = BatchTranscriptionWorker(audio_paths=temp_audio_files, enable_diarization=False)
 
     worker.start()
 
@@ -106,10 +104,7 @@ def test_cancel_during_processing(temp_audio_files, mock_engine, mock_atomic_wri
 
 def test_cancel_idempotent(temp_audio_files, mock_engine, mock_atomic_write):
     """複数回のキャンセル呼び出し（冪等性）"""
-    worker = BatchTranscriptionWorker(
-        audio_paths=temp_audio_files,
-        enable_diarization=False
-    )
+    worker = BatchTranscriptionWorker(audio_paths=temp_audio_files, enable_diarization=False)
 
     worker.start()
     time.sleep(0.05)
@@ -127,6 +122,7 @@ def test_cancel_idempotent(temp_audio_files, mock_engine, mock_atomic_write):
 
 def test_executor_shutdown_guaranteed(temp_audio_files, mock_engine, mock_atomic_write):
     """Executor が確実に shutdown されることの確認"""
+
     # transcribe に遅延を追加
     def slow_transcribe(*args, **kwargs):
         time.sleep(0.3)
@@ -134,10 +130,7 @@ def test_executor_shutdown_guaranteed(temp_audio_files, mock_engine, mock_atomic
 
     mock_engine.return_value.transcribe.side_effect = slow_transcribe
 
-    worker = BatchTranscriptionWorker(
-        audio_paths=temp_audio_files,
-        enable_diarization=False
-    )
+    worker = BatchTranscriptionWorker(audio_paths=temp_audio_files, enable_diarization=False)
 
     # スレッド数を記録
     initial_thread_count = threading.active_count()
@@ -162,10 +155,7 @@ def test_no_resource_leak_after_cancel(temp_audio_files, mock_engine, mock_atomi
     initial_thread_count = threading.active_count()
 
     for _ in range(3):
-        worker = BatchTranscriptionWorker(
-            audio_paths=temp_audio_files,
-            enable_diarization=False
-        )
+        worker = BatchTranscriptionWorker(audio_paths=temp_audio_files, enable_diarization=False)
         worker.start()
         time.sleep(0.05)
         worker.cancel()
@@ -179,6 +169,7 @@ def test_no_resource_leak_after_cancel(temp_audio_files, mock_engine, mock_atomi
 
 def test_cancel_race_condition_protection(temp_audio_files, mock_engine, mock_atomic_write):
     """cancel() と run() の競合保護テスト（TOCTOU）"""
+
     # transcribe に遅延を追加
     def slow_transcribe(*args, **kwargs):
         time.sleep(0.2)
@@ -188,10 +179,7 @@ def test_cancel_race_condition_protection(temp_audio_files, mock_engine, mock_at
 
     # 複数回実行して競合をテスト
     for _ in range(5):
-        worker = BatchTranscriptionWorker(
-            audio_paths=temp_audio_files,
-            enable_diarization=False
-        )
+        worker = BatchTranscriptionWorker(audio_paths=temp_audio_files, enable_diarization=False)
 
         worker.start()
 
@@ -207,10 +195,7 @@ def test_cancel_race_condition_protection(temp_audio_files, mock_engine, mock_at
 
 def test_executor_lock_prevents_toctou(temp_audio_files, mock_engine, mock_atomic_write):
     """_executor_lock が TOCTOU を防ぐことを確認"""
-    worker = BatchTranscriptionWorker(
-        audio_paths=temp_audio_files,
-        enable_diarization=False
-    )
+    worker = BatchTranscriptionWorker(audio_paths=temp_audio_files, enable_diarization=False)
 
     # _executor_lock が存在することを確認
     assert hasattr(worker, "_executor_lock")
@@ -228,10 +213,7 @@ def test_executor_lock_prevents_toctou(temp_audio_files, mock_engine, mock_atomi
 
 def test_cancel_with_no_executor(mock_engine, mock_atomic_write):
     """Executor が存在しない状態でのキャンセル（開始前）"""
-    worker = BatchTranscriptionWorker(
-        audio_paths=[],
-        enable_diarization=False
-    )
+    worker = BatchTranscriptionWorker(audio_paths=[], enable_diarization=False)
 
     # 開始前にキャンセル（executor は None）
     worker.cancel()
@@ -250,10 +232,7 @@ def test_cancel_during_executor_creation(temp_audio_files, mock_engine, mock_ato
         return original_executor(*args, **kwargs)
 
     with patch("api.workers.ThreadPoolExecutor", side_effect=slow_executor_init):
-        worker = BatchTranscriptionWorker(
-            audio_paths=temp_audio_files,
-            enable_diarization=False
-        )
+        worker = BatchTranscriptionWorker(audio_paths=temp_audio_files, enable_diarization=False)
 
         worker.start()
 

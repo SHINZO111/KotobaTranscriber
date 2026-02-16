@@ -6,9 +6,9 @@ import os
 
 from fastapi import APIRouter, HTTPException
 
-from api.schemas import FormatTextRequest, CorrectTextRequest, DiarizeRequest
 from api.dependencies import get_text_formatter
-from validators import Validator, ValidationError
+from api.schemas import CorrectTextRequest, DiarizeRequest, FormatTextRequest
+from validators import ValidationError, Validator
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -19,6 +19,7 @@ async def format_text(req: FormatTextRequest):
     """テキストをフォーマット（CPU-bound のためスレッドプールで実行）"""
     formatter = get_text_formatter()
     try:
+
         def _run_format():
             return formatter.format_all(
                 req.text,
@@ -43,7 +44,7 @@ async def diarize(req: DiarizeRequest):
 
     try:
         Validator.validate_file_path(req.file_path, must_exist=True)
-    except ValidationError as e:
+    except ValidationError:
         raise HTTPException(status_code=400, detail="ファイルパスが不正です")
 
     try:
@@ -82,15 +83,18 @@ async def correct_text(req: CorrectTextRequest):
         raise HTTPException(status_code=400, detail="不明なプロバイダーです")
 
     try:
+
         def _run_correction():
             if req.provider == "local":
                 from llm_corrector_standalone import StandaloneLLMCorrector
+
                 corrector = StandaloneLLMCorrector()
                 return corrector.correct_text(req.text)
             else:
                 # api_corrector の create_corrector は "claude"/"openai" を受け付ける
                 # ただし APIProvider enum は "anthropic" なので直接クラスを使う
-                from api_corrector import ClaudeCorrector, OpenAICorrector, CorrectionConfig, APIProvider
+                from api_corrector import APIProvider, ClaudeCorrector, CorrectionConfig, OpenAICorrector
+
                 provider_map = {
                     "claude": (ClaudeCorrector, APIProvider.ANTHROPIC),
                     "openai": (OpenAICorrector, APIProvider.OPENAI),
@@ -114,7 +118,7 @@ async def correct_text(req: CorrectTextRequest):
         result = await asyncio.to_thread(_run_correction)
         return {"text": result}
 
-    except ImportError as e:
+    except ImportError:
         raise HTTPException(status_code=501, detail="補正ライブラリがインストールされていません")
     except HTTPException:
         raise

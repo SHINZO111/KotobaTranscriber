@@ -1,7 +1,8 @@
 """APIルーターセキュリティテスト — パス検証・入力バリデーション"""
 
-import sys
 import os
+import sys
+
 import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
@@ -9,14 +10,16 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 try:
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
 
 try:
-    from api.main import app
     from api.auth import get_token_manager
+    from api.main import app
+
     APP_AVAILABLE = True
 except ImportError:
     APP_AVAILABLE = False
@@ -40,10 +43,7 @@ class TestTranscribeRouterSecurity:
         """存在しないファイルで404を返す"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/transcribe",
-                json={"file_path": "/nonexistent/audio.mp3"}
-            )
+            response = await client.post("/api/transcribe", json={"file_path": "/nonexistent/audio.mp3"})
             assert response.status_code == 404
 
     @pytest.mark.asyncio
@@ -51,10 +51,7 @@ class TestTranscribeRouterSecurity:
         """存在しないファイルを含むバッチで404"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/batch-transcribe",
-                json={"file_paths": ["/nonexistent/audio.mp3"]}
-            )
+            response = await client.post("/api/batch-transcribe", json={"file_paths": ["/nonexistent/audio.mp3"]})
             assert response.status_code == 404
 
 
@@ -68,10 +65,7 @@ class TestExportRouterSecurity:
         """サポートされていないフォーマットで400を返す"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/export/exe",
-                json={"text": "test", "output_path": "/tmp/test.exe"}
-            )
+            response = await client.post("/api/export/exe", json={"text": "test", "output_path": "/tmp/test.exe"})
             assert response.status_code == 400
 
     @pytest.mark.asyncio
@@ -79,10 +73,7 @@ class TestExportRouterSecurity:
         """SRTエクスポートでセグメントなしは400"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/export/srt",
-                json={"text": "test", "output_path": "/tmp/test.srt"}
-            )
+            response = await client.post("/api/export/srt", json={"text": "test", "output_path": "/tmp/test.srt"})
             assert response.status_code == 400
 
     @pytest.mark.asyncio
@@ -90,10 +81,7 @@ class TestExportRouterSecurity:
         """VTTエクスポートでセグメントなしは400"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/export/vtt",
-                json={"text": "test", "output_path": "/tmp/test.vtt"}
-            )
+            response = await client.post("/api/export/vtt", json={"text": "test", "output_path": "/tmp/test.vtt"})
             assert response.status_code == 400
 
 
@@ -147,10 +135,7 @@ class TestMonitorRouterSecurity:
         """存在しないフォルダで404"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/monitor/start",
-                json={"folder_path": "/nonexistent/folder"}
-            )
+            response = await client.post("/api/monitor/start", json={"folder_path": "/nonexistent/folder"})
             assert response.status_code == 404
 
     @pytest.mark.asyncio
@@ -204,10 +189,7 @@ class TestPostprocessRouterSecurity:
         """テキストフォーマット正常系"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/format-text",
-                json={"text": "テスト テスト"}
-            )
+            response = await client.post("/api/format-text", json={"text": "テスト テスト"})
             assert response.status_code == 200
             data = response.json()
             assert "text" in data
@@ -217,10 +199,7 @@ class TestPostprocessRouterSecurity:
         """不明なプロバイダーで422（スキーマバリデーション）"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/correct-text",
-                json={"text": "テスト", "provider": "invalid"}
-            )
+            response = await client.post("/api/correct-text", json={"text": "テスト", "provider": "invalid"})
             assert response.status_code == 422
 
     @pytest.mark.asyncio
@@ -228,8 +207,5 @@ class TestPostprocessRouterSecurity:
         """存在しないファイルで話者分離すると404"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post(
-                "/api/diarize",
-                json={"file_path": "/nonexistent/audio.mp3"}
-            )
+            response = await client.post("/api/diarize", json={"file_path": "/nonexistent/audio.mp3"})
             assert response.status_code == 404

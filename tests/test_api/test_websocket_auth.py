@@ -1,26 +1,31 @@
 """WebSocket接続制限・Auth追加テスト・normalize_segments・format-text"""
 
 import asyncio
-import sys
 import os
-import pytest
+import sys
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src")
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
+pytest.importorskip("fastapi")
+
 from api.websocket import ConnectionManager
 
 try:
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
 
 try:
-    from api.main import app
     from api.auth import API_TOKEN, verify_websocket_token, verify_websocket_token_from_header
+    from api.main import app
+
     APP_AVAILABLE = True
 except ImportError:
     APP_AVAILABLE = False
@@ -34,6 +39,7 @@ def _auth_headers():
 # ============================================================
 # WebSocket 接続数制限テスト
 # ============================================================
+
 
 class TestWebSocketConnectionLimit:
     """WebSocket接続数制限のテスト"""
@@ -134,6 +140,7 @@ class TestWebSocketConnectionLimit:
 # WebSocket トークン検証テスト（旧クエリパラメータ版 - 非推奨）
 # ============================================================
 
+
 @pytest.mark.skipif(not APP_AVAILABLE, reason="FastAPI app not importable")
 class TestWebSocketTokenVerification:
     """WebSocket トークン検証のテスト（旧クエリパラメータ版）"""
@@ -167,6 +174,7 @@ class TestWebSocketTokenVerification:
 # WebSocket トークン検証テスト（新Authorizationヘッダ版）
 # ============================================================
 
+
 @pytest.mark.skipif(not APP_AVAILABLE, reason="FastAPI app not importable")
 class TestWebSocketTokenVerificationFromHeader:
     """WebSocket トークン検証のテスト（Authorizationヘッダ版）"""
@@ -174,6 +182,7 @@ class TestWebSocketTokenVerificationFromHeader:
     def test_verify_valid_token_from_header(self):
         """正しいBearerトークンでTrue"""
         from api.auth import verify_websocket_token_from_header
+
         ws = MagicMock()
         ws.headers = {"authorization": f"Bearer {API_TOKEN}"}
         assert verify_websocket_token_from_header(ws) is True
@@ -181,6 +190,7 @@ class TestWebSocketTokenVerificationFromHeader:
     def test_verify_invalid_token_from_header(self):
         """不正なトークンでFalse"""
         from api.auth import verify_websocket_token_from_header
+
         ws = MagicMock()
         ws.headers = {"authorization": "Bearer invalid_token_xyz"}
         assert verify_websocket_token_from_header(ws) is False
@@ -188,6 +198,7 @@ class TestWebSocketTokenVerificationFromHeader:
     def test_verify_missing_authorization_header(self):
         """AuthorizationヘッダなしでFalse"""
         from api.auth import verify_websocket_token_from_header
+
         ws = MagicMock()
         ws.headers = {}
         assert verify_websocket_token_from_header(ws) is False
@@ -195,6 +206,7 @@ class TestWebSocketTokenVerificationFromHeader:
     def test_verify_empty_bearer_token(self):
         """空のBearerトークンでFalse"""
         from api.auth import verify_websocket_token_from_header
+
         ws = MagicMock()
         ws.headers = {"authorization": "Bearer "}
         assert verify_websocket_token_from_header(ws) is False
@@ -202,6 +214,7 @@ class TestWebSocketTokenVerificationFromHeader:
     def test_verify_no_bearer_prefix(self):
         """BearerプレフィックスなしでFalse"""
         from api.auth import verify_websocket_token_from_header
+
         ws = MagicMock()
         ws.headers = {"authorization": API_TOKEN}
         assert verify_websocket_token_from_header(ws) is False
@@ -209,6 +222,7 @@ class TestWebSocketTokenVerificationFromHeader:
     def test_verify_lowercase_bearer_prefix(self):
         """小文字bearerプレフィックスでFalse（大文字小文字区別）"""
         from api.auth import verify_websocket_token_from_header
+
         ws = MagicMock()
         ws.headers = {"authorization": f"bearer {API_TOKEN}"}
         assert verify_websocket_token_from_header(ws) is False
@@ -216,6 +230,7 @@ class TestWebSocketTokenVerificationFromHeader:
     def test_verify_short_token(self):
         """トークン長不足でFalse（20文字未満）"""
         from api.auth import verify_websocket_token_from_header
+
         ws = MagicMock()
         ws.headers = {"authorization": "Bearer short"}
         assert verify_websocket_token_from_header(ws) is False
@@ -223,6 +238,7 @@ class TestWebSocketTokenVerificationFromHeader:
     def test_verify_token_with_whitespace(self):
         """トークンに前後スペースがあってもstrip処理される"""
         from api.auth import verify_websocket_token_from_header
+
         ws = MagicMock()
         ws.headers = {"authorization": f"Bearer  {API_TOKEN}  "}
         # strip()されるので正しいトークンとして扱われる
@@ -233,6 +249,7 @@ class TestWebSocketTokenVerificationFromHeader:
 # WebSocket接続の統合テスト（Authorizationヘッダ認証）
 # ============================================================
 
+
 @pytest.mark.skipif(not APP_AVAILABLE, reason="FastAPI app not importable")
 class TestWebSocketConnectionWithAuth:
     """WebSocket接続時の認証統合テスト"""
@@ -241,6 +258,7 @@ class TestWebSocketConnectionWithAuth:
     async def test_connect_with_valid_authorization_header(self):
         """正しいAuthorizationヘッダで接続成功"""
         from api.websocket import ConnectionManager
+
         ws = AsyncMock()
         ws.headers = {"authorization": f"Bearer {API_TOKEN}"}
 
@@ -255,6 +273,7 @@ class TestWebSocketConnectionWithAuth:
     async def test_connect_without_authorization_header(self):
         """Authorizationヘッダなしで接続拒否"""
         from api.websocket import ConnectionManager
+
         ws = AsyncMock()
         ws.headers = {}
 
@@ -270,6 +289,7 @@ class TestWebSocketConnectionWithAuth:
     async def test_connect_with_invalid_token(self):
         """不正なトークンで接続拒否"""
         from api.websocket import ConnectionManager
+
         ws = AsyncMock()
         ws.headers = {"authorization": "Bearer invalid_token_xyz"}
 
@@ -285,6 +305,7 @@ class TestWebSocketConnectionWithAuth:
     async def test_connect_with_no_bearer_prefix(self):
         """BearerプレフィックスなしのAuthorizationヘッダで接続拒否"""
         from api.websocket import ConnectionManager
+
         ws = AsyncMock()
         ws.headers = {"authorization": API_TOKEN}
 
@@ -300,6 +321,7 @@ class TestWebSocketConnectionWithAuth:
     async def test_auth_checked_before_connection_limit(self):
         """認証チェックが接続数制限より先に実行される"""
         from api.websocket import ConnectionManager
+
         mgr = ConnectionManager()
 
         # 制限まで有効な接続を追加
@@ -321,6 +343,7 @@ class TestWebSocketConnectionWithAuth:
 # ============================================================
 # Auth 追加テスト（空トークン等）
 # ============================================================
+
 
 @pytest.mark.skipif(not HTTPX_AVAILABLE, reason="httpx not installed")
 @pytest.mark.skipif(not APP_AVAILABLE, reason="FastAPI app not importable")
@@ -359,22 +382,26 @@ class TestAuthEdgeCases:
 # normalize_segments 境界値テスト
 # ============================================================
 
+
 class TestNormalizeSegmentsEdgeCases:
     """normalize_segments のエッジケーステスト"""
 
     def test_empty_result(self):
         """空の結果"""
         from constants import normalize_segments
+
         assert normalize_segments({}) == []
 
     def test_empty_chunks(self):
         """空のchunks"""
         from constants import normalize_segments
+
         assert normalize_segments({"chunks": []}) == []
 
     def test_timestamp_tuple_single_element(self):
         """timestampが1要素タプル"""
         from constants import normalize_segments
+
         result = {"chunks": [{"text": "test", "timestamp": (1.0,)}]}
         segments = normalize_segments(result)
         assert len(segments) == 1
@@ -384,6 +411,7 @@ class TestNormalizeSegmentsEdgeCases:
     def test_timestamp_empty_tuple(self):
         """timestampが空タプル"""
         from constants import normalize_segments
+
         result = {"chunks": [{"text": "test", "timestamp": ()}]}
         segments = normalize_segments(result)
         assert len(segments) == 1
@@ -393,6 +421,7 @@ class TestNormalizeSegmentsEdgeCases:
     def test_segments_key_used(self):
         """segmentsキーが使われる"""
         from constants import normalize_segments
+
         result = {"segments": [{"text": "hello", "start": 1.0, "end": 2.0}]}
         segments = normalize_segments(result)
         assert segments[0]["start"] == 1.0
@@ -400,6 +429,7 @@ class TestNormalizeSegmentsEdgeCases:
     def test_chunks_priority_over_segments(self):
         """chunksがsegmentsより優先される"""
         from constants import normalize_segments
+
         result = {
             "chunks": [{"text": "from_chunks", "timestamp": (0.0, 1.0)}],
             "segments": [{"text": "from_segments", "start": 0.0, "end": 1.0}],
@@ -410,6 +440,7 @@ class TestNormalizeSegmentsEdgeCases:
     def test_no_text_key_defaults_empty(self):
         """textキーがないセグメントは空文字"""
         from constants import normalize_segments
+
         result = {"chunks": [{"timestamp": (0.0, 1.0)}]}
         segments = normalize_segments(result)
         assert segments[0]["text"] == ""
@@ -417,6 +448,7 @@ class TestNormalizeSegmentsEdgeCases:
     def test_segment_without_start_or_timestamp(self):
         """startもtimestampもないセグメント"""
         from constants import normalize_segments
+
         result = {"chunks": [{"text": "orphan"}]}
         segments = normalize_segments(result)
         assert segments[0]["text"] == "orphan"
@@ -426,11 +458,14 @@ class TestNormalizeSegmentsEdgeCases:
     def test_mixed_segments(self):
         """異なるフォーマットの混合セグメント"""
         from constants import normalize_segments
-        result = {"chunks": [
-            {"text": "a", "timestamp": (0.0, 1.0)},
-            {"text": "b", "start": 1.0, "end": 2.0},
-            {"text": "c"},
-        ]}
+
+        result = {
+            "chunks": [
+                {"text": "a", "timestamp": (0.0, 1.0)},
+                {"text": "b", "start": 1.0, "end": 2.0},
+                {"text": "c"},
+            ]
+        }
         segments = normalize_segments(result)
         assert len(segments) == 3
         assert segments[0]["start"] == 0.0
@@ -440,6 +475,7 @@ class TestNormalizeSegmentsEdgeCases:
     def test_timestamp_list_format(self):
         """timestampがリスト形式"""
         from constants import normalize_segments
+
         result = {"chunks": [{"text": "list", "timestamp": [0.5, 1.5]}]}
         segments = normalize_segments(result)
         assert segments[0]["start"] == 0.5
@@ -449,6 +485,7 @@ class TestNormalizeSegmentsEdgeCases:
 # ============================================================
 # format-text エンドポイント happy-path テスト
 # ============================================================
+
 
 @pytest.mark.skipif(not HTTPX_AVAILABLE, reason="httpx not installed")
 @pytest.mark.skipif(not APP_AVAILABLE, reason="FastAPI app not importable")
@@ -460,13 +497,16 @@ class TestFormatTextEndpoint:
         """テキストフォーマットの正常系"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post("/api/format-text", json={
-                "text": "えーと、こんにちは。あの、テストです。",
-                "remove_fillers": True,
-                "add_punctuation": True,
-                "format_paragraphs": False,
-                "clean_repeated": False,
-            })
+            response = await client.post(
+                "/api/format-text",
+                json={
+                    "text": "えーと、こんにちは。あの、テストです。",
+                    "remove_fillers": True,
+                    "add_punctuation": True,
+                    "format_paragraphs": False,
+                    "clean_repeated": False,
+                },
+            )
             assert response.status_code == 200
             data = response.json()
             assert "text" in data
@@ -476,9 +516,12 @@ class TestFormatTextEndpoint:
         """空テキストの処理"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test", headers=_auth_headers()) as client:
-            response = await client.post("/api/format-text", json={
-                "text": "",
-            })
+            response = await client.post(
+                "/api/format-text",
+                json={
+                    "text": "",
+                },
+            )
             assert response.status_code == 200
             data = response.json()
             assert "text" in data

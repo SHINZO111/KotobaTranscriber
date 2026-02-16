@@ -26,6 +26,7 @@ def get_transcription_engine():
         with _lock:
             if _transcription_engine is None:
                 from transcription_engine import TranscriptionEngine
+
                 _transcription_engine = TranscriptionEngine()
     return _transcription_engine
 
@@ -38,6 +39,7 @@ def get_faster_whisper_engine():
             if _faster_whisper_engine is None:
                 try:
                     from faster_whisper_engine import FasterWhisperEngine
+
                     _faster_whisper_engine = FasterWhisperEngine()
                 except ImportError:
                     logger.warning("FasterWhisperEngine not available")
@@ -52,6 +54,7 @@ def get_app_settings():
         with _lock:
             if _app_settings is None:
                 from app_settings import AppSettings
+
                 _app_settings = AppSettings("app_settings.json")
     return _app_settings
 
@@ -63,6 +66,7 @@ def get_config_manager():
         with _lock:
             if _config_manager is None:
                 from config_manager import ConfigManager
+
                 _config_manager = ConfigManager()
     return _config_manager
 
@@ -74,11 +78,13 @@ def get_text_formatter():
         with _lock:
             if _text_formatter is None:
                 from text_formatter import TextFormatter
+
                 _text_formatter = TextFormatter()
     return _text_formatter
 
 
 # --- 現在のワーカー状態管理 ---
+
 
 class WorkerState:
     """アクティブなワーカーの状態を管理"""
