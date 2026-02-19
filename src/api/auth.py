@@ -83,7 +83,15 @@ def get_token_manager() -> TokenManager:
     """TokenManager シングルトンを取得"""
     global _token_manager
     if _token_manager is None:
-        ttl = int(os.environ.get("KOTOBA_TOKEN_TTL_MINUTES", "60"))
+        try:
+            ttl = int(os.environ.get("KOTOBA_TOKEN_TTL_MINUTES", "60"))
+        except (ValueError, TypeError):
+            logger.warning("Invalid KOTOBA_TOKEN_TTL_MINUTES value, using default 60")
+            ttl = 60
+        # TTLの範囲制限（1分〜7日）
+        if not 1 <= ttl <= 10080:
+            logger.warning(f"KOTOBA_TOKEN_TTL_MINUTES={ttl} out of range [1, 10080], clamping")
+            ttl = max(1, min(ttl, 10080))
         _token_manager = TokenManager(ttl_minutes=ttl)
     return _token_manager
 

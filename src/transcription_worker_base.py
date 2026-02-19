@@ -93,7 +93,11 @@ class TranscriptionLogic:
             # LLM補正（オプション、80%）
             if self.enable_llm_correction and text:
                 self._notify_progress(80)
-                text = self._apply_llm_correction(text)
+                try:
+                    text = self._apply_llm_correction(text)
+                except Exception as e:
+                    logger.warning(f"LLM correction failed, using original text: {e}")
+                    # 元のテキストで続行
 
             # 完了（100%）
             self._notify_progress(100)

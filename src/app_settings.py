@@ -84,8 +84,11 @@ class AppSettings:
             # 実行ファイルと同じディレクトリに保存
             self.settings_file = Path(__file__).parent.parent / self.DEFAULT_SETTINGS_FILE
         else:
-            # セキュリティ検証: パストラバーサル対策
-            custom_path = Path(settings_file).resolve()
+            # セキュリティ検証: パストラバーサル・シンボリックリンク対策
+            raw_path = Path(settings_file)
+            if raw_path.is_symlink():
+                raise PathTraversalError(f"Symlinks are not permitted for settings files: {settings_file}")
+            custom_path = raw_path.resolve()
 
             # 許可されたディレクトリ
             project_root = Path(__file__).parent.parent.resolve()

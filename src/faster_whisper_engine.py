@@ -219,17 +219,18 @@ class FasterWhisperEngine(BaseTranscriptionEngine):
         Returns:
             文字起こし結果のテキスト（Noneの場合はエラー）
         """
-        result = self.transcribe(
-            audio_chunk,
-            sample_rate=sample_rate,
-            beam_size=1,  # 高速化のためビームサイズを小さく
-            vad_filter=False,  # 外部VADを使用するため無効化
-        )
-
-        if "error" in result:
+        try:
+            result = self.transcribe(
+                audio_chunk,
+                sample_rate=sample_rate,
+                beam_size=1,  # 高速化のためビームサイズを小さく
+                vad_filter=False,  # 外部VADを使用するため無効化
+            )
+            text = result.get("text", "").strip()
+            return text or None
+        except TranscriptionFailedError:
+            logger.warning("Stream transcription failed")
             return None
-
-        return str(result["text"])
 
     def is_available(self) -> bool:
         """エンジンが利用可能かチェック"""
@@ -345,10 +346,8 @@ class TransformersWhisperEngine(BaseTranscriptionEngine):
 
         プロセッサも含めてクリーンアップ
         """
-        # プロセッサを削除
-        if self.processor is not None:
-            del self.processor
-            self.processor = None
+        # プロセッサをクリア（GCに任せる）
+        self.processor = None
 
         # 基底クラスのunload_modelを呼び出し
         super().unload_model()

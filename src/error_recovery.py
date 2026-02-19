@@ -274,8 +274,12 @@ class ErrorRecoveryManager:
 
             cutoff_time = datetime.now() - timedelta(hours=since_hours)
 
+        MAX_LINE_LENGTH = 1024 * 1024  # 1MB max per line
         with open(self.error_log_file, "r", encoding="utf-8") as f:
             for line in f:
+                if len(line) > MAX_LINE_LENGTH:
+                    logger.warning(f"Skipping oversized log line: {len(line)} bytes")
+                    continue
                 try:
                     error = json.loads(line)
 

@@ -5,6 +5,7 @@ memory_optimizer.py - メモリ最適化ユーティリティ
 """
 
 import gc
+import threading
 
 try:
     import torch
@@ -60,6 +61,7 @@ class MemoryOptimizer:
         self.critical_threshold = critical_threshold_mb
         self._baseline_memory = 0
         self._peak_memory: float = 0.0
+        self._peak_memory_lock = threading.Lock()
         # psutil.Process をキャッシュ（毎回生成のオーバーヘッド削減）
         self._process = psutil.Process() if PSUTIL_AVAILABLE else None
 
@@ -107,7 +109,8 @@ class MemoryOptimizer:
 
             # メモリリークチェック
             current_memory = torch.cuda.memory_allocated() / (1024**2)
-            self._peak_memory = max(self._peak_memory, current_memory)
+            with self._peak_memory_lock:
+                self._peak_memory = max(self._peak_memory, current_memory)
 
             if current_memory > self._baseline_memory * 1.5:
                 logger.warning(f"Potential memory leak detected: " f"{self._baseline_memory:.1f}MB -> {current_memory:.1f}MB")

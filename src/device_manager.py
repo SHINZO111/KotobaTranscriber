@@ -282,9 +282,12 @@ class DeviceContext:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # クリーンアップ
-        if TORCH_AVAILABLE and torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        # クリーンアップ（例外時も安全に実行）
+        try:
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception as e:
+            logger.warning(f"Failed to clear CUDA cache during cleanup: {e}")
 
 
 if __name__ == "__main__":

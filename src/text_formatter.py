@@ -395,6 +395,7 @@ class TextFormatter:
             max_sentences_per_paragraph = 4
         # 既に適切な改行がある場合（連続改行が2つ以上）
         if "\n\n" in text:
+            logger.debug("Text already contains paragraph breaks, skipping paragraph formatting")
             return text
 
         # 文で分割（句点、感嘆符、疑問符で区切る）

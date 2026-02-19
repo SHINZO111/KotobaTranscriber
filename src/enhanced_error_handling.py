@@ -319,7 +319,7 @@ class FileOperationGuard:
                 with os.fdopen(fd, "w", encoding=encoding) as f:
                     f.write(content)
                 os.replace(tmp_path, file_path)
-            except BaseException:
+            except Exception:
                 try:
                     os.unlink(tmp_path)
                 except OSError:

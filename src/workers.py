@@ -316,9 +316,12 @@ class BatchTranscriptionWorker(QThread):
             self.error.emit(error_msg)
         finally:
             self._executor = None  # 確実にクリア
-            # 共有エンジンのモデル解放
+            # 共有エンジンのモデル解放（一時ファイル含む）
             try:
                 if hasattr(self, "_shared_engine") and self._shared_engine is not None:
+                    # 一時ファイルを明示的にクリーンアップ（atexit任せにしない）
+                    if hasattr(self._shared_engine, "_cleanup_temp_files"):
+                        self._shared_engine._cleanup_temp_files()
                     self._shared_engine.unload_model()
                     self._shared_engine = None
             except Exception as e:

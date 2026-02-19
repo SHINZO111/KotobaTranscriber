@@ -44,6 +44,11 @@ class ClusteringMixin:
             clustering = AgglomerativeClustering(n_clusters=n_clusters, metric="cosine", linkage="average")
             labels = clustering.fit_predict(embeddings)
 
+            # ラベル数とエンべディング数の整合性検証
+            if len(labels) != len(embeddings):
+                logger.error(f"Clustering label count mismatch: {len(labels)} labels for {len(embeddings)} embeddings")
+                return self._simple_clustering(embeddings, n_clusters)
+
             logger.info(f"Clustering complete: {n_clusters} speakers detected")
             return labels  # type: ignore[no-any-return]
 

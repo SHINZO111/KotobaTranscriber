@@ -410,10 +410,15 @@ class EnhancedBatchProcessor:
                             self.remaining_files.remove(file_path)
                         self.stats["failed_count"] += 1
 
-                # 進捗コールバック
+                # 進捗コールバック（ロック内で統計更新、例外は握り潰す）
                 if progress_callback:
-                    self._update_stats()
-                    progress_callback(self.stats.copy())
+                    try:
+                        with self._lock:
+                            self._update_stats()
+                            stats_copy = self.stats.copy()
+                        progress_callback(stats_copy)
+                    except Exception as e:
+                        logger.warning(f"Progress callback error (ignored): {e}")
 
     def _process_single_file(self, file_path: str, processor_func: Callable) -> Dict[str, Any]:
         """

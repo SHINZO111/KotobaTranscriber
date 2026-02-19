@@ -81,7 +81,7 @@ class FolderMonitor(QThread):
                     for file_path in files_copy:
                         f.write(f"{file_path}\n")
                 os.replace(tmp_path, processed_file_path)
-            except BaseException:
+            except Exception:
                 try:
                     os.unlink(tmp_path)
                 except OSError:
@@ -158,7 +158,10 @@ class FolderMonitor(QThread):
         """
         try:
             # ファイルサイズをチェック（0バイトなら待つ）
-            if os.path.getsize(file_path) == 0:
+            try:
+                if os.path.getsize(file_path) == 0:
+                    return False
+            except (FileNotFoundError, OSError):
                 return False
 
             # 排他ロックを試みる（他のプロセスが書き込み中でないか確認）
